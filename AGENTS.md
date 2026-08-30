@@ -88,6 +88,20 @@ Exclude by default:
 The recommended MVP shape is: first page, then create, then list, then detail,
 for one domain object. Concrete per-project MVPs live in `examples/`.
 
+## Scripts
+
+These are agent tools. The user never runs them and the README does not show
+them. Always pass the target root explicitly.
+
+```bash
+scripts/check-target --target <target-path>          # preflight
+scripts/check-spring-project --target <target-path>  # layout details
+scripts/run-verification --target <target-path>      # tests
+```
+
+`tests/run-tests` covers the scripts themselves. Run it after changing anything
+under `scripts/`.
+
 ## Git Safety
 
 Before editing a target repo:

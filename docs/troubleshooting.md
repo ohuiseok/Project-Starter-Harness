@@ -1,97 +1,68 @@
 # Troubleshooting
 
+막히면 Codex에게 그냥 말로 물어보면 됩니다. 아래는 자주 나오는 상황과, 그때
+하면 되는 말입니다.
+
 ## Target 경로를 모르겠는 경우
 
-먼저 target 경로를 확인합니다.
-
-```bash
-scripts/check-target --target /work/my-spring-project
-```
-
-`UNKNOWN`이 나오면 경로가 존재하는지 확인합니다.
-
-## Git repo가 아닌 경우
-
-문제:
+만들 프로젝트 폴더의 경로를 알려주면 됩니다.
 
 ```text
-TARGET_IS_GIT_REPOSITORY: no
+target은 /work/my-spring-project야.
 ```
 
-해결:
+경로가 아직 없다면 폴더부터 만들어 달라고 해도 됩니다.
 
-target 폴더에서 Git repo를 먼저 만듭니다.
+## Git repo가 아니라고 하는 경우
 
-```bash
-git init
+Codex가 `TARGET_IS_GIT_REPOSITORY: no`라고 알려주는 경우입니다.
+
+```text
+target 폴더를 Git repo로 만들어줘.
 ```
 
 ## README만 있는 경우
 
-정상입니다. 이 Harness는 README-only repo에서 시작할 수 있습니다.
+정상입니다. 이 Harness는 빈 repo나 README만 있는 repo에서 시작할 수 있습니다.
 
-Codex는 README를 읽고 프로젝트 의도를 요약한 뒤 추천 MVP로 진행할지 묻습니다.
+Codex가 README를 읽고 프로젝트 의도를 요약한 뒤, 추천 MVP로 진행할지 묻습니다.
 
-## Spring 프로젝트인지 모르겠는 경우
+## 아직 Spring 프로젝트가 아닌 경우
 
-확인:
-
-```bash
-scripts/check-spring-project --target /work/my-spring-project
-```
-
-`build.gradle` 또는 `pom.xml`이 없으면 아직 Spring 프로젝트가 아닙니다.
-
-## 테스트를 실행할 수 없는 경우
-
-`scripts/run-verification`은 Gradle wrapper 또는 Maven wrapper가 있을 때 테스트를
-실행합니다.
-
-wrapper가 없으면:
+`build.gradle`이나 `pom.xml`이 없으면 아직 Spring 프로젝트가 아닙니다.
+프로젝트 생성이 이번 세션 목표가 됩니다.
 
 ```text
-UNKNOWN: no Gradle or Maven wrapper found
+추천으로 시작해줘.
 ```
+
+## 테스트를 실행할 수 없다고 하는 경우
+
+Gradle이나 Maven wrapper가 없으면 테스트를 돌릴 수 없습니다. Codex는 이걸
+실패가 아니라 `UNKNOWN`으로 알려줍니다.
 
 이 경우 프로젝트 생성 또는 wrapper 추가가 다음 목표가 될 수 있습니다.
 
-## 기존 변경이 있는 경우
+## 기존 변경이 남아 있는 경우
 
-target repo에 dirty 변경이 있으면 먼저 확인합니다.
+target repo에 커밋하지 않은 변경이 있으면 Codex가 먼저 알려줍니다. 이 Harness는
+사용자가 만든 변경을 덮어쓰지 않습니다.
 
-```bash
-git -C /work/my-spring-project status --short
-```
-
-기존 변경을 덮어쓰지 않고 이번 세션 목표에 필요한 파일만 수정합니다.
-
-
-## 스크립트 종료 코드
-
-```text
-0  확인됨
-1  확인된 부정 (target 없음, 테스트 실패)
-2  사용법 오류 (예: --target 값 누락)
-3  확인 불가 (UNKNOWN)
-```
-
-3은 실패가 아니라 "확인하지 못했다"는 뜻입니다. wrapper가 없어서 테스트를
-돌리지 못한 경우가 여기에 해당합니다.
+그대로 두고 이번 목표에 필요한 파일만 고칩니다.
 
 ## 이전 세션 내용이 기억나지 않는 경우
 
-target repo의 진행 기록을 봅니다.
+진행 기록은 target repo의 `docs/progress.md`에 남아 있습니다.
 
-```bash
-cat /work/my-spring-project/docs/progress.md
+```text
+이어가자.
 ```
 
-파일이 없으면 아직 첫 세션입니다.
+이렇게 말하면 Codex가 기록을 읽고 다음 할 일부터 이어갑니다.
 
-## 스크립트를 고친 경우
+## `UNKNOWN`이 나오는 경우
 
-Harness 스크립트를 수정했다면 테스트를 돌립니다.
+`UNKNOWN`은 오류가 아닙니다. "확인하지 못했다"는 뜻입니다.
 
-```bash
-tests/run-tests
-```
+Codex는 확인하지 못한 것을 추측으로 채우지 않습니다. 무엇을 확인하지 못했는지
+물어보면 알려줍니다.

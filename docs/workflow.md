@@ -73,13 +73,10 @@ Spring Boot 프로젝트 생성 + 첫 화면 확인
 
 ## 검증
 
-가능하면 테스트를 실행합니다.
+가능하면 Codex가 테스트를 실행해서 결과를 보여줍니다.
 
-```bash
-scripts/run-verification --target /work/my-spring-project
-```
-
-실행할 수 없으면 `UNKNOWN`으로 남기고 이유를 설명합니다.
+실행할 수 없으면 `UNKNOWN`으로 남기고 이유를 설명합니다. 테스트가 없다는 것과
+테스트가 실패했다는 것은 다르게 보고합니다.
 
 
 ## 기록

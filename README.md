@@ -85,23 +85,15 @@ README를 읽었습니다.
 - 실행 또는 테스트 방법
 - 다음에 이어갈 선택지
 
-## 5. 포함된 도구
+## 5. Harness가 확인하는 것
 
-```bash
-scripts/check-target --target /work/my-spring-project
-scripts/check-spring-project --target /work/my-spring-project
-scripts/run-verification --target /work/my-spring-project
-```
+명령어를 직접 칠 일은 없습니다. 필요한 확인은 Codex가 알아서 합니다.
 
-스크립트는 결과를 간단히 출력합니다. 확인하지 못한 내용은 `UNKNOWN`으로 표시합니다.
+- target 폴더가 있는지, Git repo인지, 기존 변경이 남아 있는지
+- 이미 Spring 프로젝트인지, 아직 빈 repo인지
+- 테스트가 통과하는지
 
-종료 코드는 `0` 확인됨, `1` 확인된 부정, `2` 사용법 오류, `3` 확인 불가입니다.
-
-Harness 스크립트를 고쳤다면 테스트를 돌립니다.
-
-```bash
-tests/run-tests
-```
+확인하지 못한 것은 `UNKNOWN`이라고 알려줍니다. 추측으로 넘어가지 않습니다.
 
 ## 6. 자세한 문서
 
@@ -110,4 +102,13 @@ tests/run-tests
 - [AGENTS.md](AGENTS.md): 에이전트 동작 규칙 (단일 출처)
 - [Examples](examples/verasure.md): 프로젝트별 MVP 예시
 - [Troubleshooting](docs/troubleshooting.md): 자주 막히는 문제 해결
+
+## 7. Harness를 고치는 경우
+
+이 Harness 자체를 수정했다면 테스트를 돌립니다. 프로젝트를 만드는 사용자는
+이 절을 볼 필요가 없습니다.
+
+```bash
+tests/run-tests
+```
 
