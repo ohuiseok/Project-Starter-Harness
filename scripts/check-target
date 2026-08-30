@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+set -u
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+HARNESS_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
+
+usage() {
+  printf 'Usage: %s --target PATH\n' "$0" >&2
+}
+
+TARGET="${TARGET_REPOSITORY:-}"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --target)
+      TARGET="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'UNKNOWN: unsupported argument: %s\n' "$1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [ -z "$TARGET" ]; then
+  printf 'TARGET_PATH: UNKNOWN\n'
+  printf 'UNKNOWN: target path is required\n' >&2
+  exit 2
+fi
+
+printf 'TARGET_PATH: %s\n' "$TARGET"
+
+if [ -e "$TARGET" ]; then
+  printf 'TARGET_EXISTS: yes\n'
+else
+  printf 'TARGET_EXISTS: no\n'
+  exit 1
+fi
+
+if [ -d "$TARGET" ]; then
+  printf 'TARGET_IS_DIRECTORY: yes\n'
+else
+  printf 'TARGET_IS_DIRECTORY: no\n'
+  exit 1
+fi
+
+TARGET_ABS="$(CDPATH= cd -- "$TARGET" 2>/dev/null && pwd -P)" || {
+  printf 'TARGET_ABSOLUTE_PATH: UNKNOWN\n'
+  exit 1
+}
+printf 'TARGET_ABSOLUTE_PATH: %s\n' "$TARGET_ABS"
+
+if [ "$TARGET_ABS" = "$HARNESS_ROOT" ]; then
+  printf 'TARGET_IS_HARNESS_REPO: yes\n'
+else
+  printf 'TARGET_IS_HARNESS_REPO: no\n'
+fi
+
+if command -v git >/dev/null 2>&1; then
+  if TARGET_GIT_ROOT="$(git -C "$TARGET_ABS" rev-parse --show-toplevel 2>/dev/null)"; then
+    TARGET_GIT_ROOT="$(CDPATH= cd -- "$TARGET_GIT_ROOT" && pwd -P)"
+    printf 'TARGET_IS_GIT_REPOSITORY: yes\n'
+    printf 'TARGET_GIT_ROOT: %s\n' "$TARGET_GIT_ROOT"
+    BRANCH="$(git -C "$TARGET_GIT_ROOT" branch --show-current 2>/dev/null || true)"
+    [ -n "$BRANCH" ] || BRANCH="DETACHED_HEAD"
+    printf 'TARGET_BRANCH: %s\n' "$BRANCH"
+    printf 'TARGET_GIT_STATUS:\n'
+    git -C "$TARGET_GIT_ROOT" status --short
+  else
+    printf 'TARGET_IS_GIT_REPOSITORY: no\n'
+    printf 'TARGET_GIT_ROOT: UNKNOWN\n'
+  fi
+else
+  printf 'TARGET_IS_GIT_REPOSITORY: UNKNOWN\n'
+  printf 'TARGET_GIT_ROOT: UNKNOWN\n'
+  printf 'UNKNOWN: git is not available\n' >&2
+fi
+
+if find "$TARGET_ABS" -maxdepth 1 -type f \( -iname 'README' -o -iname 'README.*' \) | grep -q .; then
+  printf 'README_EXISTS: yes\n'
+else
+  printf 'README_EXISTS: no\n'
+fi
+
+if [ -f "$TARGET_ABS/build.gradle" ] || [ -f "$TARGET_ABS/build.gradle.kts" ] || [ -f "$TARGET_ABS/pom.xml" ]; then
+  printf 'BUILD_FILE_EXISTS: yes\n'
+else
+  printf 'BUILD_FILE_EXISTS: no\n'
+fi
+
+if [ -d "$TARGET_ABS/src/main/java" ]; then
+  printf 'SRC_MAIN_JAVA_EXISTS: yes\n'
+else
+  printf 'SRC_MAIN_JAVA_EXISTS: no\n'
+fi
+
+if [ -f "$TARGET_ABS/build.gradle" ] || [ -f "$TARGET_ABS/build.gradle.kts" ] || [ -f "$TARGET_ABS/pom.xml" ]; then
+  if [ -d "$TARGET_ABS/src/main/java" ]; then
+    printf 'SPRING_PROJECT: yes\n'
+  else
+    printf 'SPRING_PROJECT: UNKNOWN\n'
+  fi
+else
+  printf 'SPRING_PROJECT: no\n'
+fi
+

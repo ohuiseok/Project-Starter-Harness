@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -u
+
+usage() {
+  printf 'Usage: %s --target PATH\n' "$0" >&2
+}
+
+TARGET="${TARGET_REPOSITORY:-}"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --target)
+      TARGET="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'UNKNOWN: unsupported argument: %s\n' "$1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [ -z "$TARGET" ] || [ ! -d "$TARGET" ]; then
+  printf 'UNKNOWN: target path is invalid\n' >&2
+  exit 2
+fi
+
+TARGET_ABS="$(CDPATH= cd -- "$TARGET" 2>/dev/null && pwd -P)" || {
+  printf 'UNKNOWN: target path is invalid\n' >&2
+  exit 2
+}
+
+printf 'TARGET_PATH: %s\n' "$TARGET_ABS"
+
+if [ -f "$TARGET_ABS/build.gradle" ]; then
+  printf 'BUILD_FILE: build.gradle\n'
+elif [ -f "$TARGET_ABS/build.gradle.kts" ]; then
+  printf 'BUILD_FILE: build.gradle.kts\n'
+elif [ -f "$TARGET_ABS/pom.xml" ]; then
+  printf 'BUILD_FILE: pom.xml\n'
+else
+  printf 'BUILD_FILE: UNKNOWN\n'
+fi
+
+if [ -d "$TARGET_ABS/src/main/java" ]; then
+  printf 'SRC_MAIN_JAVA: yes\n'
+else
+  printf 'SRC_MAIN_JAVA: no\n'
+fi
+
+if [ -f "$TARGET_ABS/src/main/resources/static/index.html" ]; then
+  printf 'STATIC_INDEX_HTML: yes\n'
+else
+  printf 'STATIC_INDEX_HTML: no\n'
+fi
+
+if [ -d "$TARGET_ABS/src/test" ]; then
+  printf 'TEST_FOLDER: yes\n'
+else
+  printf 'TEST_FOLDER: no\n'
+fi
+

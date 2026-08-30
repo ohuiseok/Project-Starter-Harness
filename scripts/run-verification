@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -u
+
+usage() {
+  printf 'Usage: %s --target PATH\n' "$0" >&2
+}
+
+TARGET="${TARGET_REPOSITORY:-}"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --target)
+      TARGET="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'UNKNOWN: unsupported argument: %s\n' "$1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [ -z "$TARGET" ] || [ ! -d "$TARGET" ]; then
+  printf 'UNKNOWN: target path is invalid\n' >&2
+  exit 2
+fi
+
+TARGET_ABS="$(CDPATH= cd -- "$TARGET" 2>/dev/null && pwd -P)" || {
+  printf 'UNKNOWN: target path is invalid\n' >&2
+  exit 2
+}
+
+printf 'TARGET_PATH: %s\n' "$TARGET_ABS"
+
+if [ -x "$TARGET_ABS/gradlew" ]; then
+  printf 'VERIFICATION_COMMAND: ./gradlew test\n'
+  (cd "$TARGET_ABS" && ./gradlew test)
+  STATUS=$?
+  printf 'VERIFICATION_EXIT_CODE: %s\n' "$STATUS"
+  exit "$STATUS"
+elif [ -x "$TARGET_ABS/mvnw" ]; then
+  printf 'VERIFICATION_COMMAND: ./mvnw test\n'
+  (cd "$TARGET_ABS" && ./mvnw test)
+  STATUS=$?
+  printf 'VERIFICATION_EXIT_CODE: %s\n' "$STATUS"
+  exit "$STATUS"
+else
+  printf 'VERIFICATION_COMMAND: UNKNOWN\n'
+  printf 'UNKNOWN: no Gradle or Maven wrapper found\n'
+  exit 1
+fi
+
