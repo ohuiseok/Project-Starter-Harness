@@ -99,6 +99,7 @@ scripts/run-verification --target /tmp/Verasure
 
 - [Workflow](docs/workflow.md): 시작부터 세션 종료까지의 흐름
 - [Learning Sessions](docs/learning-sessions.md): 입문자에게 설명하는 방식
-- [Starter Rules](docs/starter-rules.md): Harness 사용 규칙
+- [AGENTS.md](AGENTS.md): 에이전트 동작 규칙 (단일 출처)
+- [Examples](examples/verasure.md): 프로젝트별 MVP 예시
 - [Troubleshooting](docs/troubleshooting.md): 자주 막히는 문제 해결
 

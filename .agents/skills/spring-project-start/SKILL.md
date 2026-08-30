@@ -1,3 +1,8 @@
+---
+name: spring-project-start
+description: 빈 repo, README만 있는 repo, 또는 작은 기존 repo에서 입문자용 Spring Boot 프로젝트를 시작하거나 이어갈 때 사용합니다. 사용자가 "시작해줘", "추천으로 해줘", "이어가자"라고만 말해도 이 Skill을 씁니다.
+---
+
 # spring-project-start
 
 Use this Skill when a user wants to start, continue, or learn a beginner Spring
@@ -17,6 +22,14 @@ The user should be able to say:
 이어가자
 ```
 
+## Rules
+
+Follow `AGENTS.md`. It defines the UX rules, the recommended stack, the
+default exclusions, Git safety, and the `UNKNOWN` convention. Do not restate
+them here; this file only covers the session procedure.
+
+Per-project MVP scope lives in `examples/`.
+
 ## Required Behavior
 
 1. Identify the target repository.
@@ -26,21 +39,16 @@ The user should be able to say:
    - `scripts/check-target --target <target-path>`
    - If the target already looks like a Spring project, also run
      `scripts/check-spring-project --target <target-path>`.
-3. Read the target README first when it exists.
+3. Read `<target-path>/docs/progress.md` when it exists, then the target README.
 4. Summarize the project intent in 1 to 3 short bullets.
 5. Ask one short question.
-6. Present 2 to 4 choices.
-7. Always include a recommended choice.
-8. If the user is unsure, use the recommended choice.
-9. Confirm one small session goal before implementation.
-10. Implement only that goal.
-11. Explain briefly while implementing.
-12. Verify with tests or a run check.
-13. End with:
-    - 완료한 것
-    - 배운 것
-    - 실행/테스트 방법
-    - 다음 선택지
+6. Present 2 to 4 choices, including a recommended one.
+7. If the user is unsure, use the recommended choice.
+8. Confirm one small session goal before implementation.
+9. Implement only that goal.
+10. Explain briefly while implementing.
+11. Verify with tests or a run check.
+12. Close the session (see Session Ending below).
 
 ## First Question
 
@@ -64,62 +72,27 @@ If there is no README:
 2. 직접 고르기
 ```
 
-## Recommended Session Goals
+## Session Goals
 
-Use one goal per session.
+One goal per session. A goal is good when it can be verified at the end.
 
-Recommended order:
+Good:
 
-1. Spring Boot project creation and first page
-2. Domain model and status enum
-3. Create insurance information
-4. List insurance information
-5. Detail view
-6. Validation and error messages
-7. Tests and cleanup
+- Spring Boot 프로젝트 생성 + 첫 화면 확인
+- 등록 API 만들기
+- 목록 화면 만들기
 
-## Verasure Recommended MVP
+Too large:
 
-For `/tmp/Verasure`, recommend:
+- 전체 서비스 완성
+- 로그인, OCR, 추천, 배포까지 한 번에 구현
 
-- Java 17
-- Spring Boot
-- Gradle
-- Spring Web
-- Spring Data JPA
-- H2
-- JUnit
-- static `index.html`
-- insurance information create
-- insurance information list
-- insurance information detail
-- status display: `CONFIRMED`, `UNKNOWN`, `NEEDS_REVIEW`
+## Implementation Notes
 
-Do not include by default:
-
-- login
-- PDF upload
-- OCR
-- RAG
-- insurance recommendation or judgment
-- Spring Security
-- Docker
-- MySQL
-- MSA, Kafka, Kubernetes
-- forced Clean Architecture
-
-## Implementation Rules
-
-- Prefer Spring Initializr or standard Spring Boot structure when creating a
-  new project, but do not implement Spring Initializr inside this Harness.
+- Prefer Spring Initializr or standard Spring Boot layout when creating a new
+  project, but do not implement Spring Initializr inside this Harness.
 - Keep the generated project simple.
-- Prefer Gradle for the recommended path.
-- Use Java 17 for the recommended path.
-- Use H2 for the recommended path.
 - Use static `index.html` before adding a frontend framework.
-- Do not add React or Vue by default.
-- Do not add Docker by default.
-- Do not add Spring Security by default.
 - Do not force Clean Architecture on a beginner project.
 
 ## Explanation Style
@@ -142,13 +115,15 @@ After implementation, run:
 scripts/run-verification --target <target-path>
 ```
 
-If wrappers do not exist, report `UNKNOWN` and explain what could not be run.
+Exit code 3 means verification could not run. Report it as `UNKNOWN` and say
+what could not be checked. If tests fail, show the failure plainly and do not
+hide output.
 
-If tests fail, show the failure plainly and do not hide output.
+## Session Ending
 
-## Session Ending Template
-
-Use this shape:
+Write the outcome to `<target-path>/docs/progress.md`, creating it from
+`templates/progress.md` on the first session. Then report in chat using
+`templates/session-summary.md`:
 
 ```text
 완료:
@@ -160,9 +135,11 @@ Use this shape:
 실행/테스트:
 - ...
 
+남은 UNKNOWN:
+- ...
+
 다음:
 1. 추천: ...
 2. ...
 3. ...
 ```
-

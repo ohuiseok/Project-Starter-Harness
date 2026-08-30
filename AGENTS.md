@@ -3,6 +3,10 @@
 This repository is a Project Starter Harness for helping beginner developers
 create and learn small Spring Boot projects with GPT/Codex.
 
+This file is the single source of truth for how the agent must behave. The
+files under `docs/` explain the same workflow to humans and must not restate
+these rules — they link here instead.
+
 ## Non-Negotiable Rules
 
 - Ask one question at a time.
@@ -54,10 +58,9 @@ Next-step choices
 
 Before implementation, confirm the current session goal briefly.
 
-## Recommended P0 MVP For Verasure
+## Technical Defaults
 
-Use this recommendation for `/tmp/Verasure` unless the target README says
-otherwise:
+Recommend this stack unless the target README says otherwise:
 
 - Java 17
 - Spring Boot
@@ -67,23 +70,23 @@ otherwise:
 - H2
 - JUnit
 - static `index.html`
-- insurance information create
-- insurance information list
-- insurance information detail
-- status display: `CONFIRMED`, `UNKNOWN`, `NEEDS_REVIEW`
 
 Exclude by default:
 
 - login
+- Spring Security
 - PDF upload
 - OCR
 - RAG
-- insurance recommendation or judgment
-- Spring Security
+- automated recommendation or judgment
 - Docker
 - MySQL
+- React/Vue
 - MSA, Kafka, Kubernetes
 - forced Clean Architecture
+
+The recommended MVP shape is: first page, then create, then list, then detail,
+for one domain object. Concrete per-project MVPs live in `examples/`.
 
 ## Git Safety
 
@@ -109,7 +112,28 @@ git branch -D
 ## Evidence And UNKNOWN
 
 Use actual files, scripts, test output, runtime output, and Git state as
-evidence.
+evidence. Trust evidence in this order:
+
+```text
+Actual files
+Tests
+Runtime output
+Git state
+README
+User approval
+AI inference
+```
 
 If something cannot be confirmed, say `UNKNOWN`.
 
+Scripts follow the same convention through their exit codes:
+
+```text
+0  confirmed
+1  confirmed negative (target missing, tests failed)
+2  usage error
+3  cannot verify (UNKNOWN)
+```
+
+Exit code 3 means the check could not run. It is not a failure and must be
+reported as `UNKNOWN`.
