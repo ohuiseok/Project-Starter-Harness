@@ -49,15 +49,58 @@ parse_target_args() {
   resolve_target_from_config
 }
 
+# Guard for "--flag VALUE" parsing. Without it, `shift 2` with a single
+# argument left fails, $# never reaches zero, and the caller's loop spins
+# forever. Call as: need_value "$1" "$#"
+need_value() {
+  if [ "$2" -lt 2 ]; then
+    printf 'UNKNOWN: %s requires a value\n' "$1" >&2
+    exit 2
+  fi
+}
+
+# Read a "key: value" pair from config/target.local.yaml.
+read_config_value() {
+  local key="$1" config="$HARNESS_ROOT/config/target.local.yaml"
+
+  [ -f "$config" ] || return 1
+  sed -n "s/^[[:space:]]*$key:[[:space:]]*//p" "$config" | head -n 1
+}
+
 # Fall back to config/target.local.yaml when no path was given.
-# Same file and key as the analysis harness, so a single config works for both.
 resolve_target_from_config() {
-  local config="$HARNESS_ROOT/config/target.local.yaml"
-
   [ -z "$TARGET" ] || return 0
-  [ -f "$config" ] || return 0
+  TARGET="$(read_config_value repository || true)"
+}
 
-  TARGET="$(sed -n 's/^[[:space:]]*repository:[[:space:]]*//p' "$config" | head -n 1)"
+require_commands() {
+  local command_name
+
+  for command_name in "$@"; do
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+      printf 'UNKNOWN: %s is not available\n' "$command_name" >&2
+      exit 2
+    fi
+  done
+}
+
+# Resolve TARGET to the target repository's Git root in TARGET_ROOT.
+require_target_git_root() {
+  if [ -z "$TARGET" ] || [ ! -d "$TARGET" ]; then
+    printf 'UNKNOWN: target repository path is invalid\n' >&2
+    exit 2
+  fi
+
+  TARGET_ROOT="$(CDPATH= cd -- "$TARGET" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)" || {
+    printf 'UNKNOWN: target is not a git repository\n' >&2
+    exit 2
+  }
+  TARGET_ROOT="$(CDPATH= cd -- "$TARGET_ROOT" && pwd -P)"
+
+  if [ "$TARGET_ROOT" = "$HARNESS_ROOT" ]; then
+    printf 'UNKNOWN: target repository must not be the harness repository\n' >&2
+    exit 2
+  fi
 }
 
 # Require TARGET to be an existing directory and set TARGET_ABS.

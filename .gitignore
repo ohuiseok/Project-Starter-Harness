@@ -2,3 +2,4 @@
 .idea/
 *.log
 config/target.local.yaml
+reports/auto-check/

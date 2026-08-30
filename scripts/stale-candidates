@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -u
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+. "$SCRIPT_DIR/lib/common.sh"
+
+usage() {
+  printf 'Usage: %s --target PATH [--base REF] [--head REF]\n' "$0" >&2
+}
+
+TARGET="${TARGET_REPOSITORY:-}"
+BASE="HEAD~1"
+HEAD_REF="HEAD"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --target)
+      need_value "$1" "$#"
+      TARGET="$2"
+      shift 2
+      ;;
+    --base)
+      need_value "$1" "$#"
+      BASE="$2"
+      shift 2
+      ;;
+    --head)
+      need_value "$1" "$#"
+      HEAD_REF="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'UNKNOWN: unsupported argument: %s\n' "$1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+resolve_target_from_config
+require_commands git rg
+require_target_git_root
+
+printf '# Stale Knowledge Candidates\n\n'
+printf 'Target: %s\n' "$TARGET_ROOT"
+printf 'Base: %s\n' "$BASE"
+printf 'Head: %s\n\n' "$HEAD_REF"
+
+if ! git -C "$TARGET_ROOT" rev-parse --verify "$BASE" >/dev/null 2>&1; then
+  printf 'UNKNOWN: base ref is not available: %s\n' "$BASE" >&2
+  exit 1
+fi
+if ! git -C "$TARGET_ROOT" rev-parse --verify "$HEAD_REF" >/dev/null 2>&1; then
+  printf 'UNKNOWN: head ref is not available: %s\n' "$HEAD_REF" >&2
+  exit 1
+fi
+
+TMP_CHANGED="$(mktemp)"
+git -C "$TARGET_ROOT" diff --name-only "$BASE" "$HEAD_REF" -- . ':!**/*.class' ':!**/build/**' ':!**/target/**' > "$TMP_CHANGED"
+
+printf '## Changed Target Files\n'
+sed 's/^/- /' "$TMP_CHANGED" | head -n 300
+
+printf '\n## Knowledge Files Referencing Changed Paths\n'
+FOUND=0
+while IFS= read -r changed; do
+  [ -z "$changed" ] && continue
+  if rg -n --fixed-strings "$changed" "$HARNESS_ROOT/knowledge" "$HARNESS_ROOT/templates" 2>/dev/null; then
+    FOUND=1
+  fi
+done < "$TMP_CHANGED"
+rm -f "$TMP_CHANGED"
+
+if [ "$FOUND" -eq 0 ]; then
+  printf 'UNKNOWN: no direct knowledge references found, or no approved knowledge exists yet.\n'
+  exit 1
+fi

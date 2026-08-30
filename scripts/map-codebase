@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -u
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+. "$SCRIPT_DIR/lib/common.sh"
+
+usage() {
+  printf 'Usage: %s --target PATH\n' "$0" >&2
+}
+
+TARGET="${TARGET_REPOSITORY:-}"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --target)
+      need_value "$1" "$#"
+      TARGET="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'UNKNOWN: unsupported argument: %s\n' "$1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+resolve_target_from_config
+require_commands git rg
+require_target_git_root
+
+printf '# Codebase Map\n\n'
+printf 'Target: %s\n' "$TARGET_ROOT"
+printf 'Branch: %s\n\n' "$(git -C "$TARGET_ROOT" branch --show-current 2>/dev/null || printf DETACHED_HEAD)"
+
+printf '## Target Instructions and Build Files\n'
+find "$TARGET_ROOT" -maxdepth 4 \( -name AGENTS.md -o -name 'README*' -o -name pom.xml -o -name 'build.gradle*' -o -name 'settings.gradle*' -o -name gradlew -o -name mvnw \) -type f | sed "s#^$TARGET_ROOT/##" | sort | head -n 200
+
+printf '\n## Build Tool\n'
+[ -f "$TARGET_ROOT/pom.xml" ] && printf -- '- Maven root pom.xml\n'
+[ -f "$TARGET_ROOT/mvnw" ] && printf -- '- Maven wrapper\n'
+[ -f "$TARGET_ROOT/build.gradle" ] || [ -f "$TARGET_ROOT/build.gradle.kts" ] && printf -- '- Gradle root build file\n'
+[ -f "$TARGET_ROOT/gradlew" ] && printf -- '- Gradle wrapper\n'
+
+printf '\n## Module Candidates\n'
+find "$TARGET_ROOT" -maxdepth 3 \( -name pom.xml -o -name 'build.gradle*' \) -type f | sed "s#^$TARGET_ROOT/##" | sort | head -n 300
+
+printf '\n## Spring Annotation Counts\n'
+for pattern in '@RestController' '@Controller' '@Service' '@Repository' '@Component' '@Configuration' '@Mapper' '@Entity' '@Table' '@Transactional' '@Scheduled' '@EventListener'; do
+  count="$(rg -n --glob '*.java' "$pattern" "$TARGET_ROOT" 2>/dev/null | wc -l | tr -d ' ')"
+  printf '%s: %s\n' "$pattern" "$count"
+done
+
+printf '\n## Persistence Technology Candidate Counts\n'
+for pattern in 'JpaRepository' 'CrudRepository' 'PagingAndSortingRepository' 'EntityManager' '@Query' 'JdbcTemplate' 'NamedParameterJdbcTemplate' '<mapper[[:space:]]' '<(select|insert|update|delete)[[:space:]]'; do
+  count="$(rg -n --glob '*.java' --glob '*.xml' "$pattern" "$TARGET_ROOT" 2>/dev/null | wc -l | tr -d ' ')"
+  printf '%s: %s\n' "$pattern" "$count"
+done
+
+MYBATIS_COUNT="$(rg -n --glob '*.java' --glob '*.xml' '(@Mapper|<mapper[[:space:]]|<(select|insert|update|delete)[[:space:]])' "$TARGET_ROOT" 2>/dev/null | wc -l | tr -d ' ')"
+JPA_COUNT="$(rg -n --glob '*.java' '(JpaRepository|CrudRepository|PagingAndSortingRepository|Repository<|@Entity|@Table|EntityManager|@Query|Specification<|Querydsl|JPAQuery)' "$TARGET_ROOT" 2>/dev/null | wc -l | tr -d ' ')"
+JDBC_COUNT="$(rg -n --glob '*.java' '(JdbcTemplate|NamedParameterJdbcTemplate|java.sql.|DataSource)' "$TARGET_ROOT" 2>/dev/null | wc -l | tr -d ' ')"
+printf '\n## Persistence Summary\n'
+if [ "$MYBATIS_COUNT" -gt 0 ] && [ "$JPA_COUNT" -gt 0 ]; then
+  printf 'Persistence: Mixed\n'
+elif [ "$MYBATIS_COUNT" -gt 0 ]; then
+  printf 'Persistence: MyBatis\n'
+elif [ "$JPA_COUNT" -gt 0 ]; then
+  printf 'Persistence: JPA / Spring Data JPA\n'
+elif [ "$JDBC_COUNT" -gt 0 ]; then
+  printf 'Persistence: JDBC\n'
+else
+  printf 'Persistence: UNKNOWN\n'
+fi
+
+printf '\n## Test Candidates\n'
+find "$TARGET_ROOT" -maxdepth 6 \( -path '*/src/test/*' -o -path '*/test/*' \) -type f | sed "s#^$TARGET_ROOT/##" | sort | head -n 200

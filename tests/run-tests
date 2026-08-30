@@ -92,7 +92,9 @@ chmod 755 "$FAILING/gradlew"
 
 # --- argument handling ------------------------------------------------------
 
-for script in check-target check-spring-project run-verification check-environment; do
+for script in check-target check-spring-project run-verification check-environment \
+              map-codebase find-entrypoints find-persistence-links build-context-pack \
+              detect-changes stale-candidates daily-check install-target-hooks; do
   run_script "$script" --target
   expect_code "$script: --target without a value exits instead of hanging" 2
 
@@ -170,6 +172,8 @@ esac
 expect_out "check-environment: reports git" "GIT_AVAILABLE:"
 expect_out "check-environment: reports the required Java version" "JAVA_MINIMUM_REQUIRED: 17"
 expect_out "check-environment: reports overall readiness" "ENVIRONMENT_READY:"
+expect_out "check-environment: reports ripgrep for maintain mode" "RIPGREP_AVAILABLE:"
+expect_out "check-environment: reports maintain-mode readiness" "MAINTAIN_MODE_READY:"
 
 # --- target config fallback -------------------------------------------------
 
@@ -202,6 +206,72 @@ if [ "$RESOLVED" = "/explicit/path" ]; then
 else
   fail "config: an explicit path wins over target.local.yaml" "got '$RESOLVED'"
 fi
+
+# --- maintain mode scripts --------------------------------------------------
+
+# A Git repo with Spring-shaped sources, for the ported analysis scripts.
+MAINTAIN_REPO="$WORK/maintain-repo"
+mkdir -p "$MAINTAIN_REPO/src/main/java/app"
+printf 'plugins {}\n' > "$MAINTAIN_REPO/build.gradle"
+cat > "$MAINTAIN_REPO/src/main/java/app/HelloController.java" <<'JAVA'
+package app;
+import org.springframework.web.bind.annotation.RestController;
+@RestController
+public class HelloController {}
+JAVA
+git -C "$MAINTAIN_REPO" init -q
+git -C "$MAINTAIN_REPO" config user.email test@example.com
+git -C "$MAINTAIN_REPO" config user.name Test
+git -C "$MAINTAIN_REPO" add -A
+git -C "$MAINTAIN_REPO" commit -qm init
+
+run_script detect-changes --target "$MAINTAIN_REPO" --base HEAD --head HEAD
+expect_code "detect-changes: identical refs succeed" 0
+expect_out "detect-changes: reports the branch" "Branch:"
+
+run_script detect-changes --target "$MAINTAIN_REPO" --base no-such-ref
+expect_code "detect-changes: a missing base ref is exit 1, not a crash" 1
+
+run_script detect-changes --target "$README_ONLY" --base HEAD --head HEAD
+expect_code "detect-changes: a non-Spring Git repo still works" 0
+
+run_script install-target-hooks --target "$MAINTAIN_REPO" --baseline main --dry-run
+expect_code "install-target-hooks: dry run succeeds" 0
+expect_out "install-target-hooks: dry run installs nothing" "No target hook was created"
+if [ -e "$MAINTAIN_REPO/.git/hooks/post-merge" ]; then
+  fail "install-target-hooks: dry run leaves no hook behind" "hook was created"
+else
+  pass "install-target-hooks: dry run leaves no hook behind"
+fi
+
+run_script install-target-hooks --target "$MAINTAIN_REPO" --baseline main
+expect_code "install-target-hooks: installs the hook" 0
+if [ -x "$MAINTAIN_REPO/.git/hooks/post-merge" ]; then
+  pass "install-target-hooks: the hook is executable"
+else
+  fail "install-target-hooks: the hook is executable"
+fi
+
+run_script install-target-hooks --target "$MAINTAIN_REPO" --baseline main
+expect_code "install-target-hooks: an existing hook is never overwritten" 1
+
+run_script install-target-hooks --target "$MAINTAIN_REPO" --baseline 'main; rm -rf /'
+expect_code "install-target-hooks: a baseline with shell characters is rejected" 2
+
+run_script daily-check --target "$MAINTAIN_REPO"
+expect_code "daily-check: a missing baseline is a usage error" 2
+
+# ripgrep is optional on the machine. Either the script runs, or it says so;
+# what must never happen is a hang or a silently empty report.
+for script in map-codebase find-entrypoints find-persistence-links build-context-pack; do
+  run_script "$script" --target "$MAINTAIN_REPO"
+  if command -v rg >/dev/null 2>&1; then
+    expect_code "$script: runs when ripgrep is installed" 0
+  else
+    expect_code "$script: reports UNKNOWN when ripgrep is missing" 2
+    expect_out "$script: names the missing dependency" "rg is not available"
+  fi
+done
 
 # --- summary ----------------------------------------------------------------
 

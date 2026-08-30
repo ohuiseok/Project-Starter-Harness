@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -u
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+. "$SCRIPT_DIR/lib/common.sh"
+
+usage() {
+  printf 'Usage: %s --target PATH [--baseline BRANCH] [--dry-run]\n' "$0" >&2
+}
+
+TARGET="${TARGET_REPOSITORY:-}"
+BASELINE=""
+DRY_RUN=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --target)
+      need_value "$1" "$#"
+      TARGET="$2"
+      shift 2
+      ;;
+    --baseline)
+      need_value "$1" "$#"
+      BASELINE="$2"
+      shift 2
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'UNKNOWN: unsupported argument: %s\n' "$1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+resolve_target_from_config
+require_commands git
+require_target_git_root
+
+if [ -z "$BASELINE" ]; then
+  BASELINE="$(read_config_value branch || true)"
+fi
+
+if [ ! -x "$HARNESS_ROOT/scripts/daily-check" ]; then
+  printf 'UNKNOWN: scripts/daily-check is missing or not executable\n' >&2
+  exit 2
+fi
+
+if [ -z "$BASELINE" ]; then
+  printf 'UNKNOWN: baseline branch is required. Set baseline.branch in config/target.local.yaml or pass --baseline.\n' >&2
+  exit 2
+fi
+
+if [ -n "$BASELINE" ]; then
+  case "$BASELINE" in
+    *[!A-Za-z0-9._/-]*)
+      printf 'UNKNOWN: baseline contains unsupported characters\n' >&2
+      exit 2
+      ;;
+  esac
+fi
+
+HOOK_PATH="$(git -C "$TARGET_ROOT" rev-parse --path-format=absolute --git-path hooks/post-merge 2>/dev/null)" || {
+  printf 'UNKNOWN: cannot resolve target post-merge hook path\n' >&2
+  exit 2
+}
+HOOK_DIR="$(dirname -- "$HOOK_PATH")"
+
+printf '# Target Hook Install Plan\n\n'
+printf 'Target: %s\n' "$TARGET_ROOT"
+printf 'Hook: %s\n' "$HOOK_PATH"
+printf 'Harness: %s\n' "$HARNESS_ROOT"
+printf 'Baseline: %s\n' "${BASELINE:-UNKNOWN}"
+printf 'Dry run: %s\n\n' "$DRY_RUN"
+
+if [ -e "$HOOK_PATH" ]; then
+  printf 'UNKNOWN: target post-merge hook already exists and will not be overwritten: %s\n' "$HOOK_PATH" >&2
+  printf 'Manual action required: merge the Project Starter Harness daily-check call into the existing hook yourself if desired.\n' >&2
+  exit 1
+fi
+
+if [ "$DRY_RUN" -eq 1 ]; then
+  printf 'Dry-run success. No target hook was created.\n'
+  exit 0
+fi
+
+if [ ! -d "$HOOK_DIR" ]; then
+  printf 'UNKNOWN: target hooks directory does not exist: %s\n' "$HOOK_DIR" >&2
+  exit 2
+fi
+
+BASELINE_ARG=""
+if [ -n "$BASELINE" ]; then
+  BASELINE_ARG=" --baseline '$BASELINE'"
+fi
+
+cat > "$HOOK_PATH" <<EOF
+#!/usr/bin/env bash
+set +e
+# Installed by Project Starter Harness
+# HARNESS_HOOK_VERSION=1
+HARNESS_ROOT='$HARNESS_ROOT'
+TARGET_ROOT="\$(git rev-parse --show-toplevel 2>/dev/null)"
+"\$HARNESS_ROOT/scripts/daily-check" --target "\$TARGET_ROOT" --base ORIG_HEAD --head HEAD$BASELINE_ARG
+exit 0
+EOF
+chmod +x "$HOOK_PATH"
+
+printf 'Installed non-blocking post-merge hook: %s\n' "$HOOK_PATH"
+printf 'The hook runs scripts/daily-check only. It does not call AI and does not update Knowledge.\n'
