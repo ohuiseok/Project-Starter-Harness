@@ -1,47 +1,16 @@
 #!/usr/bin/env bash
 set -u
 
-usage() {
-  printf 'Usage: %s --target PATH\n' "$0" >&2
-}
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+. "$SCRIPT_DIR/lib/common.sh"
 
-TARGET="${TARGET_REPOSITORY:-}"
-
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --target)
-      TARGET="${2:-}"
-      shift 2
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      printf 'UNKNOWN: unsupported argument: %s\n' "$1" >&2
-      exit 2
-      ;;
-  esac
-done
-
-if [ -z "$TARGET" ] || [ ! -d "$TARGET" ]; then
-  printf 'UNKNOWN: target path is invalid\n' >&2
-  exit 2
-fi
-
-TARGET_ABS="$(CDPATH= cd -- "$TARGET" 2>/dev/null && pwd -P)" || {
-  printf 'UNKNOWN: target path is invalid\n' >&2
-  exit 2
-}
+parse_target_args "$@"
+require_target_dir
 
 printf 'TARGET_PATH: %s\n' "$TARGET_ABS"
 
-if [ -f "$TARGET_ABS/build.gradle" ]; then
-  printf 'BUILD_FILE: build.gradle\n'
-elif [ -f "$TARGET_ABS/build.gradle.kts" ]; then
-  printf 'BUILD_FILE: build.gradle.kts\n'
-elif [ -f "$TARGET_ABS/pom.xml" ]; then
-  printf 'BUILD_FILE: pom.xml\n'
+if BUILD_FILE="$(detect_build_file "$TARGET_ABS")"; then
+  printf 'BUILD_FILE: %s\n' "$BUILD_FILE"
 else
   printf 'BUILD_FILE: UNKNOWN\n'
 fi
@@ -50,6 +19,12 @@ if [ -d "$TARGET_ABS/src/main/java" ]; then
   printf 'SRC_MAIN_JAVA: yes\n'
 else
   printf 'SRC_MAIN_JAVA: no\n'
+fi
+
+if [ -d "$TARGET_ABS/src/main/kotlin" ]; then
+  printf 'SRC_MAIN_KOTLIN: yes\n'
+else
+  printf 'SRC_MAIN_KOTLIN: no\n'
 fi
 
 if [ -f "$TARGET_ABS/src/main/resources/static/index.html" ]; then
@@ -63,4 +38,3 @@ if [ -d "$TARGET_ABS/src/test" ]; then
 else
   printf 'TEST_FOLDER: no\n'
 fi
-

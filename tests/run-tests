@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+# Test suite for the Harness scripts.
+#
+# Usage: tests/run-tests
+set -u
+
+TESTS_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+HARNESS_ROOT="$(CDPATH= cd -- "$TESTS_DIR/.." && pwd -P)"
+SCRIPTS="$HARNESS_ROOT/scripts"
+
+PASSED=0
+FAILED=0
+
+fail() {
+  printf 'FAIL: %s\n' "$1"
+  [ "$#" -gt 1 ] && printf '  %s\n' "$2"
+  FAILED=$((FAILED + 1))
+}
+
+pass() {
+  printf 'ok: %s\n' "$1"
+  PASSED=$((PASSED + 1))
+}
+
+# run_script NAME ARGS...  -> sets OUT and CODE, never hangs.
+run_script() {
+  local name="$1"
+  shift
+  OUT="$(timeout 20 "$SCRIPTS/$name" "$@" 2>&1)"
+  CODE=$?
+}
+
+expect_code() {
+  local label="$1" want="$2"
+  if [ "$CODE" -eq 124 ]; then
+    fail "$label" "script timed out (infinite loop?)"
+  elif [ "$CODE" -ne "$want" ]; then
+    fail "$label" "expected exit $want, got $CODE"
+  else
+    pass "$label"
+  fi
+}
+
+expect_out() {
+  local label="$1" needle="$2"
+  if printf '%s' "$OUT" | grep -qF -- "$needle"; then
+    pass "$label"
+  else
+    fail "$label" "missing output: $needle"
+  fi
+}
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+# --- fixtures ---------------------------------------------------------------
+
+# README-only Git repo, the documented starting point.
+README_ONLY="$WORK/readme-only"
+mkdir -p "$README_ONLY"
+printf '# Sample\n' > "$README_ONLY/README.md"
+git -C "$README_ONLY" init -q
+git -C "$README_ONLY" config user.email test@example.com
+git -C "$README_ONLY" config user.name Test
+git -C "$README_ONLY" add -A
+git -C "$README_ONLY" commit -qm init
+
+# Gradle + Java project.
+JAVA_PROJECT="$WORK/java-project"
+mkdir -p "$JAVA_PROJECT/src/main/java" \
+         "$JAVA_PROJECT/src/main/resources/static" \
+         "$JAVA_PROJECT/src/test"
+printf 'plugins {}\n' > "$JAVA_PROJECT/build.gradle"
+printf '<html></html>\n' > "$JAVA_PROJECT/src/main/resources/static/index.html"
+
+# Gradle Kotlin DSL + Kotlin sources.
+KOTLIN_PROJECT="$WORK/kotlin-project"
+mkdir -p "$KOTLIN_PROJECT/src/main/kotlin"
+printf 'plugins {}\n' > "$KOTLIN_PROJECT/build.gradle.kts"
+
+# Wrapper without the executable bit, exiting 0.
+PASSING="$WORK/passing"
+mkdir -p "$PASSING"
+printf '#!/bin/sh\nexit 0\n' > "$PASSING/gradlew"
+chmod 644 "$PASSING/gradlew"
+
+# Wrapper whose tests fail.
+FAILING="$WORK/failing"
+mkdir -p "$FAILING"
+printf '#!/bin/sh\necho "test failure"\nexit 1\n' > "$FAILING/gradlew"
+chmod 755 "$FAILING/gradlew"
+
+# --- argument handling ------------------------------------------------------
+
+for script in check-target check-spring-project run-verification; do
+  run_script "$script" --target
+  expect_code "$script: --target without a value exits instead of hanging" 2
+
+  run_script "$script" --bogus
+  expect_code "$script: unsupported argument is rejected" 2
+done
+
+run_script check-target "--target=$README_ONLY"
+expect_code "check-target: --target=PATH form is accepted" 0
+
+OUT="$(TARGET_REPOSITORY="$README_ONLY" timeout 20 "$SCRIPTS/check-target" 2>&1)"
+CODE=$?
+expect_code "check-target: TARGET_REPOSITORY is honored" 0
+
+run_script check-target
+expect_code "check-target: no target at all is a usage error" 2
+expect_out "check-target: no target reports UNKNOWN" "TARGET_PATH: UNKNOWN"
+
+# --- target inspection ------------------------------------------------------
+
+run_script check-target --target "$WORK/does-not-exist"
+expect_code "check-target: missing path exits 1" 1
+expect_out "check-target: missing path is reported" "TARGET_EXISTS: no"
+
+run_script check-target --target "$HARNESS_ROOT"
+expect_out "check-target: harness used as target is flagged" "TARGET_IS_HARNESS_REPO: yes"
+
+run_script check-target --target "$README_ONLY"
+expect_code "check-target: README-only repo succeeds" 0
+expect_out "check-target: README-only repo is a Git repo" "TARGET_IS_GIT_REPOSITORY: yes"
+expect_out "check-target: README-only repo has a README" "README_EXISTS: yes"
+expect_out "check-target: README-only repo is not a Spring project" "SPRING_PROJECT: no"
+
+run_script check-target --target "$JAVA_PROJECT"
+expect_out "check-target: Gradle + Java is a Spring project" "SPRING_PROJECT: yes"
+expect_out "check-target: non-Git target is reported" "TARGET_IS_GIT_REPOSITORY: no"
+
+run_script check-target --target "$KOTLIN_PROJECT"
+expect_out "check-target: Kotlin sources are detected" "SRC_MAIN_KOTLIN_EXISTS: yes"
+expect_out "check-target: Gradle KTS + Kotlin is a Spring project" "SPRING_PROJECT: yes"
+
+run_script check-spring-project --target "$JAVA_PROJECT"
+expect_code "check-spring-project: Java project succeeds" 0
+expect_out "check-spring-project: build file is named" "BUILD_FILE: build.gradle"
+expect_out "check-spring-project: static index.html is found" "STATIC_INDEX_HTML: yes"
+expect_out "check-spring-project: test folder is found" "TEST_FOLDER: yes"
+
+run_script check-spring-project --target "$KOTLIN_PROJECT"
+expect_out "check-spring-project: Kotlin DSL build file is named" "BUILD_FILE: build.gradle.kts"
+expect_out "check-spring-project: Kotlin sources are reported" "SRC_MAIN_KOTLIN: yes"
+
+# --- verification -----------------------------------------------------------
+
+run_script run-verification --target "$README_ONLY"
+expect_code "run-verification: no wrapper exits 3 (cannot verify)" 3
+expect_out "run-verification: no wrapper is UNKNOWN, not a failure" "VERIFICATION_RESULT: UNKNOWN"
+
+run_script run-verification --target "$PASSING"
+expect_code "run-verification: non-executable wrapper still runs" 0
+expect_out "run-verification: passing wrapper is reported" "VERIFICATION_RESULT: passed"
+
+run_script run-verification --target "$FAILING"
+expect_code "run-verification: failing tests exit 1" 1
+expect_out "run-verification: failing tests are reported" "VERIFICATION_RESULT: failed"
+expect_out "run-verification: failure output is not hidden" "test failure"
+
+# --- summary ----------------------------------------------------------------
+
+printf '\n%s passed, %s failed\n' "$PASSED" "$FAILED"
+[ "$FAILED" -eq 0 ]

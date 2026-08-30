@@ -2,30 +2,9 @@
 set -u
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
-HARNESS_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
+. "$SCRIPT_DIR/lib/common.sh"
 
-usage() {
-  printf 'Usage: %s --target PATH\n' "$0" >&2
-}
-
-TARGET="${TARGET_REPOSITORY:-}"
-
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --target)
-      TARGET="${2:-}"
-      shift 2
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      printf 'UNKNOWN: unsupported argument: %s\n' "$1" >&2
-      exit 2
-      ;;
-  esac
-done
+parse_target_args "$@"
 
 if [ -z "$TARGET" ]; then
   printf 'TARGET_PATH: UNKNOWN\n'
@@ -87,9 +66,10 @@ else
   printf 'README_EXISTS: no\n'
 fi
 
-if [ -f "$TARGET_ABS/build.gradle" ] || [ -f "$TARGET_ABS/build.gradle.kts" ] || [ -f "$TARGET_ABS/pom.xml" ]; then
+if BUILD_FILE="$(detect_build_file "$TARGET_ABS")"; then
   printf 'BUILD_FILE_EXISTS: yes\n'
 else
+  BUILD_FILE=""
   printf 'BUILD_FILE_EXISTS: no\n'
 fi
 
@@ -99,8 +79,14 @@ else
   printf 'SRC_MAIN_JAVA_EXISTS: no\n'
 fi
 
-if [ -f "$TARGET_ABS/build.gradle" ] || [ -f "$TARGET_ABS/build.gradle.kts" ] || [ -f "$TARGET_ABS/pom.xml" ]; then
-  if [ -d "$TARGET_ABS/src/main/java" ]; then
+if [ -d "$TARGET_ABS/src/main/kotlin" ]; then
+  printf 'SRC_MAIN_KOTLIN_EXISTS: yes\n'
+else
+  printf 'SRC_MAIN_KOTLIN_EXISTS: no\n'
+fi
+
+if [ -n "$BUILD_FILE" ]; then
+  if has_jvm_sources "$TARGET_ABS"; then
     printf 'SPRING_PROJECT: yes\n'
   else
     printf 'SPRING_PROJECT: UNKNOWN\n'
@@ -108,4 +94,3 @@ if [ -f "$TARGET_ABS/build.gradle" ] || [ -f "$TARGET_ABS/build.gradle.kts" ] ||
 else
   printf 'SPRING_PROJECT: no\n'
 fi
-
