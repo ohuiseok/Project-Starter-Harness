@@ -3,6 +3,9 @@
 Spring Boot를 처음 배우는 개발 입문자가 GPT와 같은 세션에서 작은 프로젝트를
 처음부터 만들고 실행해보도록 돕는 Harness입니다.
 
+프로젝트가 자라면 같은 Harness로 이해하고, 고치고, 검증하는 것까지 이어집니다.
+어느 쪽인지는 Codex가 폴더를 보고 알아서 정합니다.
+
 처음 사용하는 사람은 이 README의 **1~3번만** 보면 됩니다.
 
 ## 1. 준비
@@ -100,7 +103,8 @@ README를 읽었습니다.
 
 ## 6. 자세한 문서
 
-- [Workflow](docs/workflow.md): 시작부터 세션 종료까지의 흐름
+- [Start Workflow](docs/start-workflow.md): 처음 만들 때의 흐름
+- [Maintain Workflow](docs/maintain-workflow.md): 기존 코드를 다룰 때의 흐름
 - [Learning Sessions](docs/learning-sessions.md): 입문자에게 설명하는 방식
 - [AGENTS.md](AGENTS.md): 모드 공통 규칙 (단일 출처)
 - [modes/start.md](modes/start.md): 처음 만들 때의 규칙
@@ -108,6 +112,8 @@ README를 읽었습니다.
 - [Examples](examples/verasure.md): 프로젝트별 MVP 예시
 - [통합 설계안](docs/integration-plan.md): 분석 harness와 합치는 방향 (설계 단계)
 - [Troubleshooting](docs/troubleshooting.md): 자주 막히는 문제 해결
+- [Skills and Scripts](docs/skills-and-scripts.md): Skill과 스크립트 목록
+- [Knowledge](docs/knowledge.md), [Auto Check](docs/auto-check.md): maintain 모드 참고
 
 ## 7. Harness를 고치는 경우
 

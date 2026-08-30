@@ -99,21 +99,26 @@ scripts/check-target
 
 ## 이행 순서
 
-한 번에 합치지 않습니다.
+base repo는 **이 repo(Project-Starter-Harness)**로 정했습니다. 분석 harness는
+읽기 전용 복사원으로 남습니다.
 
-1. **공통 코어 정렬** (일부 완료)
-   - `scripts/lib/common.sh`로 target 해석과 종료 코드를 통일
+1. **공통 코어 정렬** — 완료
+   - `scripts/lib/common.sh`로 target 해석, 인자 파싱, 종료 코드를 통일
    - `config/target.local.yaml`을 양쪽 동일 키로 사용
    - `check-environment`로 첫 세션 환경 확인
-2. **분석 harness의 스크립트 버그 수정** — 같은 `shift 2` 무한 루프
-3. **base repo 결정** 후 `modes/` 분리와 `AGENTS.md` 축약
-4. Skill 4개를 한 repo로 이동, 라우팅 규칙 추가
-5. `tests/run-tests`를 통합 스크립트 전체로 확장
+2. **스크립트 8개 이전 + `shift 2` 무한 루프 수정** — 완료
+3. **`modes/` 분리와 `AGENTS.md` 축약** — 완료
+4. **Skill 4개와 템플릿, 문서 이전 + 라우팅 규칙** — 완료
+5. **`tests/run-tests` 확장** — 완료 (80개)
 
-## 결정이 필요한 것
+## 남은 것
 
-- **어느 repo를 base로 삼을지.** 지금 이 repo의 `AGENTS.md`는
-  `/root/project-analysis-harness`를 "reference-only, 수정 금지"로 규정하고
-  있어서, 통합 방향이 정해지기 전에는 그쪽을 고칠 수 없습니다.
-- 실무자용 모드를 입문자용 배포판에 함께 넣을지, 분리 배포할지.
-- Knowledge/Reports 축적 구조를 입문자 모드에서도 쓸지, 뺄지.
+- **ripgrep 의존성.** maintain 모드 스크립트 6개가 `rg`를 요구합니다. 입문자
+  기기에는 없을 가능성이 높습니다. 지금은 `check-environment`가
+  `MAINTAIN_MODE_READY: no`로 알려주고 스크립트는 `UNKNOWN`을 반환합니다.
+  `grep` 폴백을 넣을지는 별도 판단이 필요합니다.
+- **repo 이름.** 이제 시작 전용이 아니므로 `Project-Starter-Harness`라는
+  이름이 범위와 맞지 않습니다.
+- **분석 harness 정리.** 내용이 이쪽으로 왔으므로, 그쪽을 보관용으로 둘지
+  삭제할지 결정이 필요합니다.
+- 실무자용 maintain 모드를 입문자용 배포판에 함께 넣을지, 분리 배포할지.
