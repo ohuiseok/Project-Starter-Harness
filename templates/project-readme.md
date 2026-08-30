@@ -1,7 +1,9 @@
 # Project Name
 
-이 프로젝트는 UNKNOWN을 확인 가능한 사실과 구분하며 작은 Spring Boot 앱으로
-학습하기 위한 프로젝트입니다.
+<!-- target repo에 README가 없을 때만 이 템플릿을 복사합니다. -->
+
+한 번에 하나씩 작은 목표를 만들어 나가는 Spring Boot 학습 프로젝트입니다.
+확인한 사실과 확인하지 못한 것(`UNKNOWN`)을 구분해서 기록합니다.
 
 ## 목표
 
@@ -9,19 +11,14 @@
 
 ## 이번 MVP
 
-- Spring Boot 첫 화면
+- 첫 화면
 - 데이터 등록
 - 데이터 목록
 - 데이터 상세 보기
-- 상태 표시: `CONFIRMED`, `UNKNOWN`, `NEEDS_REVIEW`
 
 ## 제외
 
-- 로그인
-- PDF 업로드
-- OCR
-- RAG
-- 추천 또는 판단 자동화
+- UNKNOWN
 
 ## 실행
 
@@ -35,3 +32,6 @@
 ./gradlew test
 ```
 
+## 진행 상황
+
+`docs/progress.md`를 참고하세요.

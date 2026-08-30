@@ -76,8 +76,21 @@ Spring Boot 프로젝트 생성 + 첫 화면 확인
 가능하면 테스트를 실행합니다.
 
 ```bash
-scripts/run-verification --target /tmp/Verasure
+scripts/run-verification --target /work/my-spring-project
 ```
 
 실행할 수 없으면 `UNKNOWN`으로 남기고 이유를 설명합니다.
 
+
+## 기록
+
+세션 결과는 target repo에 남깁니다. Harness에는 남기지 않습니다.
+
+| 템플릿 | 목적지 | 시점 |
+|---|---|---|
+| `templates/progress.md` | `<target>/docs/progress.md` | 첫 세션에 생성, 매 세션 갱신 |
+| `templates/session-summary.md` | 채팅 출력 | 매 세션 종료 |
+| `templates/project-readme.md` | `<target>/README.md` | target에 README가 없을 때만 |
+
+`이어가자`라고 하면 `<target>/docs/progress.md`를 먼저 읽고 Next 항목에서
+이어갑니다.

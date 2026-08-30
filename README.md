@@ -33,7 +33,7 @@ ChatGPT/Codex에서 이 Harness 폴더를 연 뒤 아래처럼 말하면 됩니�
 
 ```text
 이 repo에서 Spring Boot 프로젝트를 시작해줘.
-Target repository: /tmp/Verasure
+Target repository: /work/my-spring-project
 ```
 
 더 짧게 말해도 됩니다.
@@ -88,12 +88,20 @@ README를 읽었습니다.
 ## 5. 포함된 도구
 
 ```bash
-scripts/check-target --target /tmp/Verasure
-scripts/check-spring-project --target /tmp/Verasure
-scripts/run-verification --target /tmp/Verasure
+scripts/check-target --target /work/my-spring-project
+scripts/check-spring-project --target /work/my-spring-project
+scripts/run-verification --target /work/my-spring-project
 ```
 
 스크립트는 결과를 간단히 출력합니다. 확인하지 못한 내용은 `UNKNOWN`으로 표시합니다.
+
+종료 코드는 `0` 확인됨, `1` 확인된 부정, `2` 사용법 오류, `3` 확인 불가입니다.
+
+Harness 스크립트를 고쳤다면 테스트를 돌립니다.
+
+```bash
+tests/run-tests
+```
 
 ## 6. 자세한 문서
 
