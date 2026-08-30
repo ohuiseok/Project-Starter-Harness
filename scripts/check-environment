@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Report whether the local machine can build and run a Spring Boot project.
+# Beginners often do not have Java installed, so this must be checked before
+# the first session rather than discovered halfway through it.
+set -u
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+. "$SCRIPT_DIR/lib/common.sh"
+
+# No target is needed here; this only validates flags and prints --help.
+parse_target_args "$@"
+
+MINIMUM_JAVA=17
+BLOCKED=0
+UNCONFIRMED=0
+
+if command -v git >/dev/null 2>&1; then
+  printf 'GIT_AVAILABLE: yes\n'
+  printf 'GIT_VERSION: %s\n' "$(git --version 2>/dev/null | awk '{print $3}')"
+else
+  printf 'GIT_AVAILABLE: no\n'
+  printf 'GIT_VERSION: UNKNOWN\n'
+  BLOCKED=1
+fi
+
+if command -v java >/dev/null 2>&1; then
+  printf 'JAVA_AVAILABLE: yes\n'
+
+  # "openjdk version "21.0.12"" and "java version "1.8.0_401"" both appear here.
+  JAVA_VERSION="$(java -version 2>&1 | sed -n '1s/.*version "\([^"]*\)".*/\1/p')"
+
+  if [ -n "$JAVA_VERSION" ]; then
+    printf 'JAVA_VERSION: %s\n' "$JAVA_VERSION"
+
+    JAVA_MAJOR="${JAVA_VERSION%%.*}"
+    if [ "$JAVA_MAJOR" = "1" ]; then
+      JAVA_MAJOR="$(printf '%s' "$JAVA_VERSION" | cut -d. -f2)"
+    fi
+
+    case "$JAVA_MAJOR" in
+      ''|*[!0-9]*)
+        printf 'JAVA_MEETS_MINIMUM: UNKNOWN\n'
+        UNCONFIRMED=1
+        ;;
+      *)
+        if [ "$JAVA_MAJOR" -ge "$MINIMUM_JAVA" ]; then
+          printf 'JAVA_MEETS_MINIMUM: yes\n'
+        else
+          printf 'JAVA_MEETS_MINIMUM: no\n'
+          BLOCKED=1
+        fi
+        ;;
+    esac
+  else
+    printf 'JAVA_VERSION: UNKNOWN\n'
+    printf 'JAVA_MEETS_MINIMUM: UNKNOWN\n'
+    UNCONFIRMED=1
+  fi
+else
+  printf 'JAVA_AVAILABLE: no\n'
+  printf 'JAVA_VERSION: UNKNOWN\n'
+  printf 'JAVA_MEETS_MINIMUM: no\n'
+  BLOCKED=1
+fi
+
+printf 'JAVA_MINIMUM_REQUIRED: %s\n' "$MINIMUM_JAVA"
+
+if [ -f "$HARNESS_ROOT/config/target.local.yaml" ]; then
+  printf 'TARGET_CONFIG: config/target.local.yaml\n'
+else
+  printf 'TARGET_CONFIG: none\n'
+fi
+
+if [ "$BLOCKED" -eq 1 ]; then
+  printf 'ENVIRONMENT_READY: no\n'
+  exit 1
+fi
+
+if [ "$UNCONFIRMED" -eq 1 ]; then
+  printf 'ENVIRONMENT_READY: UNKNOWN\n'
+  exit "$EXIT_UNKNOWN"
+fi
+
+printf 'ENVIRONMENT_READY: yes\n'

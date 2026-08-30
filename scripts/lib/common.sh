@@ -45,6 +45,19 @@ parse_target_args() {
         ;;
     esac
   done
+
+  resolve_target_from_config
+}
+
+# Fall back to config/target.local.yaml when no path was given.
+# Same file and key as the analysis harness, so a single config works for both.
+resolve_target_from_config() {
+  local config="$HARNESS_ROOT/config/target.local.yaml"
+
+  [ -z "$TARGET" ] || return 0
+  [ -f "$config" ] || return 0
+
+  TARGET="$(sed -n 's/^[[:space:]]*repository:[[:space:]]*//p' "$config" | head -n 1)"
 }
 
 # Require TARGET to be an existing directory and set TARGET_ABS.

@@ -27,6 +27,9 @@ Spring Boot를 처음 배우는 개발 입문자가 GPT와 같은 세션에서 �
 - Harness Git 상태와 target 프로젝트 Git 상태를 섞지 않습니다.
 - 처음에는 빈 repo 또는 README만 있는 repo여도 됩니다.
 
+매번 경로를 말하기 번거로우면 `config/target.example.yaml`을
+`config/target.local.yaml`로 복사해서 경로를 한 번만 적어두면 됩니다.
+
 ## 2. 바로 시작
 
 ChatGPT/Codex에서 이 Harness 폴더를 연 뒤 아래처럼 말하면 됩니다.
@@ -101,6 +104,7 @@ README를 읽었습니다.
 - [Learning Sessions](docs/learning-sessions.md): 입문자에게 설명하는 방식
 - [AGENTS.md](AGENTS.md): 에이전트 동작 규칙 (단일 출처)
 - [Examples](examples/verasure.md): 프로젝트별 MVP 예시
+- [통합 설계안](docs/integration-plan.md): 분석 harness와 합치는 방향 (설계 단계)
 - [Troubleshooting](docs/troubleshooting.md): 자주 막히는 문제 해결
 
 ## 7. Harness를 고치는 경우

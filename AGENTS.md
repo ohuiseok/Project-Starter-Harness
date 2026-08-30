@@ -94,10 +94,19 @@ These are agent tools. The user never runs them and the README does not show
 them. Always pass the target root explicitly.
 
 ```bash
-scripts/check-target --target <target-path>          # preflight
+scripts/check-environment                            # local Java and Git
+scripts/check-target --target <target-path>          # target preflight
 scripts/check-spring-project --target <target-path>  # layout details
 scripts/run-verification --target <target-path>      # tests
 ```
+
+Run `check-environment` before the first session of a project. A beginner may
+not have Java installed at all, and that must be reported up front rather than
+discovered halfway through an implementation.
+
+If no `--target` is given, the scripts fall back to the `target.repository`
+value in `config/target.local.yaml`. That file is git-ignored and holds one
+user's own path.
 
 `tests/run-tests` covers the scripts themselves. Run it after changing anything
 under `scripts/`.

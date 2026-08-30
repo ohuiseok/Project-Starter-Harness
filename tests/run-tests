@@ -92,7 +92,7 @@ chmod 755 "$FAILING/gradlew"
 
 # --- argument handling ------------------------------------------------------
 
-for script in check-target check-spring-project run-verification; do
+for script in check-target check-spring-project run-verification check-environment; do
   run_script "$script" --target
   expect_code "$script: --target without a value exits instead of hanging" 2
 
@@ -158,6 +158,50 @@ run_script run-verification --target "$FAILING"
 expect_code "run-verification: failing tests exit 1" 1
 expect_out "run-verification: failing tests are reported" "VERIFICATION_RESULT: failed"
 expect_out "run-verification: failure output is not hidden" "test failure"
+
+# --- environment ------------------------------------------------------------
+
+run_script check-environment
+case "$CODE" in
+  0|1|3) pass "check-environment: exits with a defined status" ;;
+  124)   fail "check-environment: exits with a defined status" "timed out" ;;
+  *)     fail "check-environment: exits with a defined status" "got $CODE" ;;
+esac
+expect_out "check-environment: reports git" "GIT_AVAILABLE:"
+expect_out "check-environment: reports the required Java version" "JAVA_MINIMUM_REQUIRED: 17"
+expect_out "check-environment: reports overall readiness" "ENVIRONMENT_READY:"
+
+# --- target config fallback -------------------------------------------------
+
+CONFIG_HOME="$WORK/config-home"
+mkdir -p "$CONFIG_HOME/config"
+printf 'target:\n  repository: %s\n' "$JAVA_PROJECT" > "$CONFIG_HOME/config/target.local.yaml"
+
+RESOLVED="$(
+  . "$SCRIPTS/lib/common.sh"
+  HARNESS_ROOT="$CONFIG_HOME"
+  TARGET=""
+  resolve_target_from_config
+  printf '%s' "$TARGET"
+)"
+if [ "$RESOLVED" = "$JAVA_PROJECT" ]; then
+  pass "config: target.local.yaml is used when no path is given"
+else
+  fail "config: target.local.yaml is used when no path is given" "got '$RESOLVED'"
+fi
+
+RESOLVED="$(
+  . "$SCRIPTS/lib/common.sh"
+  HARNESS_ROOT="$CONFIG_HOME"
+  TARGET="/explicit/path"
+  resolve_target_from_config
+  printf '%s' "$TARGET"
+)"
+if [ "$RESOLVED" = "/explicit/path" ]; then
+  pass "config: an explicit path wins over target.local.yaml"
+else
+  fail "config: an explicit path wins over target.local.yaml" "got '$RESOLVED'"
+fi
 
 # --- summary ----------------------------------------------------------------
 

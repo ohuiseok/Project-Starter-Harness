@@ -1,0 +1,6 @@
+# Target repository configuration.
+# Copy this file to config/target.local.yaml and set an absolute path.
+# target.local.yaml is git-ignored, so each user keeps their own.
+
+target:
+  repository: /absolute/path/to/your/spring-project

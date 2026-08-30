@@ -36,6 +36,9 @@ Per-project MVP scope lives in `examples/`.
    - Use the path provided by the user.
    - If no path is provided, ask one short question for the target path.
 2. Run preflight:
+   - `scripts/check-environment` on the first session of a project. If
+     `ENVIRONMENT_READY` is not `yes`, say what is missing and stop before
+     implementation; do not start a project the user cannot run.
    - `scripts/check-target --target <target-path>`
    - If the target already looks like a Spring project, also run
      `scripts/check-spring-project --target <target-path>`.
