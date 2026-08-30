@@ -102,7 +102,9 @@ README를 읽었습니다.
 
 - [Workflow](docs/workflow.md): 시작부터 세션 종료까지의 흐름
 - [Learning Sessions](docs/learning-sessions.md): 입문자에게 설명하는 방식
-- [AGENTS.md](AGENTS.md): 에이전트 동작 규칙 (단일 출처)
+- [AGENTS.md](AGENTS.md): 모드 공통 규칙 (단일 출처)
+- [modes/start.md](modes/start.md): 처음 만들 때의 규칙
+- [modes/maintain.md](modes/maintain.md): 기존 코드를 다룰 때의 규칙
 - [Examples](examples/verasure.md): 프로젝트별 MVP 예시
 - [통합 설계안](docs/integration-plan.md): 분석 harness와 합치는 방향 (설계 단계)
 - [Troubleshooting](docs/troubleshooting.md): 자주 막히는 문제 해결

@@ -24,9 +24,10 @@ The user should be able to say:
 
 ## Rules
 
-Follow `AGENTS.md`. It defines the UX rules, the recommended stack, the
-default exclusions, Git safety, and the `UNKNOWN` convention. Do not restate
-them here; this file only covers the session procedure.
+Follow `AGENTS.md` for the shared rules and `modes/start.md` for this mode:
+the UX rules, the approval model, the recommended stack, and the default
+exclusions. Do not restate them here; this file only covers the session
+procedure.
 
 Per-project MVP scope lives in `examples/`.
 

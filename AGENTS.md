@@ -1,92 +1,66 @@
 # AGENTS.md
 
-This repository is a Project Starter Harness for helping beginner developers
-create and learn small Spring Boot projects with GPT/Codex.
+This repository is an evidence-first harness for external Spring projects. It
+covers the whole life of a project: creating one from an empty repository,
+understanding an existing one, changing it, and verifying the change.
 
-This file is the single source of truth for how the agent must behave. The
-files under `docs/` explain the same workflow to humans and must not restate
-these rules — they link here instead.
+The users are beginners. They should be able to work in natural language only
+and never type a command.
+
+This file holds the rules that apply in **every** mode. Rules that differ by
+mode live in `modes/`. Do not restate either set anywhere else; `docs/` and the
+skills link here.
+
+## Modes
+
+Two modes, because a beginner starting a toy project and a developer touching
+production code need opposite defaults. Read the mode file before acting.
+
+| Mode | File | When |
+|---|---|---|
+| start | `modes/start.md` | empty or README-only repo; create and learn |
+| maintain | `modes/maintain.md` | existing codebase; understand, change, verify |
+
+Never apply `modes/maintain.md` approval gates to a beginner's empty project,
+and never apply `modes/start.md` "proceed on the recommendation" to existing
+code someone depends on.
+
+## Routing
+
+The user says only `시작해줘`. Decide the mode from preflight, not by asking.
+
+```text
+scripts/check-target --target <target-path>
+
+  SPRING_PROJECT: no       → start mode. Do not ask; the intent is unambiguous.
+  SPRING_PROJECT: yes      → maintain mode. Ask one short question to pick the
+                             skill: 이해 / 수정 / 검증.
+  SPRING_PROJECT: UNKNOWN  → ask one short question.
+```
+
+A beginner cannot describe their intent in technical terms. Where preflight
+already answers the question, do not ask it.
 
 ## Non-Negotiable Rules
 
-- Ask one question at a time.
-- Keep questions short.
-- Offer 2 to 4 choices.
-- Every choice set must include a recommended option.
-- If the user does not know, continue with the recommended option.
-- Work on one small session goal at a time.
-- Explain briefly while implementing, using beginner-friendly language.
-- Verify with a test or run check before ending a session.
-- End every session with a short summary and next-step choices.
-- Do not include heavy defaults unless the user asks for them.
-- Protect existing dirty changes.
-- Keep target repository Git state separate from Harness Git state.
-- The target Spring repository is external. Do not create target source inside
-  this Harness repository.
+These hold in both modes.
+
+- The target repository is external. Never create target source inside this
+  Harness repository, and never use `workspace/target-solution`.
 - All target commands must use the target repository root as the explicit
   working directory.
-- Do not modify `/root/project-analysis-harness`; it is reference-only.
-- If evidence is missing, report `UNKNOWN` instead of guessing.
-
-## Beginner UX
-
-The user may say only:
-
-```text
-시작해줘
-추천으로 해줘
-이어가자
-```
-
-Treat these as valid instructions. Read the target repo first, summarize what is
-confirmed, then ask the next short question.
-
-## Session Shape
-
-Use this flow:
-
-```text
-Preflight
-README summary
-One short question
-One small session goal
-Implementation
-Verification
-Summary
-Next-step choices
-```
-
-Before implementation, confirm the current session goal briefly.
-
-## Technical Defaults
-
-Recommend this stack unless the target README says otherwise:
-
-- Java 17
-- Spring Boot
-- Gradle
-- Spring Web
-- Spring Data JPA
-- H2
-- JUnit
-- static `index.html`
-
-Exclude by default:
-
-- login
-- Spring Security
-- PDF upload
-- OCR
-- RAG
-- automated recommendation or judgment
-- Docker
-- MySQL
-- React/Vue
-- MSA, Kafka, Kubernetes
-- forced Clean Architecture
-
-The recommended MVP shape is: first page, then create, then list, then detail,
-for one domain object. Concrete per-project MVPs live in `examples/`.
+- Do not mix Harness Git state with target Git state.
+- Confirm target preflight before reading target Git state: `TARGET_EXISTS`,
+  `TARGET_IS_DIRECTORY`, `TARGET_IS_GIT_REPOSITORY`,
+  `TARGET_IS_HARNESS_REPO: no`, `TARGET_GIT_ROOT`, `TARGET_BRANCH`.
+- Protect existing dirty changes. Do not overwrite files you did not change.
+- If evidence is missing, or a script fails, report `UNKNOWN`. Do not infer the
+  missing result.
+- Do not store passwords, tokens, API keys, credentials, PII, production
+  customer data, full production logs, or secret-bearing config in this
+  repository or in anything it generates.
+- Do not modify `/root/project-analysis-harness`. It is the read-only source
+  this harness was merged from.
 
 ## Scripts
 
@@ -95,10 +69,14 @@ them. Always pass the target root explicitly.
 
 ```bash
 scripts/check-environment                            # local Java and Git
-scripts/check-target --target <target-path>          # target preflight
+scripts/check-target --target <target-path>          # target preflight, routing
 scripts/check-spring-project --target <target-path>  # layout details
 scripts/run-verification --target <target-path>      # tests
 ```
+
+Maintain mode adds `map-codebase`, `find-entrypoints`, `find-persistence-links`,
+`build-context-pack`, `detect-changes`, `stale-candidates`, `daily-check`, and
+`install-target-hooks`. See `docs/skills-and-scripts.md`.
 
 Run `check-environment` before the first session of a project. A beginner may
 not have Java installed at all, and that must be reported up front rather than
@@ -118,7 +96,6 @@ Before editing a target repo:
 - Run target preflight.
 - Check target Git status.
 - Check Harness Git status separately when changing Harness files.
-- Do not overwrite dirty files you did not change.
 - Never run destructive Git commands unless the user explicitly asks.
 
 Destructive commands include:
