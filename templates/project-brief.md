@@ -4,4 +4,3 @@
 
 The Harness replaces this template with a user-readable view generated from
 the structured project brief.
-
