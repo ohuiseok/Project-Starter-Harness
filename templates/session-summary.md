@@ -7,7 +7,7 @@
 
 - UNKNOWN
 
-## 배운 것
+## 중요한 결정
 
 - UNKNOWN
 

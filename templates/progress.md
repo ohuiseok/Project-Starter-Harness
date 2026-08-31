@@ -8,13 +8,26 @@
 
 - Target: UNKNOWN
 - Goal: UNKNOWN
+- Scale / shape: UNKNOWN
+- Technology profile: `docs/project-profile.md`, `docs/project-profile.json`
+- Generation plan: `docs/generation-plan.json`
 - Last session: UNKNOWN
+
+## Roadmap
+
+1. UNKNOWN
+2. UNKNOWN
+3. UNKNOWN
 
 ## Done
 
 - UNKNOWN
 
 ## In Progress
+
+- UNKNOWN
+
+## Decisions
 
 - UNKNOWN
 

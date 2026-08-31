@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "id": "simple-rest-api",
+      "label": "Simple REST API",
+      "useWhen": "A small API or prototype needs one relational store.",
+      "selections": {
+        "language": {"option": "language.java", "status": "NOW"},
+        "java-version": {"option": "java-version.21", "status": "NOW"},
+        "spring-boot-version": {"option": "spring-boot-version.current-stable", "status": "NOW"},
+        "build": {"option": "build.gradle-kotlin", "status": "NOW"},
+        "application": {"option": "application.rest-api", "status": "NOW"},
+        "view": {"option": "view.none", "status": "NOT_USED"},
+        "security": {"option": "security.none", "status": "NOW"},
+        "authorization": {"option": "authorization.none", "status": "NOT_USED"},
+        "database": {"option": "database.h2", "status": "NOW"},
+        "persistence": {"option": "persistence.jpa", "status": "NOW"},
+        "database-topology": {"option": "database-topology.single", "status": "NOW"},
+        "migration": {"option": "migration.none", "status": "DEFERRED"},
+        "architecture": {"option": "architecture.single-module", "status": "NOW"},
+        "integration": {"option": "integration.none", "status": "DEFERRED"},
+        "packaging": {"option": "packaging.jar", "status": "NOW"},
+        "deployment": {"option": "deployment.local", "status": "DEFERRED"},
+        "verification": {"option": "verification.spring-integration", "status": "NOW"}
+      }
+    },
+    {
+      "id": "server-web-session",
+      "label": "Server-rendered web with session login",
+      "useWhen": "A browser-centered web application owns page rendering and login.",
+      "selections": {
+        "language": {"option": "language.java", "status": "NOW"},
+        "java-version": {"option": "java-version.21", "status": "NOW"},
+        "spring-boot-version": {"option": "spring-boot-version.current-stable", "status": "NOW"},
+        "build": {"option": "build.gradle-kotlin", "status": "NOW"},
+        "application": {"option": "application.server-web", "status": "NOW"},
+        "view": {"option": "view.thymeleaf", "status": "NOW"},
+        "security": {"option": "security.session", "status": "NOW"},
+        "authorization": {"option": "authorization.roles", "status": "NOW"},
+        "database": {"option": "database.postgresql", "status": "NOW"},
+        "persistence": {"option": "persistence.jpa", "status": "NOW"},
+        "database-topology": {"option": "database-topology.single", "status": "NOW"},
+        "migration": {"option": "migration.flyway", "status": "SOON"},
+        "architecture": {"option": "architecture.modular-monolith", "status": "NOW"},
+        "integration": {"option": "integration.none", "status": "DEFERRED"},
+        "packaging": {"option": "packaging.jar", "status": "NOW"},
+        "deployment": {"option": "deployment.container", "status": "DEFERRED"},
+        "verification": {"option": "verification.testcontainers", "status": "NOW"}
+      }
+    },
+    {
+      "id": "legacy-jsp-war",
+      "label": "JSP application for a servlet container",
+      "useWhen": "Existing JSP assets or a required servlet-container deployment must be preserved.",
+      "selections": {
+        "language": {"option": "language.java", "status": "NOW"},
+        "java-version": {"option": "java-version.17", "status": "NOW"},
+        "spring-boot-version": {"option": "spring-boot-version.maintenance", "status": "NOW"},
+        "build": {"option": "build.maven", "status": "NOW"},
+        "application": {"option": "application.server-web", "status": "NOW"},
+        "view": {"option": "view.jsp", "status": "NOW"},
+        "security": {"option": "security.session", "status": "NOW"},
+        "authorization": {"option": "authorization.roles", "status": "NOW"},
+        "database": {"option": "database.oracle", "status": "NOW"},
+        "persistence": {"option": "persistence.mybatis", "status": "NOW"},
+        "database-topology": {"option": "database-topology.single", "status": "NOW"},
+        "migration": {"option": "migration.external", "status": "SOON"},
+        "architecture": {"option": "architecture.layered-monolith", "status": "NOW"},
+        "integration": {"option": "integration.http", "status": "SOON"},
+        "packaging": {"option": "packaging.war", "status": "NOW"},
+        "deployment": {"option": "deployment.server", "status": "NOW"},
+        "verification": {"option": "verification.spring-integration", "status": "NOW"}
+      }
+    },
+    {
+      "id": "modular-production-api",
+      "label": "Production modular API",
+      "useWhen": "A production API needs explicit modules, external identity, and a production database.",
+      "selections": {
+        "language": {"option": "language.java", "status": "NOW"},
+        "java-version": {"option": "java-version.21", "status": "NOW"},
+        "spring-boot-version": {"option": "spring-boot-version.current-stable", "status": "NOW"},
+        "build": {"option": "build.gradle-kotlin", "status": "NOW"},
+        "application": {"option": "application.rest-api", "status": "NOW"},
+        "view": {"option": "view.none", "status": "NOT_USED"},
+        "security": {"option": "security.oidc", "status": "NOW"},
+        "authorization": {"option": "authorization.roles", "status": "NOW"},
+        "database": {"option": "database.postgresql", "status": "NOW"},
+        "persistence": {"option": "persistence.jpa", "status": "NOW"},
+        "database-topology": {"option": "database-topology.single", "status": "NOW"},
+        "migration": {"option": "migration.flyway", "status": "NOW"},
+        "architecture": {"option": "architecture.modular-monolith", "status": "NOW"},
+        "integration": {"option": "integration.http", "status": "SOON"},
+        "packaging": {"option": "packaging.container", "status": "NOW"},
+        "deployment": {"option": "deployment.container", "status": "SOON"},
+        "verification": {"option": "verification.testcontainers", "status": "NOW"}
+      }
+    },
+    {
+      "id": "microservices-baseline",
+      "label": "Microservices baseline",
+      "useWhen": "Independent ownership, deployment, scaling, and failure isolation are confirmed requirements.",
+      "selections": {
+        "language": {"option": "language.java", "status": "NOW"},
+        "java-version": {"option": "java-version.21", "status": "NOW"},
+        "spring-boot-version": {"option": "spring-boot-version.current-stable", "status": "NOW"},
+        "build": {"option": "build.gradle-kotlin", "status": "NOW"},
+        "application": {"option": "application.rest-api", "status": "NOW"},
+        "view": {"option": "view.none", "status": "NOT_USED"},
+        "security": {"option": "security.oidc", "status": "NOW"},
+        "authorization": {"option": "authorization.roles", "status": "NOW"},
+        "database": {"option": "database.postgresql", "status": "NOW"},
+        "persistence": {"option": "persistence.jpa", "status": "NOW"},
+        "database-topology": {"option": "database-topology.per-service", "status": "NOW"},
+        "migration": {"option": "migration.flyway", "status": "NOW"},
+        "architecture": {"option": "architecture.microservices", "status": "NOW"},
+        "integration": {"option": "integration.http", "status": "NOW"},
+        "packaging": {"option": "packaging.container", "status": "NOW"},
+        "deployment": {"option": "deployment.kubernetes", "status": "SOON"},
+        "verification": {"option": "verification.contract-e2e", "status": "NOW"}
+      }
+    }
+  ]
+}

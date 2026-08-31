@@ -1,0 +1,212 @@
+{
+  "schemaVersion": 1,
+  "axes": [
+    {
+      "id": "language",
+      "label": "Language",
+      "decisionStage": "NOW",
+      "customAllowed": true,
+      "options": [
+        {"id": "language.java", "label": "Java", "description": "Broad Spring ecosystem support."},
+        {"id": "language.kotlin", "label": "Kotlin", "description": "Concise JVM language with Spring support."}
+      ]
+    },
+    {
+      "id": "build",
+      "label": "Build tool",
+      "decisionStage": "NOW",
+      "customAllowed": true,
+      "options": [
+        {"id": "build.gradle-kotlin", "label": "Gradle Kotlin DSL", "description": "Typed Gradle build scripts."},
+        {"id": "build.gradle-groovy", "label": "Gradle Groovy DSL", "description": "Common Gradle build scripts."},
+        {"id": "build.maven", "label": "Maven", "description": "Convention-driven XML build."}
+      ]
+    },
+    {
+      "id": "java-version",
+      "label": "Java version",
+      "decisionStage": "NOW",
+      "customAllowed": true,
+      "options": [
+        {"id": "java-version.17", "label": "Java 17", "description": "Conservative LTS baseline for supported Spring Boot lines."},
+        {"id": "java-version.21", "label": "Java 21", "description": "Modern LTS baseline for new projects."},
+        {"id": "java-version.25", "label": "Java 25", "description": "Newer LTS choice that requires current framework support verification."}
+      ]
+    },
+    {
+      "id": "spring-boot-version",
+      "label": "Spring Boot version policy",
+      "decisionStage": "NOW",
+      "customAllowed": true,
+      "dynamicSource": "https://start.spring.io/metadata/client",
+      "options": [
+        {"id": "spring-boot-version.current-stable", "label": "Current stable", "description": "Resolve an exact stable version from Spring Initializr metadata."},
+        {"id": "spring-boot-version.maintenance", "label": "Supported maintenance line", "description": "Resolve an exact supported maintenance version for compatibility needs."},
+        {"id": "spring-boot-version.custom", "label": "Required exact version", "description": "Use an exact user or organization mandated version after support verification."}
+      ]
+    },
+    {
+      "id": "application",
+      "label": "Application shape",
+      "decisionStage": "NOW",
+      "customAllowed": true,
+      "options": [
+        {"id": "application.rest-api", "label": "REST API", "description": "HTTP API without a server-rendered UI."},
+        {"id": "application.server-web", "label": "Server-rendered web", "description": "Spring MVC renders browser pages."},
+        {"id": "application.batch", "label": "Batch or scheduler", "description": "Non-interactive scheduled or batch processing."},
+        {"id": "application.mixed", "label": "Mixed channels", "description": "More than one intentional interface or workload."}
+      ]
+    },
+    {
+      "id": "view",
+      "label": "View delivery",
+      "decisionStage": "DEFERRED",
+      "customAllowed": true,
+      "options": [
+        {"id": "view.none", "label": "No server view", "description": "API, batch, or separate client only."},
+        {"id": "view.thymeleaf", "label": "Thymeleaf", "description": "Spring-friendly server-rendered HTML."},
+        {"id": "view.jsp", "label": "JSP", "description": "Useful for JSP assets or compatible servlet deployments."},
+        {"id": "view.separate-client", "label": "Separate SPA or mobile client", "description": "Backend exposes APIs to another client project."}
+      ]
+    },
+    {
+      "id": "security",
+      "label": "Authentication",
+      "decisionStage": "NOW",
+      "customAllowed": true,
+      "options": [
+        {"id": "security.none", "label": "No application authentication", "description": "Public or trusted-boundary application."},
+        {"id": "security.session", "label": "Session", "description": "Browser-oriented login maintained by the server."},
+        {"id": "security.token", "label": "JWT or opaque token", "description": "Token-based clients with an explicit issuer and lifecycle."},
+        {"id": "security.oidc", "label": "OAuth2/OIDC provider", "description": "Authentication delegated to an identity provider."},
+        {"id": "security.mixed", "label": "Mixed by channel", "description": "Different authentication mechanisms for intentional channels."}
+      ]
+    },
+    {
+      "id": "authorization",
+      "label": "Authorization",
+      "decisionStage": "DEFERRED",
+      "customAllowed": true,
+      "options": [
+        {"id": "authorization.none", "label": "No user-specific authorization", "description": "No per-user access decision."},
+        {"id": "authorization.authenticated", "label": "Authenticated users only", "description": "Login required without differentiated roles."},
+        {"id": "authorization.roles", "label": "Roles or permissions", "description": "User-specific access rules are required."}
+      ]
+    },
+    {
+      "id": "database",
+      "label": "Primary database",
+      "decisionStage": "NOW",
+      "customAllowed": true,
+      "options": [
+        {"id": "database.none", "label": "No persistent database yet", "description": "Persistence can be deferred."},
+        {"id": "database.h2", "label": "H2", "description": "Lightweight local or learning database."},
+        {"id": "database.postgresql", "label": "PostgreSQL", "description": "General-purpose production relational database."},
+        {"id": "database.mysql", "label": "MySQL or MariaDB", "description": "Common production relational database."},
+        {"id": "database.oracle", "label": "Oracle", "description": "Enterprise or legacy relational database."},
+        {"id": "database.non-relational", "label": "Non-relational store", "description": "Document, key-value, graph, search, or another specialized store."}
+      ]
+    },
+    {
+      "id": "persistence",
+      "label": "Persistence access",
+      "decisionStage": "NOW",
+      "customAllowed": true,
+      "options": [
+        {"id": "persistence.none", "label": "No persistence layer", "description": "No database access in the current stage."},
+        {"id": "persistence.jpa", "label": "Spring Data JPA", "description": "Entity-oriented relational persistence."},
+        {"id": "persistence.mybatis", "label": "MyBatis", "description": "Explicit SQL mapping."},
+        {"id": "persistence.jdbc", "label": "Spring JDBC", "description": "Direct SQL with Spring JDBC support."},
+        {"id": "persistence.mixed", "label": "Mixed by responsibility", "description": "Multiple access styles with explicit ownership."}
+      ]
+    },
+    {
+      "id": "database-topology",
+      "label": "Database topology",
+      "decisionStage": "DEFERRED",
+      "customAllowed": true,
+      "options": [
+        {"id": "database-topology.none", "label": "No database", "description": "No store in the current scope."},
+        {"id": "database-topology.single", "label": "Single data source", "description": "One primary transactional boundary."},
+        {"id": "database-topology.multiple", "label": "Multiple data sources", "description": "Stores have explicit purpose, owner, and routing."},
+        {"id": "database-topology.read-write", "label": "Read/write split", "description": "Reads and writes use distinct endpoints."},
+        {"id": "database-topology.tenant", "label": "Tenant-specific routing", "description": "Data source selection depends on tenant."},
+        {"id": "database-topology.per-service", "label": "Database per service", "description": "Each service owns its persistent data."}
+      ]
+    },
+    {
+      "id": "migration",
+      "label": "Schema migration",
+      "decisionStage": "SOON",
+      "customAllowed": true,
+      "options": [
+        {"id": "migration.none", "label": "No migration tool yet", "description": "Appropriate only when schema ownership is not in scope."},
+        {"id": "migration.flyway", "label": "Flyway", "description": "Versioned SQL-oriented migrations."},
+        {"id": "migration.liquibase", "label": "Liquibase", "description": "Structured and SQL migration workflows."},
+        {"id": "migration.external", "label": "Externally managed", "description": "Another team or platform owns schema changes."}
+      ]
+    },
+    {
+      "id": "architecture",
+      "label": "Code and deployment structure",
+      "decisionStage": "NOW",
+      "customAllowed": true,
+      "options": [
+        {"id": "architecture.single-module", "label": "Single module", "description": "One deployable with minimal build structure."},
+        {"id": "architecture.layered-monolith", "label": "Layered monolith", "description": "One deployable organized primarily by layers."},
+        {"id": "architecture.modular-monolith", "label": "Modular monolith", "description": "One deployable with explicit domain/module boundaries."},
+        {"id": "architecture.microservices", "label": "Microservices", "description": "Independent deployment and operational boundaries."},
+        {"id": "architecture.hybrid", "label": "Hybrid or custom", "description": "Intentional combination of deployment structures."}
+      ]
+    },
+    {
+      "id": "integration",
+      "label": "Primary integration",
+      "decisionStage": "DEFERRED",
+      "customAllowed": true,
+      "options": [
+        {"id": "integration.none", "label": "None yet", "description": "No external or cross-service integration in scope."},
+        {"id": "integration.http", "label": "HTTP API", "description": "Synchronous REST, GraphQL, or similar integration."},
+        {"id": "integration.grpc", "label": "gRPC", "description": "Typed RPC integration."},
+        {"id": "integration.messaging", "label": "Messaging", "description": "Kafka, RabbitMQ, JMS, or another asynchronous broker."},
+        {"id": "integration.file-polling", "label": "File or polling", "description": "Scheduled exchange without direct API calls."}
+      ]
+    },
+    {
+      "id": "packaging",
+      "label": "Packaging",
+      "decisionStage": "SOON",
+      "customAllowed": true,
+      "options": [
+        {"id": "packaging.jar", "label": "Executable JAR", "description": "Typical Spring Boot packaging."},
+        {"id": "packaging.war", "label": "WAR", "description": "Deployment to a compatible servlet container."},
+        {"id": "packaging.container", "label": "Container image", "description": "Application is delivered as a container image."},
+        {"id": "packaging.native", "label": "Native image", "description": "Ahead-of-time compiled runtime."}
+      ]
+    },
+    {
+      "id": "deployment",
+      "label": "Deployment environment",
+      "decisionStage": "DEFERRED",
+      "customAllowed": true,
+      "options": [
+        {"id": "deployment.local", "label": "Local only", "description": "No production deployment yet."},
+        {"id": "deployment.server", "label": "Traditional server", "description": "Process or servlet-container deployment."},
+        {"id": "deployment.container", "label": "Container platform", "description": "Docker-compatible runtime."},
+        {"id": "deployment.kubernetes", "label": "Kubernetes", "description": "Cluster orchestration is an explicit requirement."}
+      ]
+    },
+    {
+      "id": "verification",
+      "label": "Verification depth",
+      "decisionStage": "NOW",
+      "customAllowed": true,
+      "options": [
+        {"id": "verification.unit-only", "label": "Unit tests only", "description": "Suitable only for low-integration early work."},
+        {"id": "verification.spring-integration", "label": "Unit and Spring integration", "description": "Default application-level verification."},
+        {"id": "verification.testcontainers", "label": "Integration with real dependencies", "description": "Testcontainers or equivalent dependency verification."},
+        {"id": "verification.contract-e2e", "label": "Contract and end-to-end", "description": "Cross-boundary behavior is explicitly verified."}
+      ]
+    }
+  ]
+}

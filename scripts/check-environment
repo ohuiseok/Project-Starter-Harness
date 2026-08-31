@@ -66,22 +66,6 @@ fi
 
 printf 'JAVA_MINIMUM_REQUIRED: %s\n' "$MINIMUM_JAVA"
 
-# ripgrep is only needed by the maintain-mode scripts, so a missing rg does not
-# block a beginner who is only creating a new project.
-if command -v rg >/dev/null 2>&1; then
-  printf 'RIPGREP_AVAILABLE: yes\n'
-  MAINTAIN_READY=yes
-else
-  printf 'RIPGREP_AVAILABLE: no\n'
-  MAINTAIN_READY=no
-fi
-
-if [ "${GIT_OK:-1}" -eq 0 ]; then
-  MAINTAIN_READY=no
-fi
-
-printf 'MAINTAIN_MODE_READY: %s\n' "$MAINTAIN_READY"
-
 if [ -f "$HARNESS_ROOT/config/target.local.yaml" ]; then
   printf 'TARGET_CONFIG: config/target.local.yaml\n'
 else

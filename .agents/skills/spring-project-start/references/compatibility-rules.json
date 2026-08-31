@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "rules": [
+    {
+      "id": "authorization-requires-authentication",
+      "when": {"all": ["security.none", "authorization.roles"]},
+      "result": "CONFLICT",
+      "message": "User-specific roles require an authentication or trusted identity boundary."
+    },
+    {
+      "id": "authenticated-access-requires-authentication",
+      "when": {"all": ["security.none", "authorization.authenticated"]},
+      "result": "CONFLICT",
+      "message": "Authenticated-only access conflicts with no application authentication."
+    },
+    {
+      "id": "api-with-server-view",
+      "when": {"all": ["application.rest-api", "view.jsp"]},
+      "result": "REVIEW_REQUIRED",
+      "message": "Confirm that API and JSP channels are both intentional."
+    },
+    {
+      "id": "jsp-jar-packaging",
+      "when": {"all": ["view.jsp", "packaging.jar"]},
+      "result": "REVIEW_REQUIRED",
+      "message": "Verify the Spring Boot version and embedded-container JSP packaging model."
+    },
+    {
+      "id": "database-none-with-persistence",
+      "when": {"all": ["database.none", "persistence.jpa"]},
+      "result": "CONFLICT",
+      "message": "JPA requires a persistent store in the current project shape."
+    },
+    {
+      "id": "non-relational-with-jpa",
+      "when": {"all": ["database.non-relational", "persistence.jpa"]},
+      "result": "CONFLICT",
+      "message": "Resolve the exact non-relational store and its Spring Data or client integration instead of JPA."
+    },
+    {
+      "id": "non-relational-with-mybatis",
+      "when": {"all": ["database.non-relational", "persistence.mybatis"]},
+      "result": "CONFLICT",
+      "message": "MyBatis is a relational SQL mapper; select an exact non-relational integration."
+    },
+    {
+      "id": "non-relational-with-jdbc",
+      "when": {"all": ["database.non-relational", "persistence.jdbc"]},
+      "result": "CONFLICT",
+      "message": "Spring JDBC does not describe a non-relational store integration."
+    },
+    {
+      "id": "multiple-databases-need-integration-tests",
+      "when": {"all": ["database-topology.multiple", "verification.unit-only"]},
+      "result": "REVIEW_REQUIRED",
+      "message": "Multiple data sources need integration-level routing and transaction verification."
+    },
+    {
+      "id": "tenant-routing-needs-integration-tests",
+      "when": {"all": ["database-topology.tenant", "verification.unit-only"]},
+      "result": "REVIEW_REQUIRED",
+      "message": "Tenant routing needs integration-level isolation verification."
+    },
+    {
+      "id": "microservices-shared-database",
+      "when": {"all": ["architecture.microservices", "database-topology.single"]},
+      "result": "REVIEW_REQUIRED",
+      "message": "Define service data ownership before sharing one database across services."
+    },
+    {
+      "id": "microservices-without-integration",
+      "when": {"all": ["architecture.microservices", "integration.none"]},
+      "result": "REVIEW_REQUIRED",
+      "message": "Define how independently deployed services communicate."
+    },
+    {
+      "id": "microservices-unit-only",
+      "when": {"all": ["architecture.microservices", "verification.unit-only"]},
+      "result": "REVIEW_REQUIRED",
+      "message": "Microservices need service integration or contract verification."
+    },
+    {
+      "id": "kubernetes-needs-container-delivery",
+      "when": {"all": ["deployment.kubernetes", "packaging.war"]},
+      "result": "REVIEW_REQUIRED",
+      "message": "Clarify the container and servlet-container delivery model for Kubernetes."
+    },
+    {
+      "id": "service-owned-database-with-monolith",
+      "when": {"all": ["database-topology.per-service", "architecture.single-module"]},
+      "result": "CONFLICT",
+      "message": "Database-per-service requires explicit service boundaries."
+    }
+  ]
+}

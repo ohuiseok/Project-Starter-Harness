@@ -1,0 +1,21 @@
+{
+  "dryRunVersion": 1,
+  "sourcePlan": "docs/generation-plan.json",
+  "target": "UNKNOWN",
+  "plannedChanges": {
+    "state": "NOT_COMPUTED",
+    "creates": [],
+    "updates": [],
+    "conflicts": [],
+    "unchanged": [],
+    "desiredManifest": {
+      "manifestVersion": 1,
+      "files": {},
+      "modes": {}
+    }
+  },
+  "targetSourceChanged": false,
+  "readyForApproval": false,
+  "executionReady": false,
+  "nextStep": "Run the dry-run renderer."
+}

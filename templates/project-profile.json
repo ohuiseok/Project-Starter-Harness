@@ -1,0 +1,34 @@
+{
+  "profileVersion": 1,
+  "productContext": {
+    "goal": "UNKNOWN",
+    "primaryUsers": ["UNKNOWN"],
+    "primaryChannels": ["UNKNOWN"],
+    "deploymentEnvironment": "UNKNOWN",
+    "constraints": ["UNKNOWN"]
+  },
+  "project": {
+    "groupId": "UNKNOWN",
+    "artifactId": "UNKNOWN",
+    "name": "UNKNOWN",
+    "description": "UNKNOWN",
+    "packageName": "UNKNOWN"
+  },
+  "baseProfile": null,
+  "decisions": {},
+  "dataStores": [],
+  "projects": [],
+  "compatibilityReview": {
+    "result": "UNKNOWN",
+    "findings": [],
+    "acceptedFindings": []
+  },
+  "generationReadiness": {
+    "ready": false,
+    "blockers": ["Technology decisions and user confirmation are incomplete."]
+  },
+  "confirmedBy": {
+    "user": false,
+    "confirmedAt": null
+  }
+}

@@ -92,9 +92,7 @@ chmod 755 "$FAILING/gradlew"
 
 # --- argument handling ------------------------------------------------------
 
-for script in check-target check-spring-project run-verification check-environment \
-              map-codebase find-entrypoints find-persistence-links build-context-pack \
-              detect-changes stale-candidates daily-check install-target-hooks; do
+for script in check-target check-spring-project run-verification check-environment; do
   run_script "$script" --target
   expect_code "$script: --target without a value exits instead of hanging" 2
 
@@ -172,8 +170,6 @@ esac
 expect_out "check-environment: reports git" "GIT_AVAILABLE:"
 expect_out "check-environment: reports the required Java version" "JAVA_MINIMUM_REQUIRED: 17"
 expect_out "check-environment: reports overall readiness" "ENVIRONMENT_READY:"
-expect_out "check-environment: reports ripgrep for maintain mode" "RIPGREP_AVAILABLE:"
-expect_out "check-environment: reports maintain-mode readiness" "MAINTAIN_MODE_READY:"
 
 # --- target config fallback -------------------------------------------------
 
@@ -207,71 +203,444 @@ else
   fail "config: an explicit path wins over target.local.yaml" "got '$RESOLVED'"
 fi
 
-# --- maintain mode scripts --------------------------------------------------
+# --- starter skill contract -------------------------------------------------
 
-# A Git repo with Spring-shaped sources, for the ported analysis scripts.
-MAINTAIN_REPO="$WORK/maintain-repo"
-mkdir -p "$MAINTAIN_REPO/src/main/java/app"
-printf 'plugins {}\n' > "$MAINTAIN_REPO/build.gradle"
-cat > "$MAINTAIN_REPO/src/main/java/app/HelloController.java" <<'JAVA'
-package app;
-import org.springframework.web.bind.annotation.RestController;
-@RestController
-public class HelloController {}
-JAVA
-git -C "$MAINTAIN_REPO" init -q
-git -C "$MAINTAIN_REPO" config user.email test@example.com
-git -C "$MAINTAIN_REPO" config user.name Test
-git -C "$MAINTAIN_REPO" add -A
-git -C "$MAINTAIN_REPO" commit -qm init
+SKILL_ROOT="$HARNESS_ROOT/.agents/skills/spring-project-start"
 
-run_script detect-changes --target "$MAINTAIN_REPO" --base HEAD --head HEAD
-expect_code "detect-changes: identical refs succeed" 0
-expect_out "detect-changes: reports the branch" "Branch:"
-
-run_script detect-changes --target "$MAINTAIN_REPO" --base no-such-ref
-expect_code "detect-changes: a missing base ref is exit 1, not a crash" 1
-
-run_script detect-changes --target "$README_ONLY" --base HEAD --head HEAD
-expect_code "detect-changes: a non-Spring Git repo still works" 0
-
-run_script install-target-hooks --target "$MAINTAIN_REPO" --baseline main --dry-run
-expect_code "install-target-hooks: dry run succeeds" 0
-expect_out "install-target-hooks: dry run installs nothing" "No target hook was created"
-if [ -e "$MAINTAIN_REPO/.git/hooks/post-merge" ]; then
-  fail "install-target-hooks: dry run leaves no hook behind" "hook was created"
-else
-  pass "install-target-hooks: dry run leaves no hook behind"
-fi
-
-run_script install-target-hooks --target "$MAINTAIN_REPO" --baseline main
-expect_code "install-target-hooks: installs the hook" 0
-if [ -x "$MAINTAIN_REPO/.git/hooks/post-merge" ]; then
-  pass "install-target-hooks: the hook is executable"
-else
-  fail "install-target-hooks: the hook is executable"
-fi
-
-run_script install-target-hooks --target "$MAINTAIN_REPO" --baseline main
-expect_code "install-target-hooks: an existing hook is never overwritten" 1
-
-run_script install-target-hooks --target "$MAINTAIN_REPO" --baseline 'main; rm -rf /'
-expect_code "install-target-hooks: a baseline with shell characters is rejected" 2
-
-run_script daily-check --target "$MAINTAIN_REPO"
-expect_code "daily-check: a missing baseline is a usage error" 2
-
-# ripgrep is optional on the machine. Either the script runs, or it says so;
-# what must never happen is a hang or a silently empty report.
-for script in map-codebase find-entrypoints find-persistence-links build-context-pack; do
-  run_script "$script" --target "$MAINTAIN_REPO"
-  if command -v rg >/dev/null 2>&1; then
-    expect_code "$script: runs when ripgrep is installed" 0
+for required in \
+  "$SKILL_ROOT/SKILL.md" \
+  "$SKILL_ROOT/references/technology-decisions.md" \
+  "$SKILL_ROOT/references/compatibility-rules.md" \
+  "$SKILL_ROOT/references/technology-options.json" \
+  "$SKILL_ROOT/references/compatibility-rules.json" \
+  "$SKILL_ROOT/references/generation-readiness.json" \
+  "$SKILL_ROOT/references/generation-mappings.json" \
+  "$SKILL_ROOT/references/profiles.json" \
+  "$SKILL_ROOT/scripts/validate_catalog.py" \
+  "$SKILL_ROOT/scripts/evaluate_profile.py" \
+  "$SKILL_ROOT/scripts/compile_generation_plan.py" \
+  "$SKILL_ROOT/scripts/validate_generation_plan.py" \
+  "$SKILL_ROOT/scripts/render_generation_dry_run.py" \
+  "$SKILL_ROOT/scripts/apply_approved_generation.py" \
+  "$HARNESS_ROOT/templates/project-profile.md" \
+  "$HARNESS_ROOT/templates/project-profile.json" \
+  "$HARNESS_ROOT/templates/generation-plan.json" \
+  "$HARNESS_ROOT/templates/generation-dry-run.json" \
+  "$HARNESS_ROOT/templates/generation-approval.json" \
+  "$HARNESS_ROOT/templates/generation-baseline.json"; do
+  if [ -f "$required" ]; then
+    pass "starter contract: $(basename "$required") exists"
   else
-    expect_code "$script: reports UNKNOWN when ripgrep is missing" 2
-    expect_out "$script: names the missing dependency" "rg is not available"
+    fail "starter contract: $(basename "$required") exists" "$required is missing"
   fi
 done
+
+if grep -qF 'Other / direct input' "$SKILL_ROOT/SKILL.md" && \
+   grep -qF '기타 / 직접 입력' "$SKILL_ROOT/references/technology-decisions.md"; then
+  pass "starter contract: representative choices include direct input"
+else
+  fail "starter contract: representative choices include direct input"
+fi
+
+if grep -qF 'DEFERRED' "$HARNESS_ROOT/templates/project-profile.md" && \
+   grep -qF 'CONFLICT' "$HARNESS_ROOT/templates/project-profile.md"; then
+  pass "starter contract: profile records deferred decisions and conflicts"
+else
+  fail "starter contract: profile records deferred decisions and conflicts"
+fi
+
+if grep -qF 'references/technology-decisions.md' "$SKILL_ROOT/SKILL.md" && \
+   grep -qF 'references/compatibility-rules.md' "$SKILL_ROOT/SKILL.md"; then
+  pass "starter contract: skill routes to technology references"
+else
+  fail "starter contract: skill routes to technology references"
+fi
+
+OUT="$(python3 "$SKILL_ROOT/scripts/validate_catalog.py" 2>&1)"
+CODE=$?
+expect_code "starter contract: structured technology catalog is valid" 0
+expect_out "starter contract: catalog exposes stable options" "CATALOG_VALID: yes"
+
+OUT="$(python3 "$SKILL_ROOT/scripts/evaluate_profile.py" \
+  --profile "$HARNESS_ROOT/templates/project-profile.json" 2>&1)"
+CODE=$?
+expect_code "starter contract: empty profile template is structurally valid" 0
+expect_out "starter contract: empty profile has no deterministic conflict" \
+  "COMPATIBILITY_RESULT: SUPPORTED"
+expect_out "starter contract: empty profile is not generation-ready" \
+  "GENERATION_READY: no"
+
+OUT="$(python3 "$SKILL_ROOT/scripts/evaluate_profile.py" \
+  --profile "$HARNESS_ROOT/templates/project-profile.json" --require-ready 2>&1)"
+CODE=$?
+expect_code "starter contract: strict gate blocks an incomplete profile" 1
+
+CONFLICT_PROFILE="$WORK/conflict-profile.json"
+cat > "$CONFLICT_PROFILE" <<'JSON'
+{
+  "profileVersion": 1,
+  "project": {
+    "groupId": "com.example",
+    "artifactId": "sample",
+    "name": "sample",
+    "description": "test profile",
+    "packageName": "com.example.sample"
+  },
+  "decisions": {
+    "security": {"status": "NOW", "option": "security.none"},
+    "authorization": {"status": "NOW", "option": "authorization.roles"}
+  }
+}
+JSON
+OUT="$(python3 "$SKILL_ROOT/scripts/evaluate_profile.py" \
+  --profile "$CONFLICT_PROFILE" 2>&1)"
+CODE=$?
+expect_code "starter contract: conflicting profile is blocked" 1
+expect_out "starter contract: conflict rule is reported" \
+  "CONFLICT authorization-requires-authentication"
+
+CUSTOM_PROFILE="$WORK/custom-profile.json"
+cat > "$CUSTOM_PROFILE" <<'JSON'
+{
+  "profileVersion": 1,
+  "decisions": {
+    "database": {"status": "NOW", "custom": "회사 표준 사내 DB"}
+  }
+}
+JSON
+OUT="$(python3 "$SKILL_ROOT/scripts/evaluate_profile.py" \
+  --profile "$CUSTOM_PROFILE" 2>&1)"
+CODE=$?
+expect_code "starter contract: custom input remains valid pending review" 0
+expect_out "starter contract: custom input requires review" \
+  "COMPATIBILITY_RESULT: REVIEW_REQUIRED"
+
+READY_PROFILE="$WORK/ready-profile.json"
+cat > "$READY_PROFILE" <<'JSON'
+{
+  "profileVersion": 1,
+  "project": {
+    "groupId": "com.example",
+    "artifactId": "sample",
+    "name": "sample",
+    "description": "test profile",
+    "packageName": "com.example.sample"
+  },
+  "decisions": {
+    "language": {"status": "NOW", "option": "language.java"},
+    "java-version": {"status": "NOW", "option": "java-version.21"},
+    "spring-boot-version": {"status": "NOW", "option": "spring-boot-version.current-stable", "resolvedValue": "resolved-for-test"},
+    "build": {"status": "NOW", "option": "build.gradle-kotlin"},
+    "application": {"status": "NOW", "option": "application.rest-api"},
+    "view": {"status": "NOW", "option": "view.none"},
+    "security": {"status": "NOW", "option": "security.none"},
+    "authorization": {"status": "NOW", "option": "authorization.none"},
+    "database": {"status": "NOW", "option": "database.h2"},
+    "persistence": {"status": "NOW", "option": "persistence.jpa"},
+    "database-topology": {"status": "NOW", "option": "database-topology.single"},
+    "architecture": {"status": "NOW", "option": "architecture.single-module"},
+    "packaging": {"status": "NOW", "option": "packaging.jar"},
+    "verification": {"status": "NOW", "option": "verification.spring-integration"}
+  },
+  "dataStores": [],
+  "projects": [],
+  "confirmedBy": {"user": true, "confirmedAt": "2026-09-01T00:00:00+09:00"}
+}
+JSON
+OUT="$(python3 "$SKILL_ROOT/scripts/evaluate_profile.py" \
+  --profile "$READY_PROFILE" --require-ready 2>&1)"
+CODE=$?
+expect_code "starter contract: complete confirmed profile passes strict gate" 0
+expect_out "starter contract: complete profile is generation-ready" \
+  "GENERATION_READY: yes"
+
+UNRESOLVED_VERSION_PROFILE="$WORK/unresolved-version-profile.json"
+sed 's/, "resolvedValue": "resolved-for-test"//' \
+  "$READY_PROFILE" > "$UNRESOLVED_VERSION_PROFILE"
+OUT="$(python3 "$SKILL_ROOT/scripts/evaluate_profile.py" \
+  --profile "$UNRESOLVED_VERSION_PROFILE" --require-ready 2>&1)"
+CODE=$?
+expect_code "starter contract: unresolved dynamic version blocks generation" 1
+expect_out "starter contract: exact dynamic version blocker is reported" \
+  "exact resolvedValue is required: spring-boot-version"
+
+MULTI_DB_PROFILE="$WORK/multi-db-profile.json"
+sed 's/database-topology.single/database-topology.multiple/' \
+  "$READY_PROFILE" > "$MULTI_DB_PROFILE"
+OUT="$(python3 "$SKILL_ROOT/scripts/evaluate_profile.py" \
+  --profile "$MULTI_DB_PROFILE" --require-ready 2>&1)"
+CODE=$?
+expect_code "starter contract: multiple databases need store definitions" 1
+expect_out "starter contract: multiple database blocker is reported" \
+  "complex-database-needs-store-definitions"
+
+MSA_PROFILE="$WORK/msa-profile.json"
+sed 's/architecture.single-module/architecture.microservices/' \
+  "$READY_PROFILE" > "$MSA_PROFILE"
+OUT="$(python3 "$SKILL_ROOT/scripts/evaluate_profile.py" \
+  --profile "$MSA_PROFILE" --require-ready 2>&1)"
+CODE=$?
+expect_code "starter contract: MSA needs child project definitions" 1
+expect_out "starter contract: MSA project-definition blocker is reported" \
+  "microservices-need-project-definitions"
+
+# --- generation planning ----------------------------------------------------
+
+INITIALIZR_METADATA="$WORK/initializr-metadata.json"
+cat > "$INITIALIZR_METADATA" <<'JSON'
+{
+  "type": {"values": [{"id": "gradle-project-kotlin"}]},
+  "language": {"values": [{"id": "java"}]},
+  "packaging": {"values": [{"id": "jar"}]},
+  "bootVersion": {"values": [{"id": "resolved-for-test"}]},
+  "javaVersion": {"values": [{"id": "21"}]},
+  "dependencies": {
+    "values": [
+      {"name": "test", "values": [
+        {"id": "web"},
+        {"id": "h2"},
+        {"id": "data-jpa"}
+      ]}
+    ]
+  }
+}
+JSON
+
+GENERATION_PLAN="$WORK/generation-plan.json"
+OUT="$(python3 "$SKILL_ROOT/scripts/compile_generation_plan.py" \
+  --profile "$READY_PROFILE" --metadata "$INITIALIZR_METADATA" \
+  --output "$GENERATION_PLAN" 2>&1)"
+CODE=$?
+expect_code "generation plan: ready profile compiles without source changes" 0
+expect_out "generation plan: compiler reports no target source change" \
+  "TARGET_SOURCE_CHANGED: no"
+expect_out "generation plan: plan is ready for dry run" \
+  "PLAN_STATUS: READY_FOR_DRY_RUN"
+
+OUT="$(python3 "$SKILL_ROOT/scripts/validate_generation_plan.py" \
+  --plan "$GENERATION_PLAN" 2>&1)"
+CODE=$?
+expect_code "generation plan: compiled plan validates" 0
+expect_out "generation plan: validated plan is not execution-ready" \
+  "EXECUTION_READY: no"
+
+if grep -qF '"data-jpa"' "$GENERATION_PLAN" && \
+   grep -qF '"h2"' "$GENERATION_PLAN" && \
+   grep -qF '"web"' "$GENERATION_PLAN"; then
+  pass "generation plan: profile choices map to Initializr dependencies"
+else
+  fail "generation plan: profile choices map to Initializr dependencies"
+fi
+
+OUT="$(python3 "$SKILL_ROOT/scripts/compile_generation_plan.py" \
+  --profile "$READY_PROFILE" --metadata "$INITIALIZR_METADATA" \
+  --output "$GENERATION_PLAN" 2>&1)"
+CODE=$?
+expect_code "generation plan: existing plan is not overwritten implicitly" 1
+
+OUT="$(python3 "$SKILL_ROOT/scripts/compile_generation_plan.py" \
+  --profile "$HARNESS_ROOT/templates/project-profile.json" \
+  --metadata "$INITIALIZR_METADATA" 2>&1)"
+CODE=$?
+expect_code "generation plan: incomplete profile cannot compile" 1
+
+MISSING_DEPENDENCY_METADATA="$WORK/missing-dependency-metadata.json"
+sed '/"data-jpa"/d; s/{"id": "h2"},/{"id": "h2"}/' \
+  "$INITIALIZR_METADATA" > "$MISSING_DEPENDENCY_METADATA"
+OUT="$(python3 "$SKILL_ROOT/scripts/compile_generation_plan.py" \
+  --profile "$READY_PROFILE" --metadata "$MISSING_DEPENDENCY_METADATA" 2>&1)"
+CODE=$?
+expect_code "generation plan: unsupported Initializr dependency blocks compile" 1
+expect_out "generation plan: unsupported dependency is named" \
+  "Initializr metadata does not support dependencies"
+
+LEAKING_PLAN="$WORK/leaking-plan.json"
+sed 's/"valuesStored": false/"valuesStored": false, "password": "secret"/' \
+  "$GENERATION_PLAN" > "$LEAKING_PLAN"
+OUT="$(python3 "$SKILL_ROOT/scripts/validate_generation_plan.py" \
+  --plan "$LEAKING_PLAN" 2>&1)"
+CODE=$?
+expect_code "generation plan: secret-bearing plan is rejected" 1
+expect_out "generation plan: secret field rejection is explicit" \
+  "secrets may contain requiredNames and valuesStored only"
+
+# --- generation dry run ----------------------------------------------------
+
+RENDERED_SOURCE="$WORK/rendered-source"
+DRY_TARGET="$WORK/dry-target"
+mkdir -p "$RENDERED_SOURCE/src/main/java/com/example/sample" "$DRY_TARGET"
+printf 'plugins { java }\n' > "$RENDERED_SOURCE/build.gradle.kts"
+printf 'package com.example.sample;\n' \
+  > "$RENDERED_SOURCE/src/main/java/com/example/sample/Application.java"
+
+DRY_REPORT="$WORK/generation-dry-run.json"
+OUT="$(python3 "$SKILL_ROOT/scripts/render_generation_dry_run.py" \
+  --plan "$GENERATION_PLAN" --target "$DRY_TARGET" \
+  --rendered-source "$RENDERED_SOURCE" --output "$DRY_REPORT" 2>&1)"
+CODE=$?
+expect_code "generation dry run: missing files are computed safely" 0
+expect_out "generation dry run: target source remains unchanged" \
+  "TARGET_SOURCE_CHANGED: no"
+expect_out "generation dry run: clear result is ready for approval" \
+  "READY_FOR_APPROVAL: yes"
+if [ ! -e "$DRY_TARGET/build.gradle.kts" ] && \
+   grep -qF '"path": "build.gradle.kts"' "$DRY_REPORT"; then
+  pass "generation dry run: CREATE is reported without writing target"
+else
+  fail "generation dry run: CREATE is reported without writing target"
+fi
+
+printf 'old build\n' > "$DRY_TARGET/build.gradle.kts"
+OUT="$(python3 "$SKILL_ROOT/scripts/render_generation_dry_run.py" \
+  --plan "$GENERATION_PLAN" --target "$DRY_TARGET" \
+  --rendered-source "$RENDERED_SOURCE" 2>&1)"
+CODE=$?
+expect_code "generation dry run: unowned existing file is inspected" 0
+expect_out "generation dry run: unowned content becomes conflict" \
+  "CHANGE_RESULT: CONFLICT"
+
+OLD_HASH="$(sha256sum "$DRY_TARGET/build.gradle.kts" | cut -d' ' -f1)"
+BASELINE="$WORK/baseline-manifest.json"
+printf '{"manifestVersion":1,"files":{"build.gradle.kts":"%s"}}\n' \
+  "$OLD_HASH" > "$BASELINE"
+OUT="$(python3 "$SKILL_ROOT/scripts/render_generation_dry_run.py" \
+  --plan "$GENERATION_PLAN" --target "$DRY_TARGET" \
+  --rendered-source "$RENDERED_SOURCE" --baseline-manifest "$BASELINE" 2>&1)"
+CODE=$?
+expect_code "generation dry run: matching baseline permits UPDATE" 0
+expect_out "generation dry run: baseline-backed result is clear" \
+  "CHANGE_RESULT: COMPUTED"
+expect_out "generation dry run: approval is still not execution" \
+  "EXECUTION_READY: no"
+
+OUT="$(python3 "$SKILL_ROOT/scripts/render_generation_dry_run.py" \
+  --plan "$GENERATION_PLAN" --target "$HARNESS_ROOT" \
+  --rendered-source "$RENDERED_SOURCE" 2>&1)"
+CODE=$?
+expect_code "generation dry run: Harness cannot be the target" 1
+expect_out "generation dry run: Harness target rejection is explicit" \
+  "Harness repository cannot be used as the target"
+
+# --- approved generation apply --------------------------------------------
+
+APPLY_REPORT="$WORK/apply-report.json"
+OUT="$(python3 "$SKILL_ROOT/scripts/render_generation_dry_run.py" \
+  --plan "$GENERATION_PLAN" --target "$DRY_TARGET" \
+  --rendered-source "$RENDERED_SOURCE" --baseline-manifest "$BASELINE" \
+  --output "$APPLY_REPORT" 2>&1)"
+CODE=$?
+expect_code "generation apply: approval candidate dry run is clear" 0
+
+APPLY_REPORT_HASH="$(sha256sum "$APPLY_REPORT" | cut -d' ' -f1)"
+APPROVAL="$WORK/generation-approval.json"
+printf '{"approvalVersion":1,"approved":true,"dryRunReportSha256":"%s","target":"%s","approvedBy":"test-user","approvedAt":"2026-09-01T00:00:00Z"}\n' \
+  "$APPLY_REPORT_HASH" "$DRY_TARGET" > "$APPROVAL"
+OUT="$(python3 "$SKILL_ROOT/scripts/apply_approved_generation.py" \
+  --plan "$GENERATION_PLAN" --report "$APPLY_REPORT" \
+  --approval "$APPROVAL" --target "$DRY_TARGET" \
+  --rendered-source "$RENDERED_SOURCE" 2>&1)"
+CODE=$?
+expect_code "generation apply: exact approved report is applied" 0
+expect_out "generation apply: transaction commits" "APPLY_STATE: COMMITTED"
+expect_out "generation apply: baseline is recorded" "BASELINE_WRITTEN: yes"
+if cmp -s "$RENDERED_SOURCE/build.gradle.kts" "$DRY_TARGET/build.gradle.kts" && \
+   cmp -s "$RENDERED_SOURCE/src/main/java/com/example/sample/Application.java" \
+     "$DRY_TARGET/src/main/java/com/example/sample/Application.java" && \
+   [ -f "$DRY_TARGET/.starter-harness-generation.json" ] && \
+   find "$DRY_TARGET/.starter-harness/backups" -type f -name build.gradle.kts \
+     | grep -q .; then
+  pass "generation apply: CREATE, UPDATE, backup, and baseline are materialized"
+else
+  fail "generation apply: CREATE, UPDATE, backup, and baseline are materialized"
+fi
+
+printf 'changed after approval\n' > "$DRY_TARGET/build.gradle.kts"
+OUT="$(python3 "$SKILL_ROOT/scripts/apply_approved_generation.py" \
+  --plan "$GENERATION_PLAN" --report "$APPLY_REPORT" \
+  --approval "$APPROVAL" --target "$DRY_TARGET" \
+  --rendered-source "$RENDERED_SOURCE" 2>&1)"
+CODE=$?
+expect_code "generation apply: target drift blocks re-application" 1
+expect_out "generation apply: drifted path is named" \
+  "target content changed after dry run: build.gradle.kts"
+if grep -qF 'changed after approval' "$DRY_TARGET/build.gradle.kts"; then
+  pass "generation apply: failed preflight does not overwrite drifted content"
+else
+  fail "generation apply: failed preflight does not overwrite drifted content"
+fi
+
+TAMPERED_REPORT="$WORK/tampered-apply-report.json"
+sed 's/Review the report/Review this altered report/' "$APPLY_REPORT" \
+  > "$TAMPERED_REPORT"
+OUT="$(python3 "$SKILL_ROOT/scripts/apply_approved_generation.py" \
+  --plan "$GENERATION_PLAN" --report "$TAMPERED_REPORT" \
+  --approval "$APPROVAL" --target "$DRY_TARGET" \
+  --rendered-source "$RENDERED_SOURCE" 2>&1)"
+CODE=$?
+expect_code "generation apply: altered report invalidates approval" 1
+expect_out "generation apply: exact report hash is required" \
+  "approval does not match the exact dry-run report SHA-256"
+
+ROLLBACK_TARGET="$WORK/rollback-target"
+mkdir -p "$ROLLBACK_TARGET"
+ROLLBACK_REPORT="$WORK/rollback-report.json"
+python3 "$SKILL_ROOT/scripts/render_generation_dry_run.py" \
+  --plan "$GENERATION_PLAN" --target "$ROLLBACK_TARGET" \
+  --rendered-source "$RENDERED_SOURCE" --output "$ROLLBACK_REPORT" \
+  >/dev/null 2>&1
+ROLLBACK_HASH="$(sha256sum "$ROLLBACK_REPORT" | cut -d' ' -f1)"
+ROLLBACK_APPROVAL="$WORK/rollback-approval.json"
+printf '{"approvalVersion":1,"approved":true,"dryRunReportSha256":"%s","target":"%s","approvedBy":"test-user","approvedAt":"2026-09-01T00:00:00Z"}\n' \
+  "$ROLLBACK_HASH" "$ROLLBACK_TARGET" > "$ROLLBACK_APPROVAL"
+OUT="$(SKILL_ROOT="$SKILL_ROOT" GENERATION_PLAN="$GENERATION_PLAN" \
+  ROLLBACK_REPORT="$ROLLBACK_REPORT" ROLLBACK_APPROVAL="$ROLLBACK_APPROVAL" \
+  ROLLBACK_TARGET="$ROLLBACK_TARGET" RENDERED_SOURCE="$RENDERED_SOURCE" \
+  python3 - <<'PY'
+import argparse
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(os.environ["SKILL_ROOT"]) / "scripts"))
+import apply_approved_generation as module
+
+real_replace = module.os.replace
+blocked = Path(os.environ["ROLLBACK_TARGET"]) / "src/main/java/com/example/sample/Application.java"
+
+def fail_second_replace(source, destination):
+    if Path(destination) == blocked:
+        raise OSError("injected commit failure")
+    return real_replace(source, destination)
+
+module.os.replace = fail_second_replace
+args = argparse.Namespace(
+    plan=Path(os.environ["GENERATION_PLAN"]),
+    report=Path(os.environ["ROLLBACK_REPORT"]),
+    approval=Path(os.environ["ROLLBACK_APPROVAL"]),
+    target=Path(os.environ["ROLLBACK_TARGET"]),
+    rendered_source=Path(os.environ["RENDERED_SOURCE"]),
+    rendered_archive=None,
+)
+try:
+    module.apply(args)
+except ValueError as error:
+    print(error)
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+)"
+CODE=$?
+expect_code "generation apply: injected partial failure rolls back" 0
+expect_out "generation apply: rollback result is explicit" \
+  "apply failed and was rolled back"
+if [ ! -e "$ROLLBACK_TARGET/build.gradle.kts" ] && \
+   [ ! -e "$ROLLBACK_TARGET/src" ] && \
+   grep -R -qF '"state": "ROLLED_BACK"' \
+     "$ROLLBACK_TARGET/.starter-harness/transactions"; then
+  pass "generation apply: rollback removes partial files and records evidence"
+else
+  fail "generation apply: rollback removes partial files and records evidence"
+fi
 
 # --- summary ----------------------------------------------------------------
 

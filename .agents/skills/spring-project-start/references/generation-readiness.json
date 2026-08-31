@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "requiredAxes": [
+    "language",
+    "java-version",
+    "spring-boot-version",
+    "build",
+    "application",
+    "security",
+    "database",
+    "persistence",
+    "database-topology",
+    "architecture",
+    "packaging",
+    "verification"
+  ],
+  "resolvedValueAxes": ["spring-boot-version"],
+  "requiredObjectFields": {
+    "project": ["groupId", "artifactId", "name", "packageName"]
+  },
+  "conditionalRules": [
+    {
+      "id": "server-web-needs-view",
+      "whenAny": ["application.server-web"],
+      "allowedOptions": {
+        "view": ["view.thymeleaf", "view.jsp"]
+      },
+      "message": "Server-rendered web requires a selected server view technology."
+    },
+    {
+      "id": "api-view-must-be-explicit",
+      "whenAny": ["application.rest-api"],
+      "allowedOptions": {
+        "view": ["view.none", "view.separate-client"]
+      },
+      "message": "REST API projects must explicitly select no server view or a separate client."
+    },
+    {
+      "id": "no-security-needs-no-authorization",
+      "whenAny": ["security.none"],
+      "allowedOptions": {
+        "authorization": ["authorization.none"]
+      },
+      "message": "No-authentication projects must explicitly confirm that user-specific authorization is not used."
+    },
+    {
+      "id": "authentication-needs-access-policy",
+      "whenAny": ["security.session", "security.token", "security.oidc", "security.mixed"],
+      "allowedOptions": {
+        "authorization": ["authorization.authenticated", "authorization.roles"]
+      },
+      "message": "Authentication requires an explicit access policy."
+    },
+    {
+      "id": "no-database-needs-no-persistence",
+      "whenAny": ["database.none"],
+      "allowedOptions": {
+        "persistence": ["persistence.none"],
+        "database-topology": ["database-topology.none"]
+      },
+      "message": "A project without a database must not generate a persistence layer or data source."
+    },
+    {
+      "id": "database-needs-persistence",
+      "whenAny": ["database.h2", "database.postgresql", "database.mysql", "database.oracle", "database.non-relational"],
+      "allowedOptions": {
+        "persistence": ["persistence.jpa", "persistence.mybatis", "persistence.jdbc", "persistence.mixed"],
+        "database-topology": ["database-topology.single", "database-topology.multiple", "database-topology.read-write", "database-topology.tenant", "database-topology.per-service"]
+      },
+      "message": "A selected database requires an explicit access style and topology."
+    },
+    {
+      "id": "production-relational-needs-migration-owner",
+      "whenAny": ["database.postgresql", "database.mysql", "database.oracle"],
+      "allowedOptions": {
+        "migration": ["migration.flyway", "migration.liquibase", "migration.external"]
+      },
+      "message": "A production relational database requires an explicit schema migration owner or tool."
+    },
+    {
+      "id": "complex-database-needs-store-definitions",
+      "whenAny": ["database-topology.multiple", "database-topology.read-write", "database-topology.tenant", "database-topology.per-service"],
+      "requiredNonEmptyArrays": ["dataStores"],
+      "requiredArrayObjectFields": {
+        "dataStores": ["id", "purpose", "technology", "access", "transactionBoundary"]
+      },
+      "message": "Complex database topology requires named stores, ownership, routing, and transaction boundaries."
+    },
+    {
+      "id": "microservices-need-project-definitions",
+      "whenAny": ["architecture.microservices"],
+      "requiredNonEmptyArrays": ["projects"],
+      "requiredArrayObjectFields": {
+        "projects": ["id", "profile"]
+      },
+      "message": "Microservices generation requires explicit child project or service definitions."
+    },
+    {
+      "id": "kubernetes-needs-container-packaging",
+      "whenAny": ["deployment.kubernetes"],
+      "allowedOptions": {
+        "packaging": ["packaging.container"]
+      },
+      "message": "Kubernetes generation requires a container delivery plan."
+    }
+  ]
+}

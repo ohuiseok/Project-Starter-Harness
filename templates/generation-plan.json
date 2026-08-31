@@ -1,0 +1,52 @@
+{
+  "planVersion": 1,
+  "planStatus": "REVIEW_REQUIRED",
+  "source": {
+    "profile": "docs/project-profile.json",
+    "metadata": "UNKNOWN",
+    "compatibilityResult": "UNKNOWN",
+    "acceptedCompatibilityFindings": []
+  },
+  "selectedOptions": {},
+  "initializr": {
+    "service": "https://start.spring.io",
+    "request": {
+      "type": "UNKNOWN",
+      "language": "UNKNOWN",
+      "bootVersion": "UNKNOWN",
+      "javaVersion": "UNKNOWN",
+      "packaging": "UNKNOWN",
+      "groupId": "UNKNOWN",
+      "artifactId": "UNKNOWN",
+      "name": "UNKNOWN",
+      "description": "UNKNOWN",
+      "packageName": "UNKNOWN",
+      "dependencies": []
+    }
+  },
+  "projectStructure": {
+    "shape": "UNKNOWN",
+    "contributors": [],
+    "childProjects": [],
+    "dataStores": []
+  },
+  "capabilities": [],
+  "externalPrerequisites": [],
+  "secrets": {
+    "requiredNames": [],
+    "valuesStored": false
+  },
+  "verification": [],
+  "reviews": [],
+  "deferredValidations": [
+    "Spring Initializr dependency version ranges and generated build compatibility must be verified during dry run."
+  ],
+  "plannedChanges": {
+    "state": "NOT_COMPUTED",
+    "creates": [],
+    "updates": [],
+    "conflicts": [],
+    "nextStep": "Run a separate dry-run renderer before applying files."
+  },
+  "executionReady": false
+}

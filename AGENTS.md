@@ -1,102 +1,86 @@
 # AGENTS.md
 
-This repository is an evidence-first harness for external Spring projects. It
-covers the whole life of a project: creating one from an empty repository,
-understanding an existing one, changing it, and verifying the change.
+This repository is an evidence-first harness for creating and growing external
+Spring projects. The target may be an empty repository, a small application, or
+a large multi-stage system. The user should be able to work in natural language
+without typing commands.
 
-The users are beginners. They should be able to work in natural language only
-and never type a command.
-
-This file holds the rules that apply in **every** mode. Rules that differ by
-mode live in `modes/`. Do not restate either set anywhere else; `docs/` and the
-skills link here.
-
-## Modes
-
-Two modes, because a beginner starting a toy project and a developer touching
-production code need opposite defaults. Read the mode file before acting.
-
-| Mode | File | When |
-|---|---|---|
-| start | `modes/start.md` | empty or README-only repo; create and learn |
-| maintain | `modes/maintain.md` | existing codebase; understand, change, verify |
-
-Never apply `modes/maintain.md` approval gates to a beginner's empty project,
-and never apply `modes/start.md` "proceed on the recommendation" to existing
-code someone depends on.
+The Harness has one mode: `start`. Read `modes/start.md` before acting. Use the
+`spring-project-start` skill for creating a project, continuing it, or adding
+the next planned capability.
 
 ## Routing
 
-The user says only `시작해줘`. Decide the mode from preflight, not by asking.
+Resolve the target and run preflight instead of asking the user to classify the
+project.
 
 ```text
 scripts/check-target --target <target-path>
 
-  SPRING_PROJECT: no       → start mode. Do not ask; the intent is unambiguous.
-  SPRING_PROJECT: yes      → maintain mode. Ask one short question to pick the
-                             skill: 이해 / 수정 / 검증.
-  SPRING_PROJECT: UNKNOWN  → ask one short question.
+  SPRING_PROJECT: no       → initialize the project from its README or agreed scope
+  SPRING_PROJECT: yes      → read progress and project evidence, then continue building
+  SPRING_PROJECT: UNKNOWN  → report UNKNOWN and ask one short question only if needed
 ```
 
-A beginner cannot describe their intent in technical terms. Where preflight
-already answers the question, do not ask it.
+An existing Spring layout does not select another mode. It means the project has
+already started and the next planned milestone should continue from current
+evidence.
 
 ## Non-Negotiable Rules
-
-These hold in both modes.
 
 - The target repository is external. Never create target source inside this
   Harness repository, and never use `workspace/target-solution`.
 - All target commands must use the target repository root as the explicit
   working directory.
 - Do not mix Harness Git state with target Git state.
-- Confirm target preflight before reading target Git state: `TARGET_EXISTS`,
+- Confirm target preflight before editing: `TARGET_EXISTS`,
   `TARGET_IS_DIRECTORY`, `TARGET_IS_GIT_REPOSITORY`,
-  `TARGET_IS_HARNESS_REPO: no`, `TARGET_GIT_ROOT`, `TARGET_BRANCH`.
+  `TARGET_IS_HARNESS_REPO: no`, `TARGET_GIT_ROOT`, and `TARGET_BRANCH`.
 - Protect existing dirty changes. Do not overwrite files you did not change.
 - If evidence is missing, or a script fails, report `UNKNOWN`. Do not infer the
   missing result.
 - Do not store passwords, tokens, API keys, credentials, PII, production
   customer data, full production logs, or secret-bearing config in this
   repository or in anything it generates.
-- Do not modify `/root/project-analysis-harness`. It is the read-only source
-  this harness was merged from.
+- Do not modify `/root/project-analysis-harness`.
+
+## Project Scale
+
+Project size is not limited. Keep the whole product direction visible while
+implementing one coherent, verifiable milestone at a time.
+
+- Small projects may move directly from setup to a first feature.
+- Large projects first need an explicit scope, staged roadmap, module boundaries,
+  and verification strategy appropriate to their requirements.
+- Add infrastructure, security, persistence, messaging, deployment, or module
+  separation when requirements or the current stage justify them; do not add
+  them merely because the eventual project may be large.
+- A milestone may span multiple files and layers. "One milestone" does not mean
+  "one trivial code edit."
 
 ## Scripts
 
-These are agent tools. The user never runs them and the README does not show
-them. Always pass the target root explicitly.
+These are agent tools. The user never needs to run them. Always pass the target
+root explicitly.
 
 ```bash
-scripts/check-environment                            # local Java and Git
-scripts/check-target --target <target-path>          # target preflight, routing
-scripts/check-spring-project --target <target-path>  # layout details
-scripts/run-verification --target <target-path>      # tests
+scripts/check-environment
+scripts/check-target --target <target-path>
+scripts/check-spring-project --target <target-path>
+scripts/run-verification --target <target-path>
 ```
 
-Maintain mode adds `map-codebase`, `find-entrypoints`, `find-persistence-links`,
-`build-context-pack`, `detect-changes`, `stale-candidates`, `daily-check`, and
-`install-target-hooks`. See `docs/skills-and-scripts.md`.
+Run `check-environment` before the first session of a project. If no `--target`
+is given, scripts fall back to `target.repository` in the git-ignored
+`config/target.local.yaml`.
 
-Run `check-environment` before the first session of a project. A beginner may
-not have Java installed at all, and that must be reported up front rather than
-discovered halfway through an implementation.
-
-If no `--target` is given, the scripts fall back to the `target.repository`
-value in `config/target.local.yaml`. That file is git-ignored and holds one
-user's own path.
-
-`tests/run-tests` covers the scripts themselves. Run it after changing anything
-under `scripts/`.
+Run `tests/run-tests` after changing anything under `scripts/`.
 
 ## Git Safety
 
-Before editing a target repo:
-
-- Run target preflight.
-- Check target Git status.
-- Check Harness Git status separately when changing Harness files.
-- Never run destructive Git commands unless the user explicitly asks.
+Before editing a target repository, run target preflight and check target Git
+status. Check Harness Git status separately when changing Harness files. Never
+run destructive Git commands unless the user explicitly asks.
 
 Destructive commands include:
 
@@ -111,29 +95,26 @@ git branch -D
 
 ## Evidence And UNKNOWN
 
-Use actual files, scripts, test output, runtime output, and Git state as
-evidence. Trust evidence in this order:
+Use actual files, tests, runtime output, Git state, and user-approved
+requirements as evidence. Trust evidence in this order:
 
 ```text
 Actual files
 Tests
 Runtime output
 Git state
-README
-User approval
+README and project documents
+User-approved requirements
 AI inference
 ```
 
-If something cannot be confirmed, say `UNKNOWN`.
-
-Scripts follow the same convention through their exit codes:
+Scripts use these exit codes:
 
 ```text
 0  confirmed
-1  confirmed negative (target missing, tests failed)
-2  usage error
+1  confirmed negative or tests failed
+2  usage error or unsafe condition
 3  cannot verify (UNKNOWN)
 ```
 
-Exit code 3 means the check could not run. It is not a failure and must be
-reported as `UNKNOWN`.
+Exit code 3 is not a confirmed failure. Report it as `UNKNOWN` with the reason.
