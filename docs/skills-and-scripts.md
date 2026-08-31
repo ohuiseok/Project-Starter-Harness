@@ -62,6 +62,7 @@ rollback하며, 성공 시 다음 비교를 위한 baseline manifest를 기록�
 | `scripts/run-verification` | target 테스트 실행 |
 | `spring-project-start/scripts/validate_feature_specs.py` | 프로젝트 개요·기능 계약과 진행 gate 검증 |
 | `spring-project-start/scripts/render_spec_markdown.py` | JSON에서 사용자용 Markdown 생성·동기화 확인 |
+| `spring-project-start/scripts/record_spec_approval.py` | 사용자 승인 후 내부 해시와 승인 증거 기록 |
 
 Exit code:
 

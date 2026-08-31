@@ -26,17 +26,19 @@ session should deliver one coherent milestone that can be verified.
 7. Determine whether this is initialization or continuation; do not route to a
    different mode merely because Spring source already exists.
 8. Summarize the current project goal, evidence, and UNKNOWN briefly.
-9. Before feature design, create or confirm the project brief and one approved
-   feature specification using the Feature Specification workflow below.
-10. Before the first implementation, create or confirm the technology profile
-   using the Technology Selection workflow below.
-11. For a large or underspecified project, establish a staged roadmap before
+9. Create or confirm the project brief and feature candidates using the Feature
+   Specification workflow below.
+10. For a large or underspecified project, establish a staged roadmap before
    implementation. Record architecture and operational choices only to the
    depth needed for the current and near-term stages.
-12. Confirm one coherent, verifiable milestone and implement it.
-13. Add only technology justified by requirements or the current stage.
-14. Verify with tests or a run check.
-15. Update `<target>/docs/progress.md` and close with the session summary.
+11. Select the next vertical slice and identify only its relevant design needs.
+12. Create or confirm the technology profile using the Technology Selection
+    workflow below.
+13. Complete and approve the selected feature specification.
+14. Confirm one coherent, verifiable milestone and implement it.
+15. Add only technology justified by requirements or the current stage.
+16. Verify with tests or a run check.
+17. Update `<target>/docs/progress.md` and close with the session summary.
 
 ## Feature Specification
 
@@ -52,7 +54,7 @@ decision came from the user, project evidence, a recommendation, an inference,
 or remains unknown. Ask one material question at a time and keep API, database,
 messaging, scheduled work, and UI optional.
 
-Validate before design or implementation:
+Validate before API/data design or implementation:
 
 ```bash
 python3 .agents/skills/spring-project-start/scripts/validate_feature_specs.py \
@@ -69,6 +71,11 @@ Treat `SPEC_VALID` and `ADVANCEMENT_READY` separately. A valid draft may be
 saved, but do not design APIs, data models, or implementation tasks while a
 blocking unknown, unconfirmed AI-proposed rule, incomplete acceptance criterion,
 missing project feature ID, missing approval, or stale Markdown view remains.
+Keep content hashes internal. After the user approves the displayed summary,
+use `record_spec_approval.py` to record project and feature approvals; never ask
+the user to copy or verify a hash. One user response may approve both summaries,
+but store two independent approvals. Regenerate derived Markdown automatically
+after an approved JSON change when no independent edit would be overwritten.
 
 ## Technology Selection
 

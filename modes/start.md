@@ -14,8 +14,8 @@ README-only repo, 작은 애플리케이션, 대형 프로젝트 모두 같은 �
 ## UX 규칙
 
 - 질문은 한 번에 하나만 합니다.
-- 먼저 추천 기술 프로필을 요약하고 `추천으로 진행 / 항목별 수정 / 직접 구성`을
-  선택하게 합니다.
+- 먼저 프로젝트 청사진과 추천 첫 기능을 요약하고 `추천으로 진행 / 항목별 수정 /
+  직접 구성`을 선택하게 합니다. 기술은 선택한 기능에 필요한 범위부터 제안합니다.
 - 개별 질문은 짧게 하고 관련 있는 대표 선택지 2~4개와 `기타 / 직접 입력`을 줍니다.
 - 선택지에는 추천과 즉시 영향을 한 문장으로 포함합니다.
 - 질문이 이어지면 진행도를 보여주고 `나머지는 추천`과 `이전 선택 변경`을 허용합니다.
@@ -28,6 +28,8 @@ README-only repo, 작은 애플리케이션, 대형 프로젝트 모두 같은 �
   보여줍니다.
 - AI 추천과 추론을 사용자 발언으로 표현하지 않습니다.
 - 프로젝트 목표 승인, 기능 명세 승인, 파일 적용 승인은 서로 대체하지 않습니다.
+- 프로젝트 개요와 첫 기능을 한 화면에서 확인했다면 한 번의 응답으로 각각 승인할 수
+  있습니다. 내부 해시나 JSON 편집은 사용자에게 요구하지 않습니다.
 
 ## 규모에 따른 시작
 
@@ -92,8 +94,9 @@ README 또는 사용자의 목표에서 첫 기능을 정하고 빠르게 실행
 Preflight
 Project evidence and progress
 Scope or roadmap check
-Approved feature specification
-One milestone
+Feature choice
+Relevant technology decisions
+Approved feature specification and milestone
 Implementation
 Verification
 Progress update

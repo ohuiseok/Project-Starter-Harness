@@ -36,6 +36,9 @@ def project_brief() -> dict:
                 "id": "F001",
                 "name": "Request leave",
                 "userValue": "An employee can submit a leave request.",
+                "recommendationReason": "It is the first independently testable user flow.",
+                "dependsOn": [],
+                "blockingUnknownIds": [],
                 "recommendedOrder": 1,
                 "status": "APPROVED",
             }
@@ -223,6 +226,9 @@ class FeatureSpecTests(unittest.TestCase):
         feature = feature_spec()
         self.assertIn("## 추천 첫 번째 기능", render_project(project))
         self.assertIn("## 이 기능으로 사용자가 할 수 있는 일", render_feature(feature, project))
+        self.assertNotIn("BR-F001-01", render_feature(feature, project))
+        self.assertIn("하네스 추천 · 사용자 확인 완료", render_feature(feature, project))
+        self.assertIn("BR-F001-01", render_feature(feature, project, "full"))
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             project_path = root / "project.json"
@@ -243,6 +249,99 @@ class FeatureSpecTests(unittest.TestCase):
             checked = subprocess.run(command + ["--check"], check=False, capture_output=True, text=True)
             self.assertEqual(1, checked.returncode)
             self.assertIn("Markdown view is stale", checked.stdout)
+
+    def test_blocking_deferred_unknown_is_shown_as_immediate(self) -> None:
+        project = project_brief()
+        project["unknowns"] = [{
+            "id": "U-PROJECT-01", "question": "Which privacy policy applies?",
+            "impact": "Changes data retention.", "blocking": True, "status": "DEFERRED",
+        }]
+        refresh_approval(project)
+        markdown = render_project(project)
+        immediate = markdown.split("## 지금 확인해야 할 사항", 1)[1].split("## 나중에 결정 가능한 사항", 1)[0]
+        later = markdown.split("## 나중에 결정 가능한 사항", 1)[1]
+        self.assertIn("Which privacy policy applies?", immediate)
+        self.assertNotIn("Which privacy policy applies?", later)
+
+    def test_deferred_feature_is_not_recommended_first(self) -> None:
+        project = project_brief()
+        project["featureCandidates"][0]["status"] = "DEFERRED"
+        project["featureCandidates"].append({
+            "id": "F002", "name": "View leave", "userValue": "See request status.",
+            "recommendationReason": "It can be verified independently.",
+            "dependsOn": [], "blockingUnknownIds": [],
+            "recommendedOrder": 2, "status": "DRAFT",
+        })
+        refresh_approval(project)
+        recommendation = render_project(project).split("## 추천 첫 번째 기능", 1)[1].split("## 지금 확인해야 할 사항", 1)[0]
+        self.assertIn("View leave", recommendation)
+        self.assertNotIn("Request leave", recommendation)
+
+    def test_feature_with_unresolved_link_is_not_recommended(self) -> None:
+        project = project_brief()
+        project["unknowns"] = [{
+            "id": "U-PROJECT-01", "question": "Which calendar is authoritative?",
+            "impact": "Changes validation.", "blocking": False, "status": "OPEN",
+        }]
+        project["featureCandidates"][0]["blockingUnknownIds"] = ["U-PROJECT-01"]
+        refresh_approval(project)
+        recommendation = render_project(project).split("## 추천 첫 번째 기능", 1)[1].split("## 지금 확인해야 할 사항", 1)[0]
+        self.assertIn("아직 정하지 않음", recommendation)
+
+    def test_approval_tool_records_hashes_without_exposing_them(self) -> None:
+        project = project_brief()
+        feature = feature_spec()
+        project["approval"] = {
+            "status": "REVIEW_REQUIRED", "approvedBy": None, "approvedAt": None,
+            "approvedContentSha256": None,
+        }
+        feature["feature"]["status"] = "REVIEW_REQUIRED"
+        feature["approval"] = {
+            "status": "REVIEW_REQUIRED", "approvedBy": None, "approvedAt": None,
+            "approvedContentSha256": None,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project_path = root / "project.json"
+            feature_path = root / "feature.json"
+            project_path.write_text(json.dumps(project), encoding="utf-8")
+            feature_path.write_text(json.dumps(feature), encoding="utf-8")
+            result = subprocess.run([
+                sys.executable, str(SCRIPTS / "record_spec_approval.py"),
+                "--project-brief", str(project_path), "--feature", str(feature_path),
+                "--expected-project-hash", approval_content_hash(project),
+                "--expected-feature-hash", approval_content_hash(feature),
+                "--approved-by", "test-user", "--approved-at", "2026-09-01T00:00:00Z",
+            ], check=False, capture_output=True, text=True)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertIn("CONTENT_HASH_VISIBLE_TO_USER: no", result.stdout)
+            self.assertNotIn("sha256", result.stdout.lower())
+            approved_project = json.loads(project_path.read_text(encoding="utf-8"))
+            approved_feature = json.loads(feature_path.read_text(encoding="utf-8"))
+            self.assertEqual((True, []), validate_project(approved_project))
+            self.assertEqual((True, []), validate_feature(approved_feature, approved_project))
+
+    def test_approval_tool_rejects_content_changed_after_display(self) -> None:
+        project = project_brief()
+        project["approval"] = {
+            "status": "REVIEW_REQUIRED", "approvedBy": None, "approvedAt": None,
+            "approvedContentSha256": None,
+        }
+        shown_hash = approval_content_hash(project)
+        project["project"]["goal"] = "Changed after display"
+        with tempfile.TemporaryDirectory() as directory:
+            project_path = Path(directory) / "project.json"
+            project_path.write_text(json.dumps(project), encoding="utf-8")
+            result = subprocess.run([
+                sys.executable, str(SCRIPTS / "record_spec_approval.py"),
+                "--project-brief", str(project_path),
+                "--expected-project-hash", shown_hash,
+                "--approved-by", "test-user", "--approved-at", "2026-09-01T00:00:00Z",
+            ], check=False, capture_output=True, text=True)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("changed after it was shown", result.stdout)
+            unchanged = json.loads(project_path.read_text(encoding="utf-8"))
+            self.assertEqual("REVIEW_REQUIRED", unchanged["approval"]["status"])
 
     def test_templates_are_valid_drafts(self) -> None:
         project = json.loads((ROOT / "templates/project-brief.json").read_text(encoding="utf-8"))

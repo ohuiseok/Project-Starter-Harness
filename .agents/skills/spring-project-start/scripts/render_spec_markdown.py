@@ -19,6 +19,32 @@ from validate_feature_specs import (
 )
 
 
+STATUS_LABELS = {
+    "DRAFT": "초안",
+    "REVIEW_REQUIRED": "확인 필요",
+    "APPROVED": "승인됨",
+    "IMPLEMENTING": "구현 중",
+    "VERIFIED": "검증 완료",
+    "DEFERRED": "나중에 진행",
+}
+SOURCE_LABELS = {
+    "USER_STATED": "사용자가 말한 내용",
+    "PROJECT_EVIDENCE": "프로젝트에서 확인한 내용",
+    "RECOMMENDED": "하네스 추천",
+    "INFERRED": "하네스 추론",
+    "UNKNOWN": "출처 확인 필요",
+}
+DESIGN_LABELS = {
+    "httpApi": "웹 API",
+    "relationalData": "관계형 데이터 저장",
+    "messaging": "메시지 송수신",
+    "scheduledJob": "예약 또는 반복 작업",
+    "serverRenderedUi": "서버 렌더링 화면",
+    "separateClient": "별도 클라이언트",
+    "externalIntegration": "외부 시스템 연동",
+}
+
+
 def canonical_hash(document: dict[str, Any]) -> str:
     encoded = json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
@@ -28,13 +54,21 @@ def bullets(values: list[str], empty: str = "없음") -> list[str]:
     return [f"- {value}" for value in values] if values else [f"- {empty}"]
 
 
-def render_project(document: dict[str, Any]) -> str:
+def render_project(document: dict[str, Any], detail: str = "basic") -> str:
     validate_project(document)
     project = document["project"]
     scope = document["scope"]
     candidates = sorted(document["featureCandidates"], key=lambda item: item["recommendedOrder"])
-    blocking = [item for item in document["unknowns"] if item["blocking"] and item["status"] == "OPEN"]
-    later = [item for item in document["unknowns"] if not item["blocking"] or item["status"] == "DEFERRED"]
+    blocking = [item for item in document["unknowns"] if item["blocking"] and item["status"] != "RESOLVED"]
+    later = [item for item in document["unknowns"] if not item["blocking"] and item["status"] != "RESOLVED"]
+    candidate_status = {item["id"]: item["status"] for item in candidates}
+    unknown_status = {item["id"]: item["status"] for item in document["unknowns"]}
+    eligible = [
+        item for item in candidates
+        if item["status"] != "DEFERRED"
+        and all(candidate_status[dependency] == "VERIFIED" for dependency in item["dependsOn"])
+        and all(unknown_status[unknown] == "RESOLVED" for unknown in item["blockingUnknownIds"])
+    ]
     lines = [
         "# 프로젝트 개요",
         "",
@@ -70,39 +104,52 @@ def render_project(document: dict[str, Any]) -> str:
         "",
     ]
     lines.extend(
-        f"- {item['id']} · {item['name']} — {item['userValue']} ({item['status']})"
+        f"- {item['name']} — {item['userValue']}"
         for item in candidates
     )
     if not candidates:
         lines.append("- 없음")
     lines.extend(["", "## 추천 첫 번째 기능", ""])
-    if candidates:
-        first = candidates[0]
-        lines.append(f"- {first['id']} · {first['name']} — {first['userValue']}")
+    if eligible:
+        first = eligible[0]
+        lines.append(f"- {first['name']} — {first['userValue']}")
+        lines.append(f"- 추천 이유: {first['recommendationReason']}")
     else:
         lines.append("- 아직 정하지 않음")
     lines.extend(["", "## 지금 확인해야 할 사항", ""])
     lines.extend(
-        [f"- {item['id']} · {item['question']} — 영향: {item['impact']}" for item in blocking]
+        [f"- {item['question']} — 이 결정의 영향: {item['impact']}" for item in blocking]
         or ["- 없음"]
     )
     lines.extend(["", "## 나중에 결정 가능한 사항", ""])
     lines.extend(
-        [f"- {item['id']} · {item['question']} ({item['status']})" for item in later]
+        [f"- {item['question']}" for item in later]
         or ["- 없음"]
     )
-    lines.extend(["", "## 승인 상태", "", f"- {document['approval']['status']}", ""])
+    lines.extend(["", "## 현재 상태", "", f"- {STATUS_LABELS[document['approval']['status']]}", ""])
+    if detail == "full":
+        lines.extend(["## 개발자 상세", ""])
+        lines.extend(
+            f"- {item['id']} · {STATUS_LABELS[item['status']]} · 순서 {item['recommendedOrder']}"
+            for item in candidates
+        )
+        lines.append("")
     return "\n".join(lines)
 
 
-def render_feature(document: dict[str, Any], project: dict[str, Any] | None = None) -> str:
+def render_feature(
+    document: dict[str, Any],
+    project: dict[str, Any] | None = None,
+    detail: str = "basic",
+) -> str:
     validate_feature(document, project)
     feature = document["feature"]
     scenario = document["scenario"]
-    needs = [name for name, enabled in document["designNeeds"].items() if enabled]
-    open_unknowns = [item for item in document["unknowns"] if item["status"] == "OPEN"]
+    needs = [DESIGN_LABELS[name] for name, enabled in document["designNeeds"].items() if enabled]
+    blocking = [item for item in document["unknowns"] if item["blocking"] and item["status"] != "RESOLVED"]
+    later = [item for item in document["unknowns"] if not item["blocking"] and item["status"] != "RESOLVED"]
     lines = [
-        f"# {feature['id']} · {feature['name']}",
+        f"# {feature['name']}",
         "",
         f"<!-- spec-source-sha256: {canonical_hash(document)} -->",
         f"<!-- approval-content-sha256: {approval_content_hash(document)} -->",
@@ -115,12 +162,16 @@ def render_feature(document: dict[str, Any], project: dict[str, Any] | None = No
         "## 주요 흐름",
         "",
         f"- 시작: {scenario['trigger']}",
-        *[f"- {index}. {step}" for index, step in enumerate(scenario["mainFlow"], 1)],
+        *[f"{index}. {step}" for index, step in enumerate(scenario["mainFlow"], 1)],
         "",
         "## 업무 규칙",
         "",
         *(
-            [f"- {rule['id']} · {rule['description']} ({rule['source']}, {rule['status']})" for rule in document["businessRules"]]
+            [
+                f"- {rule['description']} — {SOURCE_LABELS[rule['source']]}"
+                + (" · 사용자 확인 완료" if rule["confirmedByUser"] else " · 사용자 확인 필요")
+                for rule in document["businessRules"]
+            ]
             or ["- 없음"]
         ),
         "",
@@ -139,7 +190,10 @@ def render_feature(document: dict[str, Any], project: dict[str, Any] | None = No
         "## 완료 여부를 확인하는 방법",
         "",
         *(
-            [f"- {item['id']} · Given {item['given']} / When {item['when']} / Then {item['then']}" for item in document["acceptanceCriteria"]]
+            [
+                f"- 상황: {item['given']}\n  - 행동: {item['when']}\n  - 기대 결과: {item['then']}"
+                for item in document["acceptanceCriteria"]
+            ]
             or ["- 없음"]
         ),
         "",
@@ -147,18 +201,30 @@ def render_feature(document: dict[str, Any], project: dict[str, Any] | None = No
         "",
         *bullets(needs),
         "",
-        "## 남은 UNKNOWN",
+        "## 지금 확인해야 할 사항",
         "",
         *(
-            [f"- {item['id']} · {item['question']} — 영향: {item['impact']}" for item in open_unknowns]
+            [f"- {item['question']} — 이 결정의 영향: {item['impact']}" for item in blocking]
             or ["- 없음"]
         ),
         "",
-        "## 승인 상태",
+        "## 나중에 결정 가능한 사항",
         "",
-        f"- {document['approval']['status']}",
+        *([f"- {item['question']}" for item in later] or ["- 없음"]),
+        "",
+        "## 현재 상태",
+        "",
+        f"- {STATUS_LABELS[document['approval']['status']]}",
         "",
     ]
+    if detail == "full":
+        lines.extend(["## 개발자 상세", "", f"- 기능 ID: {feature['id']}"])
+        lines.extend(
+            f"- {rule['id']} · {rule['source']} · {rule['status']}"
+            for rule in document["businessRules"]
+        )
+        lines.extend(f"- {item['id']}" for item in document["acceptanceCriteria"])
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -185,6 +251,7 @@ def main() -> int:
     parser.add_argument("--project-brief", type=Path)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--detail", choices=("basic", "full"), default="basic")
     args = parser.parse_args()
     if args.check and args.force:
         print("SPEC_MARKDOWN_VALID: no\nERROR: --check and --force cannot be combined")
@@ -192,13 +259,13 @@ def main() -> int:
     try:
         document = load_object(args.input)
         if "featureCandidates" in document:
-            expected = render_project(document)
+            expected = render_project(document, args.detail)
             kind = "PROJECT_BRIEF"
         elif "feature" in document:
             project = load_object(args.project_brief) if args.project_brief else None
             if project is not None:
                 validate_project(project)
-            expected = render_feature(document, project)
+            expected = render_feature(document, project, args.detail)
             kind = "FEATURE_SPEC"
         else:
             raise ValueError("input is neither a project brief nor a feature spec")

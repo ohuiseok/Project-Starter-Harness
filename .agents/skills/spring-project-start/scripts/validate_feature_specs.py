@@ -172,6 +172,19 @@ def validate_project(document: dict[str, Any]) -> tuple[bool, list[str]]:
     for index, candidate in enumerate(candidates):
         text(candidate.get("name"), f"featureCandidates[{index}].name")
         text(candidate.get("userValue"), f"featureCandidates[{index}].userValue")
+        text(candidate.get("recommendationReason"), f"featureCandidates[{index}].recommendationReason")
+        dependencies = candidate.get("dependsOn")
+        blocking_unknowns = candidate.get("blockingUnknownIds")
+        if not isinstance(dependencies, list) or not all(
+            isinstance(item, str) and FEATURE_ID.fullmatch(item) for item in dependencies
+        ):
+            raise ValueError(f"featureCandidates[{index}].dependsOn: feature ID array required")
+        if not isinstance(blocking_unknowns, list) or not all(
+            isinstance(item, str) and UNKNOWN_ID.fullmatch(item) for item in blocking_unknowns
+        ):
+            raise ValueError(f"featureCandidates[{index}].blockingUnknownIds: unknown ID array required")
+        if len(dependencies) != len(set(dependencies)) or len(blocking_unknowns) != len(set(blocking_unknowns)):
+            raise ValueError(f"featureCandidates[{index}]: dependency and unknown links must be unique")
         order = candidate.get("recommendedOrder")
         if not isinstance(order, int) or isinstance(order, bool) or order < 1:
             raise ValueError(f"featureCandidates[{index}].recommendedOrder: positive integer required")
@@ -182,6 +195,34 @@ def validate_project(document: dict[str, Any]) -> tuple[bool, list[str]]:
         if status not in STATUSES:
             raise ValueError(f"featureCandidates[{index}].status: invalid status {status}")
     blockers = validate_unknowns(document.get("unknowns"), "unknowns")
+    candidate_ids = {candidate["id"] for candidate in candidates}
+    unknown_ids = {unknown["id"] for unknown in document["unknowns"]}
+    for index, candidate in enumerate(candidates):
+        invalid_dependencies = set(candidate["dependsOn"]) - candidate_ids
+        if candidate["id"] in candidate["dependsOn"]:
+            raise ValueError(f"featureCandidates[{index}].dependsOn: self dependency is not allowed")
+        if invalid_dependencies:
+            raise ValueError(f"featureCandidates[{index}].dependsOn: unknown features {sorted(invalid_dependencies)}")
+        invalid_unknowns = set(candidate["blockingUnknownIds"]) - unknown_ids
+        if invalid_unknowns:
+            raise ValueError(f"featureCandidates[{index}].blockingUnknownIds: unknown IDs {sorted(invalid_unknowns)}")
+    dependency_map = {candidate["id"]: candidate["dependsOn"] for candidate in candidates}
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(feature_id: str) -> None:
+        if feature_id in visiting:
+            raise ValueError(f"featureCandidates: dependency cycle contains {feature_id}")
+        if feature_id in visited:
+            return
+        visiting.add(feature_id)
+        for dependency in dependency_map[feature_id]:
+            visit(dependency)
+        visiting.remove(feature_id)
+        visited.add(feature_id)
+
+    for candidate_id in dependency_map:
+        visit(candidate_id)
     validate_sources(document.get("sources"), "sources")
     approved = validate_approval(document.get("approval"), "approval", document)
     if approved:
