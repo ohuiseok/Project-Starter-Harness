@@ -22,6 +22,7 @@ sys.path.insert(0, str(SCRIPTS))
 from render_spec_markdown import render_feature, render_project  # noqa: E402
 import record_spec_approval  # noqa: E402
 from next_feature_id import next_feature_id  # noqa: E402
+from migrate_feature_spec_v2 import migrate  # noqa: E402
 from validate_feature_specs import approval_content_hash, validate_feature, validate_project  # noqa: E402
 
 
@@ -63,9 +64,18 @@ def project_brief() -> dict:
     return document
 
 
+def design_requirement(status: str, reason: str) -> dict:
+    return {
+        "status": status,
+        "reason": reason,
+        "source": "USER_STATED",
+        "confirmedByUser": True,
+    }
+
+
 def feature_spec() -> dict:
     document = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "feature": {
             "id": "F001",
             "name": "Request leave",
@@ -101,14 +111,14 @@ def feature_spec() -> dict:
                 "then": "a pending request is stored",
             }
         ],
-        "designNeeds": {
-            "httpApi": True,
-            "relationalData": True,
-            "messaging": False,
-            "scheduledJob": False,
-            "serverRenderedUi": False,
-            "separateClient": False,
-            "externalIntegration": False,
+        "designRequirements": {
+            "httpApi": design_requirement("REQUIRED", "A separate client submits requests."),
+            "persistentState": design_requirement("REQUIRED", "Requests must survive restarts."),
+            "messaging": design_requirement("NOT_USED", "No asynchronous handoff is needed."),
+            "scheduledJob": design_requirement("NOT_USED", "No time-based action is needed."),
+            "serverRenderedUi": design_requirement("NOT_USED", "The client is separate."),
+            "separateClient": design_requirement("REQUIRED", "Employees use a separate client."),
+            "externalIntegration": design_requirement("NOT_USED", "No external system is involved."),
         },
         "dependencies": [],
         "unknowns": [],
@@ -143,19 +153,42 @@ class FeatureSpecTests(unittest.TestCase):
 
     def test_batch_feature_does_not_require_api(self) -> None:
         feature = feature_spec()
-        feature["designNeeds"]["httpApi"] = False
-        feature["designNeeds"]["relationalData"] = False
-        feature["designNeeds"]["scheduledJob"] = True
+        feature["designRequirements"]["httpApi"] = design_requirement("NOT_USED", "No request entry point.")
+        feature["designRequirements"]["persistentState"] = design_requirement("NOT_USED", "Stateless job.")
+        feature["designRequirements"]["scheduledJob"] = design_requirement("REQUIRED", "Runs nightly.")
         refresh_approval(feature)
         self.assertEqual((True, []), validate_feature(feature, project_brief()))
 
     def test_message_consumer_does_not_require_relational_data(self) -> None:
         feature = feature_spec()
-        feature["designNeeds"]["httpApi"] = False
-        feature["designNeeds"]["relationalData"] = False
-        feature["designNeeds"]["messaging"] = True
+        feature["designRequirements"]["httpApi"] = design_requirement("NOT_USED", "Messages are the entry point.")
+        feature["designRequirements"]["persistentState"] = design_requirement("NOT_USED", "No state is retained.")
+        feature["designRequirements"]["messaging"] = design_requirement("REQUIRED", "Consumes a domain event.")
         refresh_approval(feature)
         self.assertEqual((True, []), validate_feature(feature, project_brief()))
+
+    def test_unknown_design_requirement_blocks_advancement(self) -> None:
+        feature = feature_spec()
+        feature["designRequirements"]["httpApi"] = {
+            "status": "UNKNOWN", "reason": "Client entry point is undecided.",
+            "source": "UNKNOWN", "confirmedByUser": False,
+        }
+        refresh_approval(feature)
+        blockers = validate_feature(feature, project_brief())[1]
+        self.assertIn("design requirement is UNKNOWN: httpApi", blockers)
+        self.assertIn("design requirement source is UNKNOWN: httpApi", blockers)
+
+    def test_unconfirmed_ai_design_requirement_blocks_advancement(self) -> None:
+        feature = feature_spec()
+        feature["designRequirements"]["messaging"] = {
+            "status": "NOT_USED", "reason": "Synchronous processing is sufficient.",
+            "source": "RECOMMENDED", "confirmedByUser": False,
+        }
+        refresh_approval(feature)
+        self.assertIn(
+            "AI-proposed design requirement is not user-confirmed: messaging",
+            validate_feature(feature, project_brief())[1],
+        )
 
     def test_blocking_unknown_prevents_advancement(self) -> None:
         feature = feature_spec()
@@ -260,6 +293,94 @@ class FeatureSpecTests(unittest.TestCase):
             checked = subprocess.run(command + ["--check"], check=False, capture_output=True, text=True)
             self.assertEqual(1, checked.returncode)
             self.assertIn("Markdown view is stale", checked.stdout)
+
+    def test_markdown_surfaces_required_deferred_and_unknown_design(self) -> None:
+        feature = feature_spec()
+        feature["designRequirements"]["messaging"] = design_requirement(
+            "DEFERRED", "A later milestone may publish events."
+        )
+        feature["designRequirements"]["externalIntegration"] = {
+            "status": "UNKNOWN", "reason": "Calendar ownership is undecided.",
+            "source": "UNKNOWN", "confirmedByUser": False,
+        }
+        refresh_approval(feature)
+        markdown = render_feature(feature, project_brief())
+        required = markdown.split("## 이번 기능에 필요한 설계", 1)[1].split("## 지금 확인해야 할 사항", 1)[0]
+        immediate = markdown.split("## 지금 확인해야 할 사항", 1)[1].split("## 나중에 결정 가능한 사항", 1)[0]
+        later = markdown.split("## 나중에 결정 가능한 사항", 1)[1]
+        self.assertIn("웹 API", required)
+        self.assertIn("외부 시스템 연동", immediate)
+        self.assertIn("메시지 송수신", later)
+
+    def test_v1_migration_is_conservative_and_requires_review(self) -> None:
+        legacy = feature_spec()
+        legacy["schemaVersion"] = 1
+        legacy.pop("designRequirements")
+        legacy["designNeeds"] = {
+            "httpApi": True, "relationalData": True, "messaging": False,
+            "scheduledJob": False, "serverRenderedUi": False,
+            "separateClient": True, "externalIntegration": False,
+        }
+        migrated = migrate(legacy)
+        self.assertEqual(2, migrated["schemaVersion"])
+        self.assertEqual("REQUIRED", migrated["designRequirements"]["persistentState"]["status"])
+        self.assertEqual("UNKNOWN", migrated["designRequirements"]["messaging"]["status"])
+        self.assertFalse(migrated["designRequirements"]["httpApi"]["confirmedByUser"])
+        self.assertEqual("REVIEW_REQUIRED", migrated["feature"]["status"])
+        self.assertEqual("REVIEW_REQUIRED", migrated["approval"]["status"])
+        approved, blockers = validate_feature(migrated, None)
+        self.assertFalse(approved)
+        self.assertIn("design requirement is UNKNOWN: messaging", blockers)
+
+    def test_v1_migration_cli_preserves_source_and_refuses_overwrite(self) -> None:
+        legacy = feature_spec()
+        legacy["schemaVersion"] = 1
+        legacy.pop("designRequirements")
+        legacy["designNeeds"] = {
+            "httpApi": True, "relationalData": False, "messaging": False,
+            "scheduledJob": False, "serverRenderedUi": False,
+            "separateClient": False, "externalIntegration": False,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "spec.json"
+            output = root / "spec.v2.json"
+            source.write_text(json.dumps(legacy), encoding="utf-8")
+            original = source.read_bytes()
+            command = [
+                sys.executable, str(SCRIPTS / "migrate_feature_spec_v2.py"),
+                "--input", str(source), "--output", str(output),
+            ]
+            first = subprocess.run(command, check=False, capture_output=True, text=True)
+            self.assertEqual(0, first.returncode, first.stdout + first.stderr)
+            self.assertIn("SOURCE_CHANGED: no", first.stdout)
+            self.assertEqual(original, source.read_bytes())
+            second = subprocess.run(command, check=False, capture_output=True, text=True)
+            self.assertEqual(1, second.returncode)
+            self.assertIn("output already exists", second.stdout)
+
+    def test_v1_migration_refuses_dangling_output_symlink(self) -> None:
+        legacy = feature_spec()
+        legacy["schemaVersion"] = 1
+        legacy.pop("designRequirements")
+        legacy["designNeeds"] = {
+            "httpApi": False, "relationalData": False, "messaging": False,
+            "scheduledJob": False, "serverRenderedUi": False,
+            "separateClient": False, "externalIntegration": False,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "spec.json"
+            output = root / "spec.v2.json"
+            source.write_text(json.dumps(legacy), encoding="utf-8")
+            output.symlink_to(root / "missing.json")
+            result = subprocess.run([
+                sys.executable, str(SCRIPTS / "migrate_feature_spec_v2.py"),
+                "--input", str(source), "--output", str(output),
+            ], check=False, capture_output=True, text=True)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("output already exists", result.stdout)
+            self.assertFalse((root / "missing.json").exists())
 
     def test_confirmation_badge_is_only_for_ai_proposed_rules(self) -> None:
         project = project_brief()

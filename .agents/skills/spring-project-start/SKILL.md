@@ -49,6 +49,9 @@ For a new product goal, a missing brief, or the next feature, read
 `F001`; on continuation resolve the next unused stable ID from both the project
 brief and existing feature directories with `scripts/next_feature_id.py`.
 Generate their Markdown views; never ask the user to author JSON.
+Feature contracts use schema v2 design requirements. If a target contains a v1
+contract, migrate it to a separate file with `migrate_feature_spec_v2.py`, show
+the unresolved interpretations, and replace the original only after review.
 
 Show the understood goal, users, feature candidates, recommended next slice,
 blocking questions, and deferrable questions. Preserve whether each important
@@ -72,7 +75,8 @@ python3 .agents/skills/spring-project-start/scripts/render_spec_markdown.py \
 Treat `SPEC_VALID` and `ADVANCEMENT_READY` separately. A valid draft may be
 saved, but do not design APIs, data models, or implementation tasks while a
 blocking unknown, unconfirmed AI-proposed rule, incomplete acceptance criterion,
-missing project feature ID, missing approval, or stale Markdown view remains.
+unknown or unconfirmed design requirement, missing project feature ID, missing
+approval, or stale Markdown view remains.
 Keep content hashes internal. After the user approves the displayed summary,
 use `record_spec_approval.py` to atomically record project and feature approvals,
 synchronize the candidate status, and regenerate both Markdown views; never ask

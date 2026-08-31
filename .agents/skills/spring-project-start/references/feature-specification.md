@@ -44,9 +44,19 @@ feature. Explain the reason in user language.
 Business rules are optional when no separate domain constraint exists; do not
 invent one for a health check, static page, or technical foundation. Acceptance
 criteria remain mandatory and carry the verifiable behavior.
-Do not require an HTTP API or relational data. Entry and effect needs are
-booleans under `designNeeds`, so REST, server-rendered UI, batch, scheduled,
-messaging, and integration features use the same contract.
+Do not require an HTTP API or a particular database technology. Feature schema
+v2 records `httpApi`, `persistentState`, `messaging`, `scheduledJob`,
+`serverRenderedUi`, `separateClient`, and `externalIntegration` under
+`designRequirements`. Each decision has `REQUIRED`, `NOT_USED`, `DEFERRED`, or
+`UNKNOWN` status plus a reason, source, and user-confirmation flag. Persistent
+state describes a product need; relational, document, or other storage belongs
+to the later technology and solution design.
+
+Legacy schema v1 booleans are ambiguous. Run `migrate_feature_spec_v2.py` to a
+new output path. It maps `true` to an unconfirmed `REQUIRED` inference and
+`false` to `UNKNOWN`, resets feature approval to `REVIEW_REQUIRED`, and never
+changes the source file. Resolve and confirm the migrated decisions before
+approval.
 
 ## Gates
 
@@ -57,6 +67,8 @@ artifacts. Block advancement when:
 - a blocking unknown remains unresolved;
 - user value, main flow, or acceptance criteria are missing;
 - an inferred or recommended mandatory rule has not been confirmed by the user;
+- a design requirement, reason, or source is unknown, or an AI-proposed design
+  requirement is unconfirmed;
 - the feature ID is absent from the project brief;
 - JSON and its generated Markdown view differ.
 

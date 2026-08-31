@@ -64,6 +64,7 @@ rollback하며, 성공 시 다음 비교를 위한 baseline manifest를 기록�
 | `spring-project-start/scripts/render_spec_markdown.py` | JSON에서 사용자용 Markdown 생성·동기화 확인 |
 | `spring-project-start/scripts/record_spec_approval.py` | 승인 상태 동기화와 JSON·Markdown 원자적 갱신 |
 | `spring-project-start/scripts/next_feature_id.py` | 프로젝트 개요와 기존 디렉터리에서 다음 기능 ID 확인 |
+| `spring-project-start/scripts/migrate_feature_spec_v2.py` | v1 기능 명세를 원본 보존 상태로 v2 검토본에 변환 |
 
 Exit code:
 

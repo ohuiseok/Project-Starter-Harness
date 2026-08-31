@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "feature": {
     "id": "F001",
     "name": "UNKNOWN",
@@ -20,14 +20,14 @@
   "dataAndState": [],
   "failureCases": [],
   "acceptanceCriteria": [],
-  "designNeeds": {
-    "httpApi": false,
-    "relationalData": false,
-    "messaging": false,
-    "scheduledJob": false,
-    "serverRenderedUi": false,
-    "separateClient": false,
-    "externalIntegration": false
+  "designRequirements": {
+    "httpApi": {"status": "UNKNOWN", "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
+    "persistentState": {"status": "UNKNOWN", "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
+    "messaging": {"status": "UNKNOWN", "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
+    "scheduledJob": {"status": "UNKNOWN", "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
+    "serverRenderedUi": {"status": "UNKNOWN", "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
+    "separateClient": {"status": "UNKNOWN", "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
+    "externalIntegration": {"status": "UNKNOWN", "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false}
   },
   "dependencies": [],
   "unknowns": [],

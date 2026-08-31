@@ -36,12 +36,18 @@ SOURCE_LABELS = {
 }
 DESIGN_LABELS = {
     "httpApi": "웹 API",
-    "relationalData": "관계형 데이터 저장",
+    "persistentState": "지속적인 상태 저장",
     "messaging": "메시지 송수신",
     "scheduledJob": "예약 또는 반복 작업",
     "serverRenderedUi": "서버 렌더링 화면",
     "separateClient": "별도 클라이언트",
     "externalIntegration": "외부 시스템 연동",
+}
+DESIGN_STATUS_LABELS = {
+    "REQUIRED": "필요",
+    "NOT_USED": "사용하지 않음",
+    "DEFERRED": "나중에 결정",
+    "UNKNOWN": "확인 필요",
 }
 
 
@@ -59,6 +65,15 @@ def rule_label(rule: dict[str, Any]) -> str:
     if rule["source"] in {"RECOMMENDED", "INFERRED"}:
         label += " · " + ("사용자 확인 완료" if rule["confirmedByUser"] else "사용자 확인 필요")
     return label
+
+
+def design_requirement_blocks(decision: dict[str, Any]) -> bool:
+    return (
+        decision["status"] == "UNKNOWN"
+        or decision["reason"] == "UNKNOWN"
+        or decision["source"] == "UNKNOWN"
+        or (decision["source"] in {"RECOMMENDED", "INFERRED"} and not decision["confirmedByUser"])
+    )
 
 
 def render_project(document: dict[str, Any], detail: str = "basic") -> str:
@@ -152,7 +167,21 @@ def render_feature(
     validate_feature(document, project)
     feature = document["feature"]
     scenario = document["scenario"]
-    needs = [DESIGN_LABELS[name] for name, enabled in document["designNeeds"].items() if enabled]
+    requirements = document["designRequirements"]
+    required = [
+        f"{DESIGN_LABELS[name]} — {decision['reason']}"
+        for name, decision in requirements.items() if decision["status"] == "REQUIRED"
+    ]
+    deferred_design = [
+        f"{DESIGN_LABELS[name]} — {decision['reason']}"
+        for name, decision in requirements.items()
+        if decision["status"] == "DEFERRED" and not design_requirement_blocks(decision)
+    ]
+    design_questions = [
+        f"{DESIGN_LABELS[name]} — {decision['reason']}"
+        for name, decision in requirements.items()
+        if design_requirement_blocks(decision)
+    ]
     blocking = [item for item in document["unknowns"] if item["blocking"] and item["status"] != "RESOLVED"]
     later = [item for item in document["unknowns"] if not item["blocking"] and item["status"] != "RESOLVED"]
     lines = [
@@ -203,20 +232,25 @@ def render_feature(
             or ["- 없음"]
         ),
         "",
-        "## 설계 단계에서 필요한 항목",
+        "## 이번 기능에 필요한 설계",
         "",
-        *bullets(needs),
+        *bullets(required),
         "",
         "## 지금 확인해야 할 사항",
         "",
         *(
             [f"- {item['question']} — 이 결정의 영향: {item['impact']}" for item in blocking]
+            + [f"- {item}" for item in design_questions]
             or ["- 없음"]
         ),
         "",
         "## 나중에 결정 가능한 사항",
         "",
-        *([f"- {item['question']}" for item in later] or ["- 없음"]),
+        *(
+            [f"- {item['question']}" for item in later]
+            + [f"- {item}" for item in deferred_design]
+            or ["- 없음"]
+        ),
         "",
         "## 현재 상태",
         "",
@@ -230,6 +264,11 @@ def render_feature(
             for rule in document["businessRules"]
         )
         lines.extend(f"- {item['id']}" for item in document["acceptanceCriteria"])
+        lines.extend(
+            f"- {name} · {DESIGN_STATUS_LABELS[decision['status']]} · {decision['source']}"
+            + (" · 사용자 확인 완료" if decision["confirmedByUser"] else " · 사용자 확인 없음")
+            for name, decision in requirements.items()
+        )
         lines.append("")
     return "\n".join(lines)
 

@@ -227,6 +227,7 @@ for required in \
   "$SKILL_ROOT/scripts/render_spec_markdown.py" \
   "$SKILL_ROOT/scripts/record_spec_approval.py" \
   "$SKILL_ROOT/scripts/next_feature_id.py" \
+  "$SKILL_ROOT/scripts/migrate_feature_spec_v2.py" \
   "$HARNESS_ROOT/templates/project-profile.md" \
   "$HARNESS_ROOT/templates/project-profile.json" \
   "$HARNESS_ROOT/templates/generation-plan.json" \
@@ -399,7 +400,7 @@ OUT="$(python3 "$HARNESS_ROOT/tests/test_feature_specs.py" 2>&1)"
 CODE=$?
 expect_code "feature specification: focused regression suite passes" 0
 expect_out "feature specification: all focused scenarios ran" \
-  "Ran 27 tests"
+  "Ran 33 tests"
 
 OUT="$(python3 "$SKILL_ROOT/scripts/validate_feature_specs.py" \
   --project-brief "$HARNESS_ROOT/templates/project-brief.json" 2>&1)"

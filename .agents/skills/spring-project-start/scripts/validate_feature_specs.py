@@ -20,10 +20,11 @@ FEATURE_ID = re.compile(r"^F\d{3}$")
 RULE_ID = re.compile(r"^BR-(F\d{3})-\d{2}$")
 CRITERION_ID = re.compile(r"^AC-(F\d{3})-\d{2}$")
 UNKNOWN_ID = re.compile(r"^U-(?:PROJECT|F\d{3})-\d{2}$")
-DESIGN_NEEDS = {
-    "httpApi", "relationalData", "messaging", "scheduledJob",
+DESIGN_REQUIREMENTS = {
+    "httpApi", "persistentState", "messaging", "scheduledJob",
     "serverRenderedUi", "separateClient", "externalIntegration",
 }
+DESIGN_REQUIREMENT_STATUSES = {"REQUIRED", "NOT_USED", "DEFERRED", "UNKNOWN"}
 SENSITIVE_KEYS = re.compile(r"(?:password|passwd|secret|credential|api[_-]?key|access[_-]?token|private[_-]?key)", re.I)
 SENSITIVE_VALUES = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+/=-]{12,}", re.I)
 
@@ -243,8 +244,8 @@ def validate_project(document: dict[str, Any]) -> tuple[bool, list[str]]:
 
 
 def validate_feature(document: dict[str, Any], project: dict[str, Any] | None) -> tuple[bool, list[str]]:
-    if document.get("schemaVersion") != 1:
-        raise ValueError("schemaVersion must be 1")
+    if document.get("schemaVersion") != 2:
+        raise ValueError("feature schemaVersion must be 2; migrate legacy v1 specs first")
     reject_secrets(document)
     feature = document.get("feature")
     if not isinstance(feature, dict):
@@ -299,12 +300,33 @@ def validate_feature(document: dict[str, Any], project: dict[str, Any] | None) -
             raise ValueError(f"acceptanceCriteria[{index}].id: must belong to {feature_id}")
         for field in ("given", "when", "then"):
             text(criterion.get(field), f"acceptanceCriteria[{index}].{field}", False)
-    needs = document.get("designNeeds")
-    if not isinstance(needs, dict) or set(needs) != DESIGN_NEEDS:
-        raise ValueError(f"designNeeds must contain exactly {sorted(DESIGN_NEEDS)}")
-    for field, value in needs.items():
-        if not isinstance(value, bool):
-            raise ValueError(f"designNeeds.{field}: boolean required")
+    requirements = document.get("designRequirements")
+    if not isinstance(requirements, dict) or set(requirements) != DESIGN_REQUIREMENTS:
+        raise ValueError(f"designRequirements must contain exactly {sorted(DESIGN_REQUIREMENTS)}")
+    for field, decision in requirements.items():
+        location = f"designRequirements.{field}"
+        if not isinstance(decision, dict):
+            raise ValueError(f"{location}: object required")
+        if set(decision) != {"status", "reason", "source", "confirmedByUser"}:
+            raise ValueError(f"{location}: status, reason, source, and confirmedByUser required")
+        status = text(decision.get("status"), f"{location}.status")
+        if status not in DESIGN_REQUIREMENT_STATUSES:
+            raise ValueError(f"{location}.status: invalid status {status}")
+        reason = text(decision.get("reason"), f"{location}.reason")
+        source = text(decision.get("source"), f"{location}.source")
+        if source not in SOURCES:
+            raise ValueError(f"{location}.source: invalid source {source}")
+        confirmed = decision.get("confirmedByUser")
+        if not isinstance(confirmed, bool):
+            raise ValueError(f"{location}.confirmedByUser: boolean required")
+        if status == "UNKNOWN":
+            blockers.append(f"design requirement is UNKNOWN: {field}")
+        if reason == "UNKNOWN":
+            blockers.append(f"design requirement reason is UNKNOWN: {field}")
+        if source == "UNKNOWN":
+            blockers.append(f"design requirement source is UNKNOWN: {field}")
+        if source in {"RECOMMENDED", "INFERRED"} and not confirmed:
+            blockers.append(f"AI-proposed design requirement is not user-confirmed: {field}")
     blockers.extend(validate_unknowns(document.get("unknowns"), "unknowns", feature_id))
     validate_sources(document.get("sources"), "sources")
     approved = validate_approval(document.get("approval"), "approval", document)
