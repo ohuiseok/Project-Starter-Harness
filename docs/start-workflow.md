@@ -84,7 +84,7 @@ Spring 소스가 있다고 다른 모드로 전환하지 않습니다. 다음 ev
 `docs/project-brief.md`에서 이해한 목표, 기능 후보, 추천 첫 기능, 지금 확인할 사항을
 봅니다.
 
-다음 vertical slice는 `docs/features/F001/spec.json`에 사용자 가치, 시나리오, 업무
+다음 vertical slice는 `docs/features/<feature-id>/spec.json`에 사용자 가치, 시나리오, 업무
 규칙, 권한, 상태, 실패 사례, 인수 조건, 설계 필요 항목을 기록합니다. REST, 화면,
 배치, 메시지, 스케줄, 외부 연동을 선택적으로 표현하며 API나 관계형 DB를 모든 기능에
 강제하지 않습니다. `spec.md`는 JSON에서 생성한 보기이며 직접 관리하는 두 번째 원본이
@@ -102,6 +102,10 @@ Spring 소스가 있다고 다른 모드로 전환하지 않습니다. 다음 ev
 있지만, 내부적으로는 두 승인과 콘텐츠 해시를 별도로 기록합니다. 사용자는 해시를
 보거나 입력하지 않습니다. JSON을 의도적으로 변경한 뒤 파생 Markdown만 갱신하는
 작업에는 별도 승인을 반복해서 요구하지 않습니다.
+첫 기능은 `F001`이고 이후 기능은 프로젝트 개요와 기존 기능 디렉터리를 함께 확인해 다음
+미사용 ID를 부여합니다. 승인 시 선택된 기능 후보 상태와 기능 명세 상태를 동기화하고,
+두 JSON과 두 Markdown을 적용 직전 재검증하는 하나의 트랜잭션으로 갱신합니다. 중간 실패
+시 하네스가 쓴 내용과 여전히 같은 파일만 rollback하여 외부 변경을 보호합니다.
 
 ## 기술 선택
 
@@ -170,8 +174,8 @@ dry-run이 안전한 `UPDATE`를 판별하게 합니다.
 | `templates/progress.md` | `<target>/docs/progress.md` | 첫 세션 생성, 매 세션 갱신 |
 | `templates/project-brief.json` | `<target>/docs/project-brief.json` | 목표와 기능 후보의 구조화 기준 |
 | `templates/project-brief.md` | `<target>/docs/project-brief.md` | 프로젝트 개요의 생성된 사용자 보기 |
-| `templates/feature-spec.json` | `<target>/docs/features/F001/spec.json` | 한 기능의 구현 전 계약 |
-| `templates/feature-spec.md` | `<target>/docs/features/F001/spec.md` | 기능 명세의 생성된 사용자 보기 |
+| `templates/feature-spec.json` | `<target>/docs/features/<feature-id>/spec.json` | 한 기능의 구현 전 계약 |
+| `templates/feature-spec.md` | `<target>/docs/features/<feature-id>/spec.md` | 기능 명세의 생성된 사용자 보기 |
 | `templates/project-profile.json` | `<target>/docs/project-profile.json` | 구조화된 기술 선택의 기준 |
 | `templates/project-profile.md` | `<target>/docs/project-profile.md` | 사람이 읽는 선택 이유와 검토 결과 |
 | `templates/generation-plan.json` | `<target>/docs/generation-plan.json` | readiness 통과 후 생성 계획 컴파일 |

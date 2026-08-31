@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 import copy
+import contextlib
+import io
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -17,6 +20,8 @@ SCRIPTS = ROOT / ".agents/skills/spring-project-start/scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from render_spec_markdown import render_feature, render_project  # noqa: E402
+import record_spec_approval  # noqa: E402
+from next_feature_id import next_feature_id  # noqa: E402
 from validate_feature_specs import approval_content_hash, validate_feature, validate_project  # noqa: E402
 
 
@@ -306,6 +311,8 @@ class FeatureSpecTests(unittest.TestCase):
             feature_path = root / "feature.json"
             project_path.write_text(json.dumps(project), encoding="utf-8")
             feature_path.write_text(json.dumps(feature), encoding="utf-8")
+            project_path.with_suffix(".md").write_text(render_project(project), encoding="utf-8")
+            feature_path.with_suffix(".md").write_text(render_feature(feature, project), encoding="utf-8")
             result = subprocess.run([
                 sys.executable, str(SCRIPTS / "record_spec_approval.py"),
                 "--project-brief", str(project_path), "--feature", str(feature_path),
@@ -318,8 +325,84 @@ class FeatureSpecTests(unittest.TestCase):
             self.assertNotIn("sha256", result.stdout.lower())
             approved_project = json.loads(project_path.read_text(encoding="utf-8"))
             approved_feature = json.loads(feature_path.read_text(encoding="utf-8"))
+            self.assertEqual("APPROVED", approved_project["featureCandidates"][0]["status"])
             self.assertEqual((True, []), validate_project(approved_project))
             self.assertEqual((True, []), validate_feature(approved_feature, approved_project))
+            self.assertEqual(render_project(approved_project), project_path.with_suffix(".md").read_text(encoding="utf-8"))
+            self.assertEqual(
+                render_feature(approved_feature, approved_project),
+                feature_path.with_suffix(".md").read_text(encoding="utf-8"),
+            )
+
+    def test_approval_rejects_independently_edited_markdown(self) -> None:
+        project = project_brief()
+        project["approval"] = {
+            "status": "REVIEW_REQUIRED", "approvedBy": None, "approvedAt": None,
+            "approvedContentSha256": None,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            project_path = Path(directory) / "project.json"
+            project_path.write_text(json.dumps(project), encoding="utf-8")
+            project_path.with_suffix(".md").write_text("independent edit", encoding="utf-8")
+            result = subprocess.run([
+                sys.executable, str(SCRIPTS / "record_spec_approval.py"),
+                "--project-brief", str(project_path),
+                "--expected-project-hash", approval_content_hash(project),
+                "--approved-by", "test-user", "--approved-at", "2026-09-01T00:00:00Z",
+            ], check=False, capture_output=True, text=True)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("project Markdown view changed", result.stdout)
+            self.assertEqual("independent edit", project_path.with_suffix(".md").read_text(encoding="utf-8"))
+
+    def test_approval_rollback_preserves_external_change(self) -> None:
+        project = project_brief()
+        project["approval"] = {
+            "status": "REVIEW_REQUIRED", "approvedBy": None, "approvedAt": None,
+            "approvedContentSha256": None,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            project_path = Path(directory) / "project.json"
+            markdown_path = project_path.with_suffix(".md")
+            project_path.write_text(json.dumps(project), encoding="utf-8")
+            markdown_path.write_text(render_project(project), encoding="utf-8")
+            real_write = record_spec_approval.atomic_write_bytes
+            calls = 0
+
+            def fail_after_external_change(content: bytes, destination: Path) -> None:
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    real_write(content, destination)
+                    return
+                project_path.write_text("external change", encoding="utf-8")
+                raise OSError("injected failure")
+
+            arguments = [
+                "record_spec_approval.py", "--project-brief", str(project_path),
+                "--expected-project-hash", approval_content_hash(project),
+                "--approved-by", "test-user", "--approved-at", "2026-09-01T00:00:00Z",
+            ]
+            with mock.patch.object(sys, "argv", arguments), mock.patch.object(
+                record_spec_approval, "atomic_write_bytes", side_effect=fail_after_external_change
+            ), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(1, record_spec_approval.main())
+            self.assertEqual("external change", project_path.read_text(encoding="utf-8"))
+
+    def test_next_feature_id_uses_brief_and_existing_directories(self) -> None:
+        project = project_brief()
+        project["featureCandidates"].append({
+            "id": "F002", "name": "Decide leave", "userValue": "Decide a request.",
+            "recommendationReason": "It follows submission.", "dependsOn": ["F001"],
+            "blockingUnknownIds": [], "recommendedOrder": 2, "status": "DRAFT",
+        })
+        refresh_approval(project)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project_path = root / "project.json"
+            features = root / "features"
+            (features / "F004").mkdir(parents=True)
+            project_path.write_text(json.dumps(project), encoding="utf-8")
+            self.assertEqual("F005", next_feature_id(project_path, features))
 
     def test_approval_tool_rejects_content_changed_after_display(self) -> None:
         project = project_brief()

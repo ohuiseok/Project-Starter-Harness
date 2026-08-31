@@ -30,10 +30,12 @@ Markdown is a generated view for the user.
 
 - `<target>/docs/project-brief.json`: project goal and ordered feature map.
 - `<target>/docs/project-brief.md`: generated user view.
-- `<target>/docs/features/F001/spec.json`: one feature contract.
-- `<target>/docs/features/F001/spec.md`: generated user view.
+- `<target>/docs/features/<feature-id>/spec.json`: one feature contract.
+- `<target>/docs/features/<feature-id>/spec.md`: generated user view.
 
-Use stable IDs: `F001`, `BR-F001-01`, `AC-F001-01`, and `U-F001-01`.
+Use stable IDs: `F001`, `BR-F001-01`, `AC-F001-01`, and `U-F001-01` for the
+first feature. Before adding another, run `scripts/next_feature_id.py` against
+the project brief and feature directory; never reuse or renumber an ID.
 Give every feature candidate a short `recommendationReason`, `dependsOn`, and
 `blockingUnknownIds`. Recommend only a non-deferred candidate whose dependencies
 are verified and whose linked unknowns are resolved. Explain the reason in user
@@ -61,7 +63,7 @@ python3 .agents/skills/spring-project-start/scripts/validate_feature_specs.py \
   --project-brief <target>/docs/project-brief.json
 
 python3 .agents/skills/spring-project-start/scripts/validate_feature_specs.py \
-  --feature <target>/docs/features/F001/spec.json \
+  --feature <target>/docs/features/<feature-id>/spec.json \
   --project-brief <target>/docs/project-brief.json --require-approved
 
 python3 .agents/skills/spring-project-start/scripts/render_spec_markdown.py \
@@ -77,4 +79,7 @@ python3 .agents/skills/spring-project-start/scripts/record_spec_approval.py \
 Use `--check` to detect a stale Markdown view. Use the default basic view for
 users and `--detail full` only on request. Regenerate a derived view after an
 intentional JSON change without asking for another approval; first ensure the
-view has no independent edits that would be lost.
+view has no independent edits that would be lost. Approval synchronizes the
+selected candidate status and atomically updates both JSON sources and both
+Markdown views. Each artifact is rechecked immediately before replacement;
+rollback refuses to overwrite a later external edit.

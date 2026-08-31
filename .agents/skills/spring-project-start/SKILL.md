@@ -44,9 +44,11 @@ session should deliver one coherent milestone that can be verified.
 
 For a new product goal, a missing brief, or the next feature, read
 `references/feature-specification.md` completely. Create
-`<target>/docs/project-brief.json` and one feature contract at
-`<target>/docs/features/F001/spec.json`. Generate their Markdown views; never
-ask the user to author JSON.
+`<target>/docs/project-brief.json` and one feature contract under
+`<target>/docs/features/<feature-id>/spec.json`. For the first feature use
+`F001`; on continuation resolve the next unused stable ID from both the project
+brief and existing feature directories with `scripts/next_feature_id.py`.
+Generate their Markdown views; never ask the user to author JSON.
 
 Show the understood goal, users, feature candidates, recommended first slice,
 blocking questions, and deferrable questions. Preserve whether each important
@@ -59,12 +61,12 @@ Validate before API/data design or implementation:
 ```bash
 python3 .agents/skills/spring-project-start/scripts/validate_feature_specs.py \
   --project-brief <target>/docs/project-brief.json \
-  --feature <target>/docs/features/F001/spec.json --require-approved
+  --feature <target>/docs/features/<feature-id>/spec.json --require-approved
 
 python3 .agents/skills/spring-project-start/scripts/render_spec_markdown.py \
-  --input <target>/docs/features/F001/spec.json \
+  --input <target>/docs/features/<feature-id>/spec.json \
   --project-brief <target>/docs/project-brief.json \
-  --output <target>/docs/features/F001/spec.md --check
+  --output <target>/docs/features/<feature-id>/spec.md --check
 ```
 
 Treat `SPEC_VALID` and `ADVANCEMENT_READY` separately. A valid draft may be
@@ -72,7 +74,8 @@ saved, but do not design APIs, data models, or implementation tasks while a
 blocking unknown, unconfirmed AI-proposed rule, incomplete acceptance criterion,
 missing project feature ID, missing approval, or stale Markdown view remains.
 Keep content hashes internal. After the user approves the displayed summary,
-use `record_spec_approval.py` to record project and feature approvals; never ask
+use `record_spec_approval.py` to atomically record project and feature approvals,
+synchronize the candidate status, and regenerate both Markdown views; never ask
 the user to copy or verify a hash. One user response may approve both summaries,
 but store two independent approvals. Regenerate derived Markdown automatically
 after an approved JSON change when no independent edit would be overwritten.
