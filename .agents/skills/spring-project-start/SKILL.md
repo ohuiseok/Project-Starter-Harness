@@ -50,7 +50,7 @@ For a new product goal, a missing brief, or the next feature, read
 brief and existing feature directories with `scripts/next_feature_id.py`.
 Generate their Markdown views; never ask the user to author JSON.
 
-Show the understood goal, users, feature candidates, recommended first slice,
+Show the understood goal, users, feature candidates, recommended next slice,
 blocking questions, and deferrable questions. Preserve whether each important
 decision came from the user, project evidence, a recommendation, an inference,
 or remains unknown. Ask one material question at a time and keep API, database,

@@ -324,8 +324,6 @@ def validate_feature(document: dict[str, Any], project: dict[str, Any] | None) -
             blockers.append("a resolved trigger and main flow are required")
         elif "UNKNOWN" in scenario["mainFlow"]:
             blockers.append("main flow contains UNKNOWN")
-        if not rules:
-            blockers.append("at least one business rule is required")
         for rule in rules:
             if rule["description"] == "UNKNOWN":
                 blockers.append(f"business rule description is unresolved: {rule['id']}")

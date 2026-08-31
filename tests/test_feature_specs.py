@@ -178,6 +178,12 @@ class FeatureSpecTests(unittest.TestCase):
         refresh_approval(feature)
         self.assertIn("at least one acceptance criterion is required", validate_feature(feature, project_brief())[1])
 
+    def test_approved_feature_may_have_no_separate_business_rule(self) -> None:
+        feature = feature_spec()
+        feature["businessRules"] = []
+        refresh_approval(feature)
+        self.assertEqual((True, []), validate_feature(feature, project_brief()))
+
     def test_unconfirmed_ai_rule_prevents_advancement(self) -> None:
         feature = feature_spec()
         feature["businessRules"][0]["source"] = "INFERRED"
@@ -229,7 +235,7 @@ class FeatureSpecTests(unittest.TestCase):
     def test_markdown_is_user_ordered_and_staleness_is_detected(self) -> None:
         project = project_brief()
         feature = feature_spec()
-        self.assertIn("## 추천 첫 번째 기능", render_project(project))
+        self.assertIn("## 추천 다음 기능", render_project(project))
         self.assertIn("## 이 기능으로 사용자가 할 수 있는 일", render_feature(feature, project))
         self.assertNotIn("BR-F001-01", render_feature(feature, project))
         self.assertIn("하네스 추천 · 사용자 확인 완료", render_feature(feature, project))
@@ -255,6 +261,20 @@ class FeatureSpecTests(unittest.TestCase):
             self.assertEqual(1, checked.returncode)
             self.assertIn("Markdown view is stale", checked.stdout)
 
+    def test_confirmation_badge_is_only_for_ai_proposed_rules(self) -> None:
+        project = project_brief()
+        feature = feature_spec()
+        feature["businessRules"][0].update({
+            "source": "PROJECT_EVIDENCE", "confirmedByUser": False,
+        })
+        refresh_approval(feature)
+        rule_line = next(
+            line for line in render_feature(feature, project).splitlines()
+            if "end date" in line
+        )
+        self.assertIn("프로젝트에서 확인한 내용", rule_line)
+        self.assertNotIn("사용자 확인", rule_line)
+
     def test_blocking_deferred_unknown_is_shown_as_immediate(self) -> None:
         project = project_brief()
         project["unknowns"] = [{
@@ -278,9 +298,29 @@ class FeatureSpecTests(unittest.TestCase):
             "recommendedOrder": 2, "status": "DRAFT",
         })
         refresh_approval(project)
-        recommendation = render_project(project).split("## 추천 첫 번째 기능", 1)[1].split("## 지금 확인해야 할 사항", 1)[0]
+        recommendation = render_project(project).split("## 추천 다음 기능", 1)[1].split("## 지금 확인해야 할 사항", 1)[0]
         self.assertIn("View leave", recommendation)
         self.assertNotIn("Request leave", recommendation)
+
+    def test_completed_or_implementing_feature_is_not_recommended_next(self) -> None:
+        project = project_brief()
+        project["featureCandidates"][0]["status"] = "VERIFIED"
+        project["featureCandidates"].append({
+            "id": "F002", "name": "Decide leave", "userValue": "Decide a request.",
+            "recommendationReason": "It is already underway.", "dependsOn": ["F001"],
+            "blockingUnknownIds": [], "recommendedOrder": 2, "status": "IMPLEMENTING",
+        })
+        project["featureCandidates"].append({
+            "id": "F003", "name": "View leave", "userValue": "See request status.",
+            "recommendationReason": "It is the next independently testable value.",
+            "dependsOn": ["F001"], "blockingUnknownIds": [],
+            "recommendedOrder": 3, "status": "DRAFT",
+        })
+        refresh_approval(project)
+        recommendation = render_project(project).split("## 추천 다음 기능", 1)[1].split("## 지금 확인해야 할 사항", 1)[0]
+        self.assertIn("View leave", recommendation)
+        self.assertNotIn("Request leave", recommendation)
+        self.assertNotIn("Decide leave", recommendation)
 
     def test_feature_with_unresolved_link_is_not_recommended(self) -> None:
         project = project_brief()
@@ -290,8 +330,8 @@ class FeatureSpecTests(unittest.TestCase):
         }]
         project["featureCandidates"][0]["blockingUnknownIds"] = ["U-PROJECT-01"]
         refresh_approval(project)
-        recommendation = render_project(project).split("## 추천 첫 번째 기능", 1)[1].split("## 지금 확인해야 할 사항", 1)[0]
-        self.assertIn("아직 정하지 않음", recommendation)
+        recommendation = render_project(project).split("## 추천 다음 기능", 1)[1].split("## 지금 확인해야 할 사항", 1)[0]
+        self.assertIn("현재 추천할 다음 기능 없음", recommendation)
 
     def test_approval_tool_records_hashes_without_exposing_them(self) -> None:
         project = project_brief()

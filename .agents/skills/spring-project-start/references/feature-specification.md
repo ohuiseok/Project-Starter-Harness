@@ -10,7 +10,7 @@ Markdown is a generated view for the user.
    requirements, scope, and feature candidates before asking questions.
 2. Distinguish `USER_STATED`, `PROJECT_EVIDENCE`, `RECOMMENDED`, `INFERRED`,
    and `UNKNOWN`. Never present a recommendation or inference as a user fact.
-3. Show the recommended first vertical slice. Offer `accept recommendation`,
+3. Show the recommended next vertical slice. Offer `accept recommendation`,
    `edit one item`, and `direct input`.
 4. Ask only about unresolved decisions that materially change the feature.
    Ask one question at a time with 2–4 relevant choices and
@@ -37,9 +37,13 @@ Use stable IDs: `F001`, `BR-F001-01`, `AC-F001-01`, and `U-F001-01` for the
 first feature. Before adding another, run `scripts/next_feature_id.py` against
 the project brief and feature directory; never reuse or renumber an ID.
 Give every feature candidate a short `recommendationReason`, `dependsOn`, and
-`blockingUnknownIds`. Recommend only a non-deferred candidate whose dependencies
-are verified and whose linked unknowns are resolved. Explain the reason in user
-language.
+`blockingUnknownIds`. Recommend only a `DRAFT`, `REVIEW_REQUIRED`, or `APPROVED`
+candidate whose dependencies are verified and whose linked unknowns are
+resolved. Completed, deferred, and already implementing work is not a next
+feature. Explain the reason in user language.
+Business rules are optional when no separate domain constraint exists; do not
+invent one for a health check, static page, or technical foundation. Acceptance
+criteria remain mandatory and carry the verifiable behavior.
 Do not require an HTTP API or relational data. Entry and effect needs are
 booleans under `designNeeds`, so REST, server-rendered UI, batch, scheduled,
 messaging, and integration features use the same contract.
@@ -51,7 +55,7 @@ artifacts. Block advancement when:
 
 - approval is absent or incomplete;
 - a blocking unknown remains unresolved;
-- user value, main flow, business rules, or acceptance criteria are missing;
+- user value, main flow, or acceptance criteria are missing;
 - an inferred or recommended mandatory rule has not been confirmed by the user;
 - the feature ID is absent from the project brief;
 - JSON and its generated Markdown view differ.
@@ -83,3 +87,14 @@ view has no independent edits that would be lost. Approval synchronizes the
 selected candidate status and atomically updates both JSON sources and both
 Markdown views. Each artifact is rechecked immediately before replacement;
 rollback refuses to overwrite a later external edit.
+
+## Design References
+
+- [GitHub Spec Kit specification template](https://github.com/github/spec-kit/blob/main/templates/spec-template.md)
+  informs prioritized, independently testable user slices and mandatory
+  acceptance scenarios.
+- [Cucumber Gherkin reference](https://github.com/cucumber/website/blob/main/docs/gherkin/reference.md)
+  treats `Rule` as optional while scenarios remain executable examples.
+- [Backstage catalog lifecycle](https://github.com/backstage/backstage/blob/master/docs/features/software-catalog/descriptor-format.md)
+  demonstrates using explicit lifecycle state to guide what consumers should
+  select next.

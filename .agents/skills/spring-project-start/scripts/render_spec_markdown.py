@@ -54,6 +54,13 @@ def bullets(values: list[str], empty: str = "없음") -> list[str]:
     return [f"- {value}" for value in values] if values else [f"- {empty}"]
 
 
+def rule_label(rule: dict[str, Any]) -> str:
+    label = SOURCE_LABELS[rule["source"]]
+    if rule["source"] in {"RECOMMENDED", "INFERRED"}:
+        label += " · " + ("사용자 확인 완료" if rule["confirmedByUser"] else "사용자 확인 필요")
+    return label
+
+
 def render_project(document: dict[str, Any], detail: str = "basic") -> str:
     validate_project(document)
     project = document["project"]
@@ -65,7 +72,7 @@ def render_project(document: dict[str, Any], detail: str = "basic") -> str:
     unknown_status = {item["id"]: item["status"] for item in document["unknowns"]}
     eligible = [
         item for item in candidates
-        if item["status"] != "DEFERRED"
+        if item["status"] in {"DRAFT", "REVIEW_REQUIRED", "APPROVED"}
         and all(candidate_status[dependency] == "VERIFIED" for dependency in item["dependsOn"])
         and all(unknown_status[unknown] == "RESOLVED" for unknown in item["blockingUnknownIds"])
     ]
@@ -109,13 +116,13 @@ def render_project(document: dict[str, Any], detail: str = "basic") -> str:
     )
     if not candidates:
         lines.append("- 없음")
-    lines.extend(["", "## 추천 첫 번째 기능", ""])
+    lines.extend(["", "## 추천 다음 기능", ""])
     if eligible:
         first = eligible[0]
         lines.append(f"- {first['name']} — {first['userValue']}")
         lines.append(f"- 추천 이유: {first['recommendationReason']}")
     else:
-        lines.append("- 아직 정하지 않음")
+        lines.append("- 현재 추천할 다음 기능 없음")
     lines.extend(["", "## 지금 확인해야 할 사항", ""])
     lines.extend(
         [f"- {item['question']} — 이 결정의 영향: {item['impact']}" for item in blocking]
@@ -168,8 +175,7 @@ def render_feature(
         "",
         *(
             [
-                f"- {rule['description']} — {SOURCE_LABELS[rule['source']]}"
-                + (" · 사용자 확인 완료" if rule["confirmedByUser"] else " · 사용자 확인 필요")
+                f"- {rule['description']} — {rule_label(rule)}"
                 for rule in document["businessRules"]
             ]
             or ["- 없음"]
