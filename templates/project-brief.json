@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "name": "UNKNOWN",
+    "goal": "UNKNOWN",
+    "targetUsers": [],
+    "successCriteria": [],
+    "nonFunctionalRequirements": []
+  },
+  "scope": {
+    "included": [],
+    "excluded": []
+  },
+  "featureCandidates": [],
+  "unknowns": [],
+  "sources": [],
+  "approval": {
+    "status": "DRAFT",
+    "approvedBy": null,
+    "approvedAt": null,
+    "approvedContentSha256": null
+  }
+}

@@ -215,6 +215,7 @@ for required in \
   "$SKILL_ROOT/references/compatibility-rules.json" \
   "$SKILL_ROOT/references/generation-readiness.json" \
   "$SKILL_ROOT/references/generation-mappings.json" \
+  "$SKILL_ROOT/references/feature-specification.md" \
   "$SKILL_ROOT/references/profiles.json" \
   "$SKILL_ROOT/scripts/validate_catalog.py" \
   "$SKILL_ROOT/scripts/evaluate_profile.py" \
@@ -222,12 +223,18 @@ for required in \
   "$SKILL_ROOT/scripts/validate_generation_plan.py" \
   "$SKILL_ROOT/scripts/render_generation_dry_run.py" \
   "$SKILL_ROOT/scripts/apply_approved_generation.py" \
+  "$SKILL_ROOT/scripts/validate_feature_specs.py" \
+  "$SKILL_ROOT/scripts/render_spec_markdown.py" \
   "$HARNESS_ROOT/templates/project-profile.md" \
   "$HARNESS_ROOT/templates/project-profile.json" \
   "$HARNESS_ROOT/templates/generation-plan.json" \
   "$HARNESS_ROOT/templates/generation-dry-run.json" \
   "$HARNESS_ROOT/templates/generation-approval.json" \
-  "$HARNESS_ROOT/templates/generation-baseline.json"; do
+  "$HARNESS_ROOT/templates/generation-baseline.json" \
+  "$HARNESS_ROOT/templates/project-brief.json" \
+  "$HARNESS_ROOT/templates/project-brief.md" \
+  "$HARNESS_ROOT/templates/feature-spec.json" \
+  "$HARNESS_ROOT/templates/feature-spec.md"; do
   if [ -f "$required" ]; then
     pass "starter contract: $(basename "$required") exists"
   else
@@ -383,6 +390,20 @@ CODE=$?
 expect_code "starter contract: MSA needs child project definitions" 1
 expect_out "starter contract: MSA project-definition blocker is reported" \
   "microservices-need-project-definitions"
+
+# --- feature specification --------------------------------------------------
+
+OUT="$(python3 "$HARNESS_ROOT/tests/test_feature_specs.py" 2>&1)"
+CODE=$?
+expect_code "feature specification: focused regression suite passes" 0
+expect_out "feature specification: all focused scenarios ran" \
+  "Ran 16 tests"
+
+OUT="$(python3 "$SKILL_ROOT/scripts/validate_feature_specs.py" \
+  --project-brief "$HARNESS_ROOT/templates/project-brief.json" 2>&1)"
+CODE=$?
+expect_code "feature specification: draft project template is structurally valid" 0
+expect_out "feature specification: draft cannot advance" "ADVANCEMENT_READY: no"
 
 # --- generation planning ----------------------------------------------------
 

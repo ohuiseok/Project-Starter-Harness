@@ -17,6 +17,7 @@
 - 목표와 요구사항 정리
 - 규모에 맞는 단계별 로드맵
 - 추천·선택·직접 입력 기반 기술 프로필과 호환성 검토
+- 자연어 목표의 프로젝트 개요·기능 후보·첫 기능 계약
 - 현재 마일스톤 구현
 - 테스트 또는 실행 검증
 - `docs/progress.md` 갱신
@@ -31,6 +32,10 @@ Markdown은 사용자가 읽는 이유와 영향 설명입니다.
 
 생성 전에는 `GENERATION_READY: yes`가 필요합니다. 빈 프로필이 파싱되고 충돌이
 없다는 이유만으로 생성 가능한 것으로 취급하지 않습니다.
+
+기능 설계 전에는 프로젝트 개요와 해당 기능 명세가 승인되고
+`ADVANCEMENT_READY: yes`여야 합니다. 구조화 JSON을 기준 원본으로 사용하고 Markdown은
+사용자용 보기로 생성하여 동기화를 검사합니다.
 
 readiness를 통과하면 `generation-mappings.json`과 현재 Spring Initializr
 메타데이터로 `docs/generation-plan.json`을 만듭니다. 계획 컴파일러는 target
@@ -55,6 +60,8 @@ rollback하며, 성공 시 다음 비교를 위한 baseline manifest를 기록�
 | `scripts/check-target` | target 경로, Git 상태, Spring 시작 여부 확인 |
 | `scripts/check-spring-project` | 빌드 파일과 소스 레이아웃 확인 |
 | `scripts/run-verification` | target 테스트 실행 |
+| `spring-project-start/scripts/validate_feature_specs.py` | 프로젝트 개요·기능 계약과 진행 gate 검증 |
+| `spring-project-start/scripts/render_spec_markdown.py` | JSON에서 사용자용 Markdown 생성·동기화 확인 |
 
 Exit code:
 

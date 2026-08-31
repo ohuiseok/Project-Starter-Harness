@@ -1,0 +1,224 @@
+#!/usr/bin/env python3
+"""Render deterministic user-facing Markdown from a structured specification."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Any
+
+from validate_feature_specs import (
+    approval_content_hash,
+    load_object,
+    validate_feature,
+    validate_project,
+)
+
+
+def canonical_hash(document: dict[str, Any]) -> str:
+    encoded = json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def bullets(values: list[str], empty: str = "없음") -> list[str]:
+    return [f"- {value}" for value in values] if values else [f"- {empty}"]
+
+
+def render_project(document: dict[str, Any]) -> str:
+    validate_project(document)
+    project = document["project"]
+    scope = document["scope"]
+    candidates = sorted(document["featureCandidates"], key=lambda item: item["recommendedOrder"])
+    blocking = [item for item in document["unknowns"] if item["blocking"] and item["status"] == "OPEN"]
+    later = [item for item in document["unknowns"] if not item["blocking"] or item["status"] == "DEFERRED"]
+    lines = [
+        "# 프로젝트 개요",
+        "",
+        f"<!-- spec-source-sha256: {canonical_hash(document)} -->",
+        f"<!-- approval-content-sha256: {approval_content_hash(document)} -->",
+        "<!-- project-brief.json에서 생성됨. 직접 수정하지 마세요. -->",
+        "",
+        "## 제가 이해한 목표",
+        "",
+        project["goal"],
+        "",
+        "## 주요 사용자",
+        "",
+        *bullets(project["targetUsers"]),
+        "",
+        "## 성공 기준",
+        "",
+        *bullets(project["successCriteria"]),
+        "",
+        "## 비기능 요구사항",
+        "",
+        *bullets(project["nonFunctionalRequirements"]),
+        "",
+        "## 포함 범위",
+        "",
+        *bullets(scope["included"]),
+        "",
+        "## 제외 범위",
+        "",
+        *bullets(scope["excluded"]),
+        "",
+        "## 핵심 기능 후보",
+        "",
+    ]
+    lines.extend(
+        f"- {item['id']} · {item['name']} — {item['userValue']} ({item['status']})"
+        for item in candidates
+    )
+    if not candidates:
+        lines.append("- 없음")
+    lines.extend(["", "## 추천 첫 번째 기능", ""])
+    if candidates:
+        first = candidates[0]
+        lines.append(f"- {first['id']} · {first['name']} — {first['userValue']}")
+    else:
+        lines.append("- 아직 정하지 않음")
+    lines.extend(["", "## 지금 확인해야 할 사항", ""])
+    lines.extend(
+        [f"- {item['id']} · {item['question']} — 영향: {item['impact']}" for item in blocking]
+        or ["- 없음"]
+    )
+    lines.extend(["", "## 나중에 결정 가능한 사항", ""])
+    lines.extend(
+        [f"- {item['id']} · {item['question']} ({item['status']})" for item in later]
+        or ["- 없음"]
+    )
+    lines.extend(["", "## 승인 상태", "", f"- {document['approval']['status']}", ""])
+    return "\n".join(lines)
+
+
+def render_feature(document: dict[str, Any], project: dict[str, Any] | None = None) -> str:
+    validate_feature(document, project)
+    feature = document["feature"]
+    scenario = document["scenario"]
+    needs = [name for name, enabled in document["designNeeds"].items() if enabled]
+    open_unknowns = [item for item in document["unknowns"] if item["status"] == "OPEN"]
+    lines = [
+        f"# {feature['id']} · {feature['name']}",
+        "",
+        f"<!-- spec-source-sha256: {canonical_hash(document)} -->",
+        f"<!-- approval-content-sha256: {approval_content_hash(document)} -->",
+        "<!-- spec.json에서 생성됨. 직접 수정하지 마세요. -->",
+        "",
+        "## 이 기능으로 사용자가 할 수 있는 일",
+        "",
+        feature["userValue"],
+        "",
+        "## 주요 흐름",
+        "",
+        f"- 시작: {scenario['trigger']}",
+        *[f"- {index}. {step}" for index, step in enumerate(scenario["mainFlow"], 1)],
+        "",
+        "## 업무 규칙",
+        "",
+        *(
+            [f"- {rule['id']} · {rule['description']} ({rule['source']}, {rule['status']})" for rule in document["businessRules"]]
+            or ["- 없음"]
+        ),
+        "",
+        "## 권한",
+        "",
+        *bullets(document["authorization"]),
+        "",
+        "## 저장하거나 변경하는 데이터",
+        "",
+        *bullets(document["dataAndState"]),
+        "",
+        "## 실패 사례",
+        "",
+        *bullets(document["failureCases"]),
+        "",
+        "## 완료 여부를 확인하는 방법",
+        "",
+        *(
+            [f"- {item['id']} · Given {item['given']} / When {item['when']} / Then {item['then']}" for item in document["acceptanceCriteria"]]
+            or ["- 없음"]
+        ),
+        "",
+        "## 설계 단계에서 필요한 항목",
+        "",
+        *bullets(needs),
+        "",
+        "## 남은 UNKNOWN",
+        "",
+        *(
+            [f"- {item['id']} · {item['question']} — 영향: {item['impact']}" for item in open_unknowns]
+            or ["- 없음"]
+        ),
+        "",
+        "## 승인 상태",
+        "",
+        f"- {document['approval']['status']}",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def atomic_write(content: str, output: Path, force: bool) -> None:
+    if output.exists() and not force:
+        raise ValueError(f"output already exists; use --force to regenerate it: {output}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_name(f".{output.name}.{os.getpid()}.tmp")
+    try:
+        with temporary.open("w", encoding="utf-8") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, output)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--project-brief", type=Path)
+    parser.add_argument("--check", action="store_true")
+    parser.add_argument("--force", action="store_true")
+    args = parser.parse_args()
+    if args.check and args.force:
+        print("SPEC_MARKDOWN_VALID: no\nERROR: --check and --force cannot be combined")
+        return 2
+    try:
+        document = load_object(args.input)
+        if "featureCandidates" in document:
+            expected = render_project(document)
+            kind = "PROJECT_BRIEF"
+        elif "feature" in document:
+            project = load_object(args.project_brief) if args.project_brief else None
+            if project is not None:
+                validate_project(project)
+            expected = render_feature(document, project)
+            kind = "FEATURE_SPEC"
+        else:
+            raise ValueError("input is neither a project brief nor a feature spec")
+        if args.check:
+            try:
+                actual = args.output.read_text(encoding="utf-8")
+            except OSError as error:
+                raise ValueError(f"cannot read Markdown view: {error}") from error
+            if actual != expected:
+                raise ValueError("Markdown view is stale; regenerate it from JSON")
+        else:
+            atomic_write(expected, args.output, args.force)
+    except ValueError as error:
+        print(f"SPEC_MARKDOWN_VALID: no\nERROR: {error}")
+        return 1
+    print("SPEC_MARKDOWN_VALID: yes")
+    print(f"SPEC_KIND: {kind}")
+    print(f"MODE: {'CHECK' if args.check else 'WRITE'}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

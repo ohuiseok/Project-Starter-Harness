@@ -9,6 +9,9 @@
 - Target: UNKNOWN
 - Goal: UNKNOWN
 - Scale / shape: UNKNOWN
+- Project brief: `docs/project-brief.md`, `docs/project-brief.json`
+- Current feature: UNKNOWN
+- Feature specification: UNKNOWN
 - Technology profile: `docs/project-profile.md`, `docs/project-profile.json`
 - Generation plan: `docs/generation-plan.json`
 - Last session: UNKNOWN

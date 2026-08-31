@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "feature": {
+    "id": "F001",
+    "name": "UNKNOWN",
+    "goal": "UNKNOWN",
+    "userValue": "UNKNOWN",
+    "status": "DRAFT"
+  },
+  "actors": [],
+  "scenario": {
+    "preconditions": [],
+    "trigger": "UNKNOWN",
+    "mainFlow": [],
+    "alternateFlows": [],
+    "postconditions": []
+  },
+  "businessRules": [],
+  "authorization": [],
+  "dataAndState": [],
+  "failureCases": [],
+  "acceptanceCriteria": [],
+  "designNeeds": {
+    "httpApi": false,
+    "relationalData": false,
+    "messaging": false,
+    "scheduledJob": false,
+    "serverRenderedUi": false,
+    "separateClient": false,
+    "externalIntegration": false
+  },
+  "dependencies": [],
+  "unknowns": [],
+  "sources": [],
+  "approval": {
+    "status": "DRAFT",
+    "approvedBy": null,
+    "approvedAt": null,
+    "approvedContentSha256": null
+  }
+}
