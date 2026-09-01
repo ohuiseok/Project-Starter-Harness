@@ -7,6 +7,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from apply_approved_relational_artifacts import validate_report
 from render_design_route import atomic_write
 from validate_feature_specs import load_object
 
@@ -18,6 +19,11 @@ def render(report: dict) -> str:
     if changes["updates"]: lines.extend(f"- 관리 중인 파일 갱신 `{item['path']}`" for item in changes["updates"])
     if changes["unchanged"]: lines.extend(f"- 변경 없음 `{item}`" for item in changes["unchanged"])
     if not changes["creates"] and not changes["updates"] and not changes["unchanged"]: lines.append("- 없음")
+    kinds = {item["kind"] for item in report.get("generatedArtifacts", [])}
+    flyway = next((item["content"] for item in report.get("generatedArtifacts", []) if item["kind"] == "FLYWAY_SQL"), "")
+    lines.extend(["", "## 실행 환경 결정", "", f"- schema: {'migration이 없으면 생성' if 'CREATE SCHEMA IF NOT EXISTS' in flyway else '기존 schema 사용'}"])
+    if "DOCKER_COMPOSE" in kinds: lines.append("- Compose 인증: 승인된 환경변수 이름만 참조하며 값은 저장하지 않음")
+    if "TESTCONTAINERS_JAVA" in kinds: lines.append("- Testcontainers 인증: 운영 credential과 분리된 일회성 컨테이너 기본값 사용")
     lines.extend(["", "## 정확한 생성 내용", ""])
     for artifact in report.get("generatedArtifacts", []):
         language = {"FLYWAY_SQL": "sql", "DOCKER_COMPOSE": "yaml", "TESTCONTAINERS_JAVA": "java"}.get(artifact["kind"], "text")
@@ -34,7 +40,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(); parser.add_argument("--report", required=True, type=Path); parser.add_argument("--output", required=True, type=Path); parser.add_argument("--check", action="store_true"); parser.add_argument("--force", action="store_true"); args = parser.parse_args()
     try:
         if args.check and args.force: raise ValueError("--check and --force cannot be combined")
-        expected = render(load_object(args.report))
+        report = load_object(args.report); validate_report(report, Path(report.get("target", "")), require_approval=False); expected = render(report)
         if args.check:
             if args.output.read_text(encoding="utf-8") != expected: raise ValueError("relational artifact dry-run Markdown is stale")
         else: atomic_write(expected, args.output, args.force)

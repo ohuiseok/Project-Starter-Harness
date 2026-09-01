@@ -75,7 +75,19 @@ class RelationalArtifactApplyTests(unittest.TestCase):
     def test_malformed_existing_relational_baseline_is_not_overwritten(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); _, _, arguments = self.fixture(root); baseline = root / ".starter-harness-relational.json"; baseline.write_text('{"manifestVersion": 1, "artifactKind": "OTHER"}')
-            before = baseline.read_bytes(); code, output = self.run_apply(arguments); self.assertEqual(1, code); self.assertIn("unsupported identity", output); self.assertEqual(before, baseline.read_bytes()); self.assertFalse((root / "compose.yaml").exists())
+            before = baseline.read_bytes(); code, output = self.run_apply(arguments); self.assertEqual(1, code); self.assertIn("baseline appeared after dry run", output); self.assertEqual(before, baseline.read_bytes()); self.assertFalse((root / "compose.yaml").exists())
+
+    def test_interrupted_prepared_transaction_can_be_recovered(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); report_path, _, _ = self.fixture(root); report = json.loads(report_path.read_text()); transaction_id = "interrupted-1234"; managed = root / ".starter-harness"; transaction = managed / "transactions" / transaction_id; backup = managed / "backups" / transaction_id; transaction.mkdir(parents=True); backup.mkdir(parents=True)
+            creates = [item["path"] for item in report["plannedChanges"]["creates"]]; first = creates[0]; artifact = next(item for item in report["generatedArtifacts"] if item["path"] == first); destination = root / first; destination.parent.mkdir(parents=True, exist_ok=True); destination.write_text(artifact["content"]); destination.chmod(report["plannedChanges"]["desiredManifest"]["modes"][first])
+            record = {"relationalArtifactTransactionVersion": 1, "transactionId": transaction_id, "state": "PREPARED", "target": str(root), "dryRunReportSha256": hashlib.sha256(report_path.read_bytes()).hexdigest(), "creates": creates, "updates": [], "backup": str(backup), "databaseOrContainerChanged": False, "desiredManifest": report["plannedChanges"]["desiredManifest"], "beforeManifest": {}, "baselineExisted": False, "baselineBeforeSha256": None}; (transaction / "transaction.json").write_text(json.dumps(record))
+            result = relational_apply.recover_transaction(root, transaction_id); self.assertEqual("RECOVERED", result["state"]); self.assertFalse(destination.exists()); self.assertEqual("RECOVERED", json.loads((transaction / "transaction.json").read_text())["state"])
+
+    def test_new_apply_is_blocked_while_prepared_transaction_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); _, _, arguments = self.fixture(root); record = root / ".starter-harness/transactions/pending/transaction.json"; record.parent.mkdir(parents=True); record.write_text('{"state":"PREPARED"}')
+            code, output = self.run_apply(arguments); self.assertEqual(1, code); self.assertIn("requires recovery", output); self.assertFalse((root / "compose.yaml").exists())
 
 
 if __name__ == "__main__": unittest.main(verbosity=2)

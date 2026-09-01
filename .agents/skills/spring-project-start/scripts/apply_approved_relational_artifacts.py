@@ -32,14 +32,20 @@ def safe_relative(value: Any) -> str:
     return value
 
 
-def validate_report(report: dict, target: Path) -> dict:
-    required = {"relationalArtifactDryRunVersion", "physicalContract", "physicalModelSha256", "artifactPlan", "target", "generatedArtifacts", "plannedChanges", "recoveryAssessment", "targetSourceChanged", "databaseOrContainerChanged", "readyForApproval", "executionReady"}
+def validate_report(report: dict, target: Path, require_approval: bool = True) -> dict:
+    required = {"relationalArtifactDryRunVersion", "physicalContract", "physicalModelSha256", "artifactPlan", "baseline", "target", "generatedArtifacts", "plannedChanges", "recoveryAssessment", "targetSourceChanged", "databaseOrContainerChanged", "readyForApproval", "executionReady"}
     if not isinstance(report, dict) or set(report) != required or report["relationalArtifactDryRunVersion"] != 1: raise ValueError("relational dry-run report is invalid")
     if Path(str(report["target"])).resolve() != target.resolve(): raise ValueError("dry-run target does not match apply target")
     if report["targetSourceChanged"] is not False or report["databaseOrContainerChanged"] is not False: raise ValueError("dry run must prove no source, database, or container changes")
-    if report["readyForApproval"] is not True or report["executionReady"] is not False: raise ValueError("dry-run report is not approval-ready")
+    baseline_ref = report["baseline"]
+    if baseline_ref is not None:
+        if not isinstance(baseline_ref, dict) or set(baseline_ref) != {"path", "sha256"} or baseline_ref["path"] != BASELINE_NAME: raise ValueError("dry-run baseline reference is invalid")
+        validate_sha(baseline_ref["sha256"], "dry-run baseline hash")
+    if report["executionReady"] is not False: raise ValueError("dry-run report must not be execution-ready")
     changes = report["plannedChanges"]
-    if not isinstance(changes, dict) or changes.get("state") != "COMPUTED" or changes.get("conflicts") != []: raise ValueError("dry-run changes must be conflict-free and COMPUTED")
+    if not isinstance(changes, dict) or changes.get("state") not in {"COMPUTED", "CONFLICT"} or not isinstance(changes.get("conflicts"), list): raise ValueError("dry-run change state is invalid")
+    if require_approval and (changes["state"] != "COMPUTED" or changes["conflicts"] != [] or report["readyForApproval"] is not True): raise ValueError("dry-run changes must be conflict-free and approval-ready")
+    if not require_approval and report["readyForApproval"] is not (changes["state"] == "COMPUTED"): raise ValueError("dry-run readiness does not match its change state")
     manifest = changes.get("desiredManifest")
     if not isinstance(manifest, dict) or manifest.get("manifestVersion") != 1 or not isinstance(manifest.get("files"), dict) or not isinstance(manifest.get("modes"), dict) or set(manifest["files"]) != set(manifest["modes"]): raise ValueError("dry-run desired manifest is invalid")
     previews = report["generatedArtifacts"]
@@ -77,7 +83,7 @@ def validate_report(report: dict, target: Path) -> dict:
         path = safe_relative(raw)
         if path in categorized: raise ValueError(f"artifact categorized more than once: {path}")
         categorized.add(path)
-    if categorized != set(manifest["files"]): raise ValueError("change categories must exactly cover the desired manifest")
+    if changes["state"] == "COMPUTED" and categorized != set(manifest["files"]): raise ValueError("change categories must exactly cover the desired manifest")
     recovery = report["recoveryAssessment"]
     if not isinstance(recovery, dict) or recovery.get("renderedDdlClass") != "TRANSACTIONAL_CREATE_ONLY" or recovery.get("isolatedDatabaseVerified") is not False: raise ValueError("recovery assessment is unsupported or overclaims execution evidence")
     return changes
@@ -105,7 +111,7 @@ def render_current(args: argparse.Namespace, root: Path) -> tuple[dict[str, byte
     approved, blockers, physical, _ = validate_physical_contract(metadata, args.physical_model, args.logical_contract, route, args.route, root, feature, profile)
     if not approved or blockers: raise ValueError("physical contract is no longer approved and current: " + "; ".join(blockers))
     plan = load_object(args.artifact_plan); artifact_plan(plan, physical, args.physical_contract, args.physical_model, args.profile, profile, root)
-    artifacts = {physical["migrationPlan"]["plannedSourcePath"]: sql(physical).encode()}
+    artifacts = {physical["migrationPlan"]["plannedSourcePath"]: sql(physical, plan).encode()}
     if physical["provisioningPlan"]["compose"]: artifacts[physical["provisioningPlan"]["compose"]["plannedPath"]] = compose(physical, plan).encode()
     if plan["testcontainers"]: artifacts[plan["testcontainers"]["plannedPath"]] = testcontainers_java(physical, plan).encode()
     return artifacts, physical
@@ -121,6 +127,73 @@ def validate_existing_baseline(path: Path) -> None:
         if not isinstance(modes[name], int) or isinstance(modes[name], bool) or not 0 <= modes[name] <= 0o777: raise ValueError(f"existing baseline mode is invalid: {name}")
 
 
+def prepared_transactions(managed_root: Path) -> list[str]:
+    result = []
+    transactions = managed_root / "transactions"
+    if not transactions.exists(): return result
+    if transactions.is_symlink() or not transactions.is_dir(): raise ValueError("transaction metadata path is unsafe")
+    for path in sorted(transactions.glob("*/transaction.json")):
+        if path.is_symlink(): raise ValueError("transaction record must not be a symbolic link")
+        if load_object(path).get("state") == "PREPARED": result.append(path.parent.name)
+    return result
+
+
+def recover_transaction(target: Path, transaction_id: str) -> dict:
+    if not transaction_id or any(character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-" for character in transaction_id): raise ValueError("transaction ID is invalid")
+    root = target.resolve(strict=True); managed = root / MANAGED_DIR; transaction = managed / "transactions" / transaction_id; record_path = transaction / "transaction.json"
+    if target.is_symlink() or managed.is_symlink() or transaction.is_symlink() or record_path.is_symlink(): raise ValueError("recovery paths must not be symbolic links")
+    record = load_object(record_path)
+    required = {"relationalArtifactTransactionVersion", "transactionId", "state", "target", "dryRunReportSha256", "creates", "updates", "backup", "databaseOrContainerChanged", "desiredManifest", "beforeManifest", "baselineExisted", "baselineBeforeSha256"}
+    if set(record) != required or record["relationalArtifactTransactionVersion"] != 1 or record["transactionId"] != transaction_id or record["state"] != "PREPARED" or Path(record["target"]).resolve() != root: raise ValueError("transaction is not a recoverable PREPARED relational apply")
+    backup = managed / "backups" / transaction_id
+    if Path(record["backup"]).resolve() != backup.resolve() or backup.is_symlink() or not backup.is_dir(): raise ValueError("transaction backup identity is invalid")
+    manifest = record["desiredManifest"]; files, modes = manifest.get("files"), manifest.get("modes")
+    if manifest.get("manifestVersion") != 1 or not isinstance(files, dict) or not isinstance(modes, dict) or set(files) != set(modes): raise ValueError("transaction desired manifest is invalid")
+    creates, updates = record["creates"], record["updates"]
+    if not isinstance(creates, list) or not isinstance(updates, list) or set(creates) | set(updates) != set(files) or set(creates) & set(updates): raise ValueError("transaction change sets are invalid")
+    before_manifest = record["beforeManifest"]
+    if not isinstance(before_manifest, dict) or set(before_manifest) != set(updates): raise ValueError("transaction before manifest is invalid")
+    for relative in updates:
+        safe_relative(relative); saved = backup / "files" / relative; destination = root / relative
+        if saved.is_symlink() or not saved.is_file(): raise ValueError(f"UPDATE backup is missing: {relative}")
+        if destination.is_symlink() or not destination.is_file(): raise ValueError(f"UPDATE target cannot be safely recovered: {relative}")
+        expected_before = before_manifest[relative]
+        if not isinstance(expected_before, dict) or set(expected_before) != {"sha256", "mode"}: raise ValueError(f"transaction before evidence is invalid: {relative}")
+        if digest(saved) != expected_before["sha256"] or saved.stat().st_mode & 0o777 != expected_before["mode"]: raise ValueError(f"UPDATE backup evidence changed: {relative}")
+        current, current_mode = digest(destination), destination.stat().st_mode & 0o777
+        if current == files[relative] and current_mode == modes[relative]: shutil.copy2(saved, destination)
+        elif current != expected_before["sha256"] or current_mode != expected_before["mode"]: raise ValueError(f"UPDATE target diverged during interrupted apply: {relative}")
+    for relative in creates:
+        safe_relative(relative); destination = root / relative
+        if destination.is_symlink(): raise ValueError(f"CREATE target cannot be safely recovered: {relative}")
+        if destination.exists():
+            if not destination.is_file() or digest(destination) != files[relative] or destination.stat().st_mode & 0o777 != modes[relative]: raise ValueError(f"CREATE target diverged during interrupted apply: {relative}")
+            destination.unlink()
+    baseline_path = root / BASELINE_NAME
+    if record["baselineExisted"] is True:
+        saved = backup / BASELINE_NAME
+        if saved.is_symlink() or not saved.is_file(): raise ValueError("prior relational baseline backup is missing")
+        if digest(saved) != record["baselineBeforeSha256"]: raise ValueError("prior relational baseline backup evidence changed")
+        if not baseline_path.exists() or baseline_path.is_symlink() or not baseline_path.is_file(): raise ValueError("relational baseline cannot be safely recovered")
+        if digest(baseline_path) != record["baselineBeforeSha256"]:
+            if load_object(baseline_path).get("appliedFromDryRunSha256") != record["dryRunReportSha256"]: raise ValueError("relational baseline diverged during interrupted apply")
+            shutil.copy2(saved, baseline_path)
+    elif record["baselineExisted"] is False:
+        if baseline_path.exists():
+            current = load_object(baseline_path)
+            if current.get("appliedFromDryRunSha256") != record["dryRunReportSha256"]: raise ValueError("relational baseline diverged during interrupted apply")
+            baseline_path.unlink()
+    else: raise ValueError("transaction baselineExisted flag is invalid")
+    for relative in sorted(creates, key=lambda item: len(PurePosixPath(item).parts), reverse=True):
+        parent = (root / relative).parent
+        while parent != root:
+            try: parent.rmdir()
+            except OSError: break
+            parent = parent.parent
+    record.update({"state": "RECOVERED", "recoveredAt": dt.datetime.now(dt.timezone.utc).isoformat()}); atomic_json(record, record_path)
+    return {"transactionId": transaction_id, "state": "RECOVERED", "databaseOrContainerChanged": False}
+
+
 def apply(args: argparse.Namespace) -> dict:
     target = args.target
     if target.is_symlink() or not target.is_dir(): raise ValueError("target must be an existing non-symlink directory")
@@ -132,6 +205,8 @@ def apply(args: argparse.Namespace) -> dict:
         if root not in (resolved, *resolved.parents): raise ValueError(f"{label} escapes target")
     managed_root, baseline_path = root / MANAGED_DIR, root / BASELINE_NAME
     if managed_root.is_symlink() or baseline_path.is_symlink(): raise ValueError("managed paths must not be symbolic links")
+    pending = prepared_transactions(managed_root)
+    if pending: raise ValueError("unfinished PREPARED relational transaction requires recovery: " + ", ".join(pending))
     report = load_object(args.report); report_hash = digest(args.report); changes = validate_report(report, root)
     validate_approval(load_object(args.approval), report_hash, root)
     contract_ref = report["physicalContract"]
@@ -139,6 +214,13 @@ def apply(args: argparse.Namespace) -> dict:
     if report["physicalModelSha256"] != digest(args.physical_model): raise ValueError("physical model changed after dry run")
     plan_ref = report["artifactPlan"]
     if not isinstance(plan_ref, dict) or set(plan_ref) != {"path", "sha256"} or Path(str(plan_ref["path"])).resolve() != args.artifact_plan.resolve() or plan_ref["sha256"] != digest(args.artifact_plan): raise ValueError("report artifact plan reference is stale or mismatched")
+    baseline_ref = report["baseline"]
+    if baseline_ref is None:
+        if baseline_path.exists(): raise ValueError("relational baseline appeared after dry run")
+    else:
+        if not isinstance(baseline_ref, dict) or set(baseline_ref) != {"path", "sha256"} or baseline_ref["path"] != BASELINE_NAME: raise ValueError("dry-run baseline reference is invalid")
+        if not baseline_path.is_file() or digest(baseline_path) != baseline_ref["sha256"]: raise ValueError("relational baseline changed after dry run")
+        validate_existing_baseline(baseline_path)
     artifacts, physical = render_current(args, root); manifest = changes["desiredManifest"]
     if report["recoveryAssessment"].get("required") != physical["migrationPlan"]["requiredRecovery"]: raise ValueError("recovery requirement changed after dry run")
     if {path: digest_bytes(content) for path, content in artifacts.items()} != manifest["files"]: raise ValueError("re-rendered artifacts do not match the approved manifest")
@@ -162,12 +244,11 @@ def apply(args: argparse.Namespace) -> dict:
     shutil.copy2(args.report, backup / "relational-dry-run-report.json"); shutil.copy2(args.approval, backup / "relational-approval.json"); shutil.copy2(args.artifact_plan, backup / "relational-artifact-plan.json")
     baseline_existed = baseline_path.exists()
     if baseline_existed:
-        if not baseline_path.is_file(): raise ValueError("relational baseline is not a regular file")
-        validate_existing_baseline(baseline_path)
         shutil.copy2(baseline_path, backup / BASELINE_NAME)
     for relative in updates:
         destination = backup / "files" / relative; destination.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(root / relative, destination)
-    record = {"relationalArtifactTransactionVersion": 1, "transactionId": transaction_id, "state": "PREPARED", "target": str(root), "dryRunReportSha256": report_hash, "creates": sorted(creates), "updates": sorted(updates), "backup": str(backup), "databaseOrContainerChanged": False}
+    before_manifest = {path: {"sha256": item["beforeSha256"], "mode": item["beforeMode"]} for path, item in updates.items()}
+    record = {"relationalArtifactTransactionVersion": 1, "transactionId": transaction_id, "state": "PREPARED", "target": str(root), "dryRunReportSha256": report_hash, "creates": sorted(creates), "updates": sorted(updates), "backup": str(backup), "databaseOrContainerChanged": False, "desiredManifest": manifest, "beforeManifest": before_manifest, "baselineExisted": baseline_existed, "baselineBeforeSha256": digest(baseline_path) if baseline_existed else None}
     atomic_json(record, transaction / "transaction.json")
     written: list[str] = []; created_directories: list[Path] = []
     try:

@@ -1,10 +1,11 @@
 {
-  "artifactPlanVersion": 1,
+  "artifactPlanVersion": 2,
   "planId": "unknown",
   "physicalContractSha256": "UNKNOWN",
   "physicalModelSha256": "UNKNOWN",
   "profileSha256": "UNKNOWN",
   "databaseName": "UNKNOWN",
-  "credentialBindings": {"username": "UNKNOWN", "password": "UNKNOWN"},
+  "schemaManagement": "UNKNOWN",
+  "composeCredentialBindings": {"username": "UNKNOWN", "password": "UNKNOWN"},
   "testcontainers": null
 }

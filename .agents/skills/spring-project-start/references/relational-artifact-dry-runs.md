@@ -6,6 +6,13 @@ inferred: database name, credential-secret roles, and the Testcontainers Java
 path/class. It pins the physical contract, physical model, and technology
 profile by SHA-256.
 
+Artifact-plan v2 separates Compose credential bindings from Testcontainers.
+Testcontainers uses container-local ephemeral defaults and never consumes the
+application's credential environment variables. `schemaManagement` explicitly
+states whether the schema already exists or this CREATE migration may emit
+`CREATE SCHEMA IF NOT EXISTS`. Version 1 remains readable only for an existing
+`public` schema.
+
 The renderer creates Flyway SQL, Compose YAML, and optional Testcontainers Java
 only in temporary storage. It compares those bytes with the target. Missing
 files are `CREATE`; existing bytes are `UNCHANGED` only when exact; every other
@@ -27,3 +34,11 @@ report, approval, artifact plan, and prior relational baseline are backed up.
 Partial failure rolls back files and baseline. Success writes the separate
 `.starter-harness-relational.json` ownership baseline last. Applying files never
 authorizes or runs Flyway, Docker, Testcontainers, tests, ports, or database I/O.
+Only that canonical baseline may authorize `UPDATE`; arbitrary manifests are
+rejected and its exact hash is pinned in the dry-run report.
+
+Every apply checks for unfinished `PREPARED` transactions first. A process or
+machine interruption therefore blocks new writes until
+`recover_relational_artifact_transaction.py` verifies the desired and prior
+hashes, restores backed-up updates and baseline, removes exact partial creates,
+and records `RECOVERED`. Diverged files are never overwritten by recovery.

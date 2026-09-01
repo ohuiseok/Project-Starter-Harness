@@ -145,6 +145,22 @@ class RelationalPhysicalContractTests(unittest.TestCase):
             fixture[6].write_text(json.dumps(physical))
             self.assertTrue(any("unsafe or unresolved check expression" in item for item in self.validate(root, fixture)[1]))
 
+    def test_duplicate_column_sql_names_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); fixture = self.fixture(root); physical = json.loads(fixture[6].read_text()); physical["tables"][0]["columns"][1]["name"] = "leave_request_id"; fixture[6].write_text(json.dumps(physical))
+            with self.assertRaisesRegex(ValueError, "duplicate column name"): self.validate(root, fixture)
+
+    def test_foreign_key_target_must_be_unique(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); fixture = self.fixture(root); physical = json.loads(fixture[6].read_text()); table = physical["tables"][0]
+            table["foreignKeys"] = [{"constraintId": "leave-date-fk", "name": "fk_leave_date", "columnIds": ["leave-start-date-column"], "referencedTableId": "leave-requests-table", "referencedColumnIds": ["leave-end-date-column"], "relationshipRef": "unknown-relationship", "onDelete": "NO_ACTION", "onUpdate": "NO_ACTION"}]
+            fixture[6].write_text(json.dumps(physical)); self.assertTrue(any("target is not a primary or unique key" in item for item in self.validate(root, fixture)[1]))
+
+    def test_index_name_cannot_collide_with_table_relation_name(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); fixture = self.fixture(root); physical = json.loads(fixture[6].read_text()); physical["tables"][0]["indexes"] = [{"indexId": "leave-date-index", "name": "leave_requests", "columnIds": ["leave-start-date-column"], "unique": False, "queryPatternRefs": ["leave-by-date"]}]; physical["queryPatterns"] = [{"queryPatternId": "leave-by-date", "description": "Find by start date.", "tableId": "leave-requests-table", "columnIds": ["leave-start-date-column"], "requirementRefs": ["BR-F001-01"]}]; fixture[6].write_text(json.dumps(physical))
+            self.assertTrue(any("schema relation name is duplicated" in item for item in self.validate(root, fixture)[1]))
+
     def test_user_view_separates_design_from_execution(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             metadata, physical, logical, *_ = self.fixture(Path(directory))

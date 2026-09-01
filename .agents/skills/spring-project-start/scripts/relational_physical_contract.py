@@ -127,6 +127,8 @@ def validate_physical_model(physical: dict, logical: dict, metadata: dict, targe
     if not tables: blockers.append("physical model has no tables")
     table_ids, table_names, column_ids, entity_coverage, field_coverage = set(), set(), set(), set(), set()
     table_columns: dict[str, set[str]] = {}
+    table_column_defs: dict[str, dict[str, dict]] = {}
+    relation_names: list[tuple[str, str]] = []
     constraint_ids: set[str] = set()
     foreign_key_ids: set[str] = set()
     check_invariants: dict[str, set[str]] = {}
@@ -147,21 +149,22 @@ def validate_physical_model(physical: dict, logical: dict, metadata: dict, targe
         if not isinstance(table, dict) or set(table) != table_keys: raise ValueError(f"{location} has invalid fields")
         table_id = stable(table["tableId"], f"{location}.tableId"); name = sql_name(table["name"], f"{location}.name")
         if table_id in table_ids or name in table_names: raise ValueError("duplicate physical table ID or name")
-        table_ids.add(table_id); table_names.add(name); text(table["description"], f"{location}.description", False)
+        table_ids.add(table_id); table_names.add(name); relation_names.append((name, f"table:{table_id}")); text(table["description"], f"{location}.description", False)
         if table["changeIntent"] != "CREATE" or table["previousNames"] != []: blockers.append(f"CREATE table has invalid rename intent: {table_id}")
         entity_ref = table["entityRef"]
         if entity_ref is not None:
             if entity_ref not in logical_entities: blockers.append(f"table references unknown logical entity: {table_id}")
             elif entity_ref in entity_coverage: blockers.append(f"logical entity maps to more than one primary table: {entity_ref}")
             else: entity_coverage.add(entity_ref)
-        columns = array(table["columns"], f"{location}.columns"); local_columns = set(); table_columns[table_id] = local_columns
+        columns = array(table["columns"], f"{location}.columns"); local_columns = set(); local_names = set(); table_columns[table_id] = local_columns; table_column_defs[table_id] = {}
         if not columns: blockers.append(f"table has no columns: {table_id}")
         for column_index, column in enumerate(columns):
             column_location = f"{location}.columns[{column_index}]"; column_keys = {"columnId", "name", "description", "fieldRef", "sqlType", "nullable", "unique", "defaultExpression", "changeIntent", "previousNames"}
             if not isinstance(column, dict) or set(column) != column_keys: raise ValueError(f"{column_location} has invalid fields")
-            column_id = stable(column["columnId"], f"{column_location}.columnId"); sql_name(column["name"], f"{column_location}.name")
+            column_id = stable(column["columnId"], f"{column_location}.columnId"); column_name = sql_name(column["name"], f"{column_location}.name")
             if column_id in column_ids: raise ValueError(f"duplicate columnId: {column_id}")
-            column_ids.add(column_id); local_columns.add(column_id); text(column["description"], f"{column_location}.description", False)
+            if column_name in local_names: raise ValueError(f"duplicate column name in table {table_id}: {column_name}")
+            column_ids.add(column_id); local_columns.add(column_id); local_names.add(column_name); table_column_defs[table_id][column_id] = column; text(column["description"], f"{column_location}.description", False)
             if not isinstance(column["nullable"], bool) or not isinstance(column["unique"], bool): raise ValueError(f"{column_location} flags must be boolean")
             if not isinstance(column["sqlType"], str) or not SQL_TYPE.fullmatch(column["sqlType"]): blockers.append(f"unsupported PostgreSQL type: {column_id}")
             if column["defaultExpression"] is not None and column["defaultExpression"] not in {"CURRENT_TIMESTAMP", "true", "false", "0"}: blockers.append(f"unsupported default expression: {column_id}")
@@ -184,7 +187,7 @@ def validate_physical_model(physical: dict, logical: dict, metadata: dict, targe
         pk_columns = array(primary["columnIds"], f"{location}.primaryKey.columnIds")
         if not pk_columns or set(pk_columns) - local_columns: blockers.append(f"primary key columns are invalid: {table_id}")
         if pk_id in constraint_ids: raise ValueError(f"duplicate constraintId: {pk_id}")
-        constraint_ids.add(pk_id)
+        constraint_ids.add(pk_id); relation_names.append((primary["name"], f"primary-key:{pk_id}"))
         if entity_ref in logical_entities:
             expected_identifiers = {field["fieldId"] for field in logical_entities[entity_ref]["fields"] if field["identifier"]}
             actual_identifiers = {column["fieldRef"] for column in columns if column["columnId"] in pk_columns}
@@ -222,11 +225,16 @@ def validate_physical_model(physical: dict, logical: dict, metadata: dict, targe
             index_id = stable(item["indexId"], f"{index_location}.indexId"); sql_name(item["name"], f"{index_location}.name")
             if index_id in index_ids: raise ValueError(f"duplicate indexId: {index_id}")
             index_ids.add(index_id)
+            relation_names.append((item["name"], f"index:{index_id}"))
             if set(item["columnIds"]) - local_columns or not item["columnIds"]: blockers.append(f"index columns are invalid: {index_id}")
             if not isinstance(item["unique"], bool): raise ValueError(f"{index_location}.unique must be boolean")
             if not item["queryPatternRefs"] or set(item["queryPatternRefs"]) - query_ids: blockers.append(f"index has no valid query justification: {index_id}")
     if entity_coverage != set(logical_entities): blockers.append("physical tables do not cover every logical entity exactly once")
     if field_coverage != set(logical_fields): blockers.append("physical columns do not cover every logical field exactly once")
+    seen_relation_names = set()
+    for name, owner in relation_names:
+        if name in seen_relation_names: blockers.append(f"PostgreSQL schema relation name is duplicated: {name} ({owner})")
+        seen_relation_names.add(name)
     for query in physical["queryPatterns"]:
         if query["tableId"] not in table_ids: blockers.append(f"query pattern references an unknown table: {query['queryPatternId']}")
         elif set(query["columnIds"]) - table_columns[query["tableId"]]: blockers.append(f"query pattern references unknown columns: {query['queryPatternId']}")
@@ -235,7 +243,20 @@ def validate_physical_model(physical: dict, logical: dict, metadata: dict, targe
             referenced = fk["referencedTableId"]
             if referenced not in table_ids: blockers.append(f"foreign key references an unknown table: {fk['constraintId']}")
             elif set(fk["referencedColumnIds"]) - table_columns[referenced]: blockers.append(f"foreign key references unknown target columns: {fk['constraintId']}")
+            else:
+                target_table = next(item for item in tables if item["tableId"] == referenced)
+                candidate_keys = [tuple(target_table["primaryKey"]["columnIds"])]
+                candidate_keys.extend((column["columnId"],) for column in target_table["columns"] if column["unique"])
+                candidate_keys.extend(tuple(index["columnIds"]) for index in target_table["indexes"] if index["unique"])
+                if tuple(fk["referencedColumnIds"]) not in candidate_keys: blockers.append(f"foreign key target is not a primary or unique key: {fk['constraintId']}")
+                if len(fk["columnIds"]) == len(fk["referencedColumnIds"]):
+                    for source_id, target_id in zip(fk["columnIds"], fk["referencedColumnIds"]):
+                        source = table_column_defs[table["tableId"]].get(source_id); target_column = table_column_defs[referenced].get(target_id)
+                        if source and target_column and source["sqlType"] != target_column["sqlType"]: blockers.append(f"foreign key column types do not match: {fk['constraintId']}")
+                if fk["onDelete"] == "SET_NULL" or fk["onUpdate"] == "SET_NULL":
+                    if any(not table_column_defs[table["tableId"]].get(item, {}).get("nullable", False) for item in fk["columnIds"]): blockers.append(f"SET NULL foreign key uses non-nullable columns: {fk['constraintId']}")
             if len(fk["columnIds"]) != len(fk["referencedColumnIds"]): blockers.append(f"foreign key column counts do not match: {fk['constraintId']}")
+            if len(set(fk["columnIds"])) != len(fk["columnIds"]) or len(set(fk["referencedColumnIds"])) != len(fk["referencedColumnIds"]): blockers.append(f"foreign key contains duplicate columns: {fk['constraintId']}")
     logical_relationships = {item["relationshipId"] for item in logical["relationships"]}
     implementations = array(physical["relationshipImplementations"], "relationshipImplementations")
     implemented_relationships = set()

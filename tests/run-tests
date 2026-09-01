@@ -254,6 +254,7 @@ for required in \
   "$SKILL_ROOT/scripts/render_relational_artifact_dry_run.py" \
   "$SKILL_ROOT/scripts/render_relational_artifact_dry_run_markdown.py" \
   "$SKILL_ROOT/scripts/apply_approved_relational_artifacts.py" \
+  "$SKILL_ROOT/scripts/recover_relational_artifact_transaction.py" \
   "$HARNESS_ROOT/templates/project-profile.md" \
   "$HARNESS_ROOT/templates/project-profile.json" \
   "$HARNESS_ROOT/templates/generation-plan.json" \
@@ -464,17 +465,17 @@ expect_out "relational data contracts: all focused scenarios ran" "Ran 14 tests"
 OUT="$(python3 "$HARNESS_ROOT/tests/test_relational_physical_contract.py" 2>&1)"
 CODE=$?
 expect_code "relational physical contracts: focused regression suite passes" 0
-expect_out "relational physical contracts: all focused scenarios ran" "Ran 15 tests"
+expect_out "relational physical contracts: all focused scenarios ran" "Ran 18 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_relational_artifact_dry_run.py" 2>&1)"
 CODE=$?
 expect_code "relational artifact dry run: focused regression suite passes" 0
-expect_out "relational artifact dry run: all focused scenarios ran" "Ran 8 tests"
+expect_out "relational artifact dry run: all focused scenarios ran" "Ran 12 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_relational_artifact_apply.py" 2>&1)"
 CODE=$?
 expect_code "relational artifact apply: focused regression suite passes" 0
-expect_out "relational artifact apply: all focused scenarios ran" "Ran 6 tests"
+expect_out "relational artifact apply: all focused scenarios ran" "Ran 8 tests"
 
 OUT="$(python3 "$SKILL_ROOT/scripts/validate_feature_specs.py" \
   --project-brief "$HARNESS_ROOT/templates/project-brief.json" 2>&1)"
