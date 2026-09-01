@@ -1,0 +1,12 @@
+{
+  "physicalContractVersion": 1,
+  "contractId": "persistence-physical",
+  "logicalContract": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "logicalModel": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []},
+  "artifact": {"format": "PHYSICAL_DATA_MODEL", "path": "UNKNOWN"},
+  "physicalModelSha256": "UNKNOWN",
+  "adapter": {"id": "UNKNOWN", "status": "UNKNOWN"},
+  "traceability": [],
+  "approval": {"status": "DRAFT", "approvedBy": null, "approvedAt": null, "approvedContentSha256": null}
+}

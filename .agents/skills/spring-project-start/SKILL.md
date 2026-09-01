@@ -146,6 +146,18 @@ route inputs, metadata, and view atomically without changing the model. This
 milestone does not support persistence `EXTEND` or `REUSE`, or non-relational
 physical models; keep those explicit instead of coercing them into an ERD.
 
+After an approved logical relational contract, read
+`references/relational-physical-contracts.md` for the physical-design milestone.
+Use `references/relational-adapters.json` as the capability source and never
+coerce a non-ready combination into PostgreSQL. The first ready adapter is
+PostgreSQL + Flyway. Create an agent-prepared physical design with
+`create_relational_physical_contract.py`, validate and render it, and after the
+user confirms the view record approval with
+`record_relational_physical_contract_approval.py`. This approval plans the future
+versioned migration, Docker Compose, and Testcontainers artifacts only. It must
+not render or apply migrations, create source/config files, start containers,
+touch volumes, access a database, or authorize any of those actions.
+
 ## Technology Selection
 
 For a new project, a missing profile, or a requested stack change, read

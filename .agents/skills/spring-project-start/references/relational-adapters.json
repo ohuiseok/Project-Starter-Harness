@@ -1,0 +1,13 @@
+{
+  "registryVersion": 1,
+  "adapters": [
+    {"id": "postgresql-flyway", "engine": "POSTGRESQL", "migrationStrategy": "FLYWAY_SQL", "status": "READY", "reason": "Reference adapter with deterministic physical validation."},
+    {"id": "postgresql-liquibase", "engine": "POSTGRESQL", "migrationStrategy": "LIQUIBASE", "status": "PLANNED", "reason": "Structured changelog rendering is not implemented yet."},
+    {"id": "mysql-flyway", "engine": "MYSQL", "migrationStrategy": "FLYWAY_SQL", "status": "PLANNED", "reason": "MySQL type and DDL safety rules are not implemented yet."},
+    {"id": "mariadb-flyway", "engine": "MARIADB", "migrationStrategy": "FLYWAY_SQL", "status": "PLANNED", "reason": "MariaDB-specific type and DDL rules are not implemented yet."},
+    {"id": "h2-flyway", "engine": "H2", "migrationStrategy": "FLYWAY_SQL", "status": "REVIEW", "reason": "H2 must not be treated as production-dialect proof."},
+    {"id": "oracle-flyway", "engine": "ORACLE", "migrationStrategy": "FLYWAY_SQL", "status": "NOT_IMPLEMENTED", "reason": "Oracle physical validation is unavailable."},
+    {"id": "sql-server-flyway", "engine": "SQL_SERVER", "migrationStrategy": "FLYWAY_SQL", "status": "NOT_IMPLEMENTED", "reason": "SQL Server physical validation is unavailable."},
+    {"id": "custom", "engine": "CUSTOM", "migrationStrategy": "CUSTOM", "status": "REVIEW", "reason": "Custom adapters require explicit implementation evidence."}
+  ]
+}

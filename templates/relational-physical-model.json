@@ -1,0 +1,17 @@
+{
+  "physicalModelVersion": 1,
+  "physicalModelId": "unknown",
+  "adapterId": "postgresql-flyway",
+  "database": {"engine": "POSTGRESQL", "version": "UNKNOWN", "schemaName": "public"},
+  "migrationPlan": {"strategy": "FLYWAY_SQL", "plannedSourcePath": "UNKNOWN", "sourceOfTruth": "VERSIONED_MIGRATION", "requiredRecovery": "TRANSACTIONAL_REQUIRED", "applyAuthorized": false},
+  "provisioningPlan": {
+    "strategy": "DEFERRED",
+    "compose": null,
+    "testcontainers": null
+  },
+  "riskAssessment": {"dataLoss": "NONE", "locking": "NONE", "downtime": "NONE", "reason": "New empty schema only."},
+  "tables": [],
+  "queryPatterns": [],
+  "relationshipImplementations": [],
+  "invariantImplementations": []
+}

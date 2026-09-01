@@ -447,6 +447,11 @@ CODE=$?
 expect_code "relational data contracts: focused regression suite passes" 0
 expect_out "relational data contracts: all focused scenarios ran" "Ran 14 tests"
 
+OUT="$(python3 "$HARNESS_ROOT/tests/test_relational_physical_contract.py" 2>&1)"
+CODE=$?
+expect_code "relational physical contracts: focused regression suite passes" 0
+expect_out "relational physical contracts: all focused scenarios ran" "Ran 14 tests"
+
 OUT="$(python3 "$SKILL_ROOT/scripts/validate_feature_specs.py" \
   --project-brief "$HARNESS_ROOT/templates/project-brief.json" 2>&1)"
 CODE=$?
