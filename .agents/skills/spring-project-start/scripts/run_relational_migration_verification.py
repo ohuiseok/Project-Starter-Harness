@@ -62,7 +62,7 @@ def validate_plan(plan: dict, plan_path: Path, target: Path) -> tuple[Path, dict
     images = plan["images"]
     if not isinstance(images, dict) or set(images) != {"postgres", "flyway"} or any(not isinstance(value, str) or not IMAGE.fullmatch(value) or value.endswith(":latest") for value in images.values()): raise ValueError("verification images must be pinned and non-latest")
     if not re.fullmatch(r"(?:docker\.io/library/)?postgres(?::[^:]+|@sha256:[a-f0-9]{64})", images["postgres"]): raise ValueError("verification PostgreSQL image must use the official postgres repository")
-    if not re.fullmatch(r"(?:docker\.io/)?redgate/flyway(?::[^:]+|@sha256:[a-f0-9]{64})", images["flyway"]): raise ValueError("verification Flyway image must use the official redgate/flyway repository")
+    if not re.fullmatch(r"(?:docker\.io/)?(?:redgate|flyway)/flyway(?::[^:]+|@sha256:[a-f0-9]{64})", images["flyway"]): raise ValueError("verification Flyway image must use an official Redgate-published Flyway repository")
     limits = plan["limits"]
     if not isinstance(limits, dict) or set(limits) != {"startupTimeoutSeconds", "commandTimeoutSeconds", "tmpfsBytes"}: raise ValueError("verification limits are invalid")
     if not isinstance(limits["startupTimeoutSeconds"], int) or not 10 <= limits["startupTimeoutSeconds"] <= 300 or not isinstance(limits["commandTimeoutSeconds"], int) or not 10 <= limits["commandTimeoutSeconds"] <= 600 or not isinstance(limits["tmpfsBytes"], int) or not 64 * 1024 * 1024 <= limits["tmpfsBytes"] <= 2 * 1024 * 1024 * 1024: raise ValueError("verification limits are outside safe bounds")
@@ -87,7 +87,27 @@ def run(command: list[str], timeout: int) -> subprocess.CompletedProcess:
     return subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
 
 
-def bounded(value: str, secret: str) -> str: return value.replace(secret, "[REDACTED]")[-MAX_OUTPUT:]
+def bounded(value: str, secret: str) -> str:
+    redacted = value.replace(secret, "[REDACTED]") if secret else value
+    return redacted if len(redacted) <= MAX_OUTPUT else f"[앞부분 {len(redacted) - MAX_OUTPUT}자 생략됨]\n" + redacted[-MAX_OUTPUT:]
+
+
+def progress(stage: str, message: str) -> None: print(f"VERIFICATION_PROGRESS: {stage} · {message}", flush=True)
+
+
+def prepare_image(reference: str, timeout: int, events: list[dict]) -> dict:
+    progress("IMAGE", f"{reference} 준비")
+    pulled = run(["docker", "pull", reference], timeout)
+    events.append({"step": f"image pull {reference}", "exitCode": pulled.returncode, "output": bounded(pulled.stdout + pulled.stderr, "")})
+    if pulled.returncode: raise ValueError(f"Docker image pull failed: {reference}")
+    inspected = run(["docker", "image", "inspect", reference], timeout)
+    if inspected.returncode: raise ValueError(f"pulled Docker image cannot be inspected: {reference}")
+    try: details = json.loads(inspected.stdout)[0]
+    except (json.JSONDecodeError, IndexError, KeyError, TypeError) as error: raise ValueError(f"Docker image evidence is invalid: {reference}") from error
+    image_id = details.get("Id"); digests = details.get("RepoDigests") or []
+    if not isinstance(image_id, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id) or not isinstance(digests, list) or not all(isinstance(item, str) for item in digests): raise ValueError(f"Docker image identity is invalid: {reference}")
+    if "@sha256:" in reference and not any(item.endswith(reference[reference.index("@sha256:"):]) for item in digests): raise ValueError(f"Docker image digest does not match the approved reference: {reference}")
+    return {"reference": reference, "imageId": image_id, "repoDigests": sorted(digests)}
 
 
 def atomic_json(document: dict, destination: Path) -> None:
@@ -120,8 +140,9 @@ def validate_storage(root: Path) -> None:
 def execute(plan: dict, migration: Path, journal: dict) -> dict:
     resources = journal["resources"]; network = resources["network"]; database_container = resources["databaseContainer"]; password = secrets.token_urlsafe(32); user = "harness_verify"; database = plan["database"]["name"]; timeout = plan["limits"]["commandTimeoutSeconds"]
     flyway_containers = resources["flywayContainers"]
-    events = []; cleanup = {"databaseContainerRemoved": False, "flywayContainersRemoved": False, "networkRemoved": False}; env_file_name = None; migration_stage = tempfile.TemporaryDirectory(prefix="harness-migration-")
+    events = []; images = {}; cleanup = {"databaseContainerRemoved": False, "flywayContainersRemoved": False, "networkRemoved": False}; env_file_name = None; migration_stage = tempfile.TemporaryDirectory(prefix="harness-migration-")
     try:
+        for name, reference in plan["images"].items(): images[name] = prepare_image(reference, timeout, events)
         staged_migration = Path(migration_stage.name) / migration.name; shutil.copy2(migration, staged_migration)
         with tempfile.NamedTemporaryFile("w", prefix="harness-flyway-", suffix=".env", delete=False) as env_file:
             env_file.write(f"POSTGRES_DB={database}\nPOSTGRES_USER={user}\nPOSTGRES_PASSWORD={password}\nFLYWAY_URL=jdbc:postgresql://{database_container}:5432/{database}\nFLYWAY_USER={user}\nFLYWAY_PASSWORD={password}\nFLYWAY_LOCATIONS=filesystem:/flyway/sql\nFLYWAY_SCHEMAS={plan['database']['schema']}\n")
@@ -130,13 +151,14 @@ def execute(plan: dict, migration: Path, journal: dict) -> dict:
         postgres_tag = plan["images"]["postgres"].rsplit(":", 1)[-1]; major_match = re.match(r"([0-9]+)", postgres_tag); data_path = "/var/lib/postgresql" if major_match and int(major_match.group(1)) >= 18 else "/var/lib/postgresql/data"
         commands = [
             ["docker", "network", "create", "--internal", "--label", RESOURCE_LABEL, network],
-            ["docker", "run", "--detach", "--rm", "--name", database_container, "--network", network, "--label", RESOURCE_LABEL, "--security-opt", "no-new-privileges", "--memory", "1g", "--cpus", "1", "--pids-limit", "512", "--env-file", env_file_name, "--mount", f"type=tmpfs,destination={data_path},tmpfs-size={plan['limits']['tmpfsBytes']}", plan["images"]["postgres"]],
+            ["docker", "run", "--detach", "--rm", "--name", database_container, "--network", network, "--label", RESOURCE_LABEL, "--security-opt", "no-new-privileges", "--memory", "1g", "--cpus", "1", "--pids-limit", "512", "--env-file", env_file_name, "--mount", f"type=tmpfs,destination={data_path},tmpfs-size={plan['limits']['tmpfsBytes']}", images["postgres"]["imageId"]],
         ]
         for command in commands:
             result = run(command, timeout)
             events.append({"step": command[1] + " " + command[2], "exitCode": result.returncode, "output": bounded(result.stdout + result.stderr, password)})
             if result.returncode: raise ValueError(f"Docker setup failed at {command[1]} {command[2]}")
         deadline = time.monotonic() + plan["limits"]["startupTimeoutSeconds"]
+        progress("DATABASE", "격리 PostgreSQL 준비 대기")
         while True:
             ready = run(["docker", "exec", database_container, "pg_isready", "-U", user, "-d", database], timeout)
             if ready.returncode == 0: break
@@ -144,7 +166,8 @@ def execute(plan: dict, migration: Path, journal: dict) -> dict:
             time.sleep(0.25)
         mount = f"type=bind,source={Path(migration_stage.name).resolve()},destination=/flyway/sql,readonly"
         for action in ("migrate", "validate"):
-            command = ["docker", "run", "--rm", "--name", flyway_containers[action], "--label", RESOURCE_LABEL, "--network", network, "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=67108864", "--security-opt", "no-new-privileges", "--memory", "1g", "--cpus", "1", "--pids-limit", "512", "--env-file", env_file_name, "--mount", mount, plan["images"]["flyway"], action]
+            progress("FLYWAY", action)
+            command = ["docker", "run", "--rm", "--name", flyway_containers[action], "--label", RESOURCE_LABEL, "--network", network, "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=67108864", "--security-opt", "no-new-privileges", "--memory", "1g", "--cpus", "1", "--pids-limit", "512", "--env-file", env_file_name, "--mount", mount, images["flyway"]["imageId"], action]
             result = run(command, timeout); events.append({"step": f"flyway {action}", "exitCode": result.returncode, "output": bounded(result.stdout + result.stderr, password)})
             if result.returncode: raise ValueError(f"Flyway {action} failed in isolated PostgreSQL")
         state = "PASSED"
@@ -168,7 +191,8 @@ def execute(plan: dict, migration: Path, journal: dict) -> dict:
             removed = run(["docker", "network", "rm", network], 30); cleanup["networkRemoved"] = removed.returncode == 0 or "not found" in removed.stderr.lower()
         except (OSError, subprocess.TimeoutExpired): cleanup["networkRemoved"] = False
     if not all(cleanup.values()): state = "CLEANUP_FAILED"; failure = "isolated Docker resources could not be fully removed"
-    result = {"state": state, "events": events, "cleanup": cleanup, "targetDatabaseAccessed": False, "targetSourceFilesChanged": False, "persistentVolumeCreated": False}
+    progress("CLEANUP", "임시 Docker 자원 정리 확인")
+    result = {"state": state, "events": events, "cleanup": cleanup, "images": images, "targetDatabaseAccessed": False, "targetSourceFilesChanged": False, "persistentVolumeCreated": False}
     if state != "PASSED": result["failure"] = failure
     return result
 
@@ -191,7 +215,7 @@ def main() -> int:
         execution = execute(plan, migration, journal)
         if execution["state"] == "CLEANUP_FAILED":
             journal["state"] = "CLEANUP_REQUIRED"; journal["cleanup"] = execution["cleanup"]; atomic_json(journal, journal_path)
-        report = {"migrationVerificationReportVersion": 1, "plan": {"path": str(args.plan.resolve()), "sha256": sha(args.plan)}, "approval": {"path": str(args.approval.resolve()), "sha256": sha(args.approval), "approvedBy": approval["approvedBy"], "approvedAt": approval["approvedAt"]}, "target": str(root), "executedAt": dt.datetime.now(dt.timezone.utc).isoformat(), "result": execution}
+        report = {"migrationVerificationReportVersion": 2, "plan": {"path": str(args.plan.resolve()), "sha256": sha(args.plan)}, "approval": {"path": str(args.approval.resolve()), "sha256": sha(args.approval), "approvedBy": approval["approvedBy"], "approvedAt": approval["approvedAt"]}, "target": str(root), "executedAt": dt.datetime.now(dt.timezone.utc).isoformat(), "runtime": {"dockerServerVersion": docker.stdout.strip()}, "result": execution}
         atomic_json(report, args.output)
         if execution["state"] != "CLEANUP_FAILED": journal_path.unlink()
     except (OSError, ValueError, subprocess.TimeoutExpired) as error: print(f"RELATIONAL_MIGRATION_VERIFICATION_VALID: no\nERROR: {error}", file=sys.stderr); return 1

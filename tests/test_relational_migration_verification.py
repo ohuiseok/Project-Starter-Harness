@@ -28,13 +28,15 @@ class RelationalMigrationVerificationTests(unittest.TestCase):
     def fixture(self, root: Path):
         applying = apply_tests.RelationalArtifactApplyTests(); _, _, apply_arguments = applying.fixture(root); self.assertEqual(0, applying.run_apply(apply_arguments)[0])
         migration = root / "src/main/resources/db/migration/V1__create_leave_requests.sql"; baseline = root / ".starter-harness-relational.json"
-        plan = {"migrationVerificationPlanVersion": 1, "planId": "leave-migration-check", "target": str(root.resolve()), "relationalBaseline": {"path": ".starter-harness-relational.json", "sha256": hashlib.sha256(baseline.read_bytes()).hexdigest()}, "migration": {"path": migration.relative_to(root).as_posix(), "sha256": hashlib.sha256(migration.read_bytes()).hexdigest()}, "database": {"name": "harness_verify", "schema": "public"}, "images": {"postgres": "postgres:17.6", "flyway": "redgate/flyway:13.4.0"}, "limits": {"startupTimeoutSeconds": 10, "commandTimeoutSeconds": 30, "tmpfsBytes": 67108864}, "isolation": {"publishPorts": False, "persistentVolumes": False, "targetDatabaseAccess": False, "cleanupRequired": True}}
+        plan = {"migrationVerificationPlanVersion": 1, "planId": "leave-migration-check", "target": str(root.resolve()), "relationalBaseline": {"path": ".starter-harness-relational.json", "sha256": hashlib.sha256(baseline.read_bytes()).hexdigest()}, "migration": {"path": migration.relative_to(root).as_posix(), "sha256": hashlib.sha256(migration.read_bytes()).hexdigest()}, "database": {"name": "harness_verify", "schema": "public"}, "images": {"postgres": "postgres:17.6", "flyway": "flyway/flyway:13.4.0"}, "limits": {"startupTimeoutSeconds": 10, "commandTimeoutSeconds": 30, "tmpfsBytes": 67108864}, "isolation": {"publishPorts": False, "persistentVolumes": False, "targetDatabaseAccess": False, "cleanupRequired": True}}
         plan_path = root / "verification-plan.json"; plan_path.write_text(json.dumps(plan)); approval = {"migrationVerificationApprovalVersion": 1, "approved": True, "planSha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(), "target": str(root.resolve()), "approvedBy": "test-user", "approvedAt": "2026-09-01T00:00:00Z"}; approval_path = root / "verification-approval.json"; approval_path.write_text(json.dumps(approval)); output = root / "verification-report.json"
         arguments = ["run_relational_migration_verification.py", "--plan", str(plan_path), "--approval", str(approval_path), "--target", str(root), "--output", str(output)]
         return plan_path, approval_path, output, arguments
 
     @staticmethod
     def completed(command, returncode=0, output="ok"):
+        if command[:3] == ["docker", "image", "inspect"]:
+            output = json.dumps([{"Id": "sha256:" + "a" * 64, "RepoDigests": [f"{command[-1].split(':')[0]}@sha256:" + "b" * 64]}])
         return subprocess.CompletedProcess(command, returncode, output, "" if returncode == 0 else output)
 
     def run_main(self, arguments, side_effect):
@@ -45,8 +47,9 @@ class RelationalMigrationVerificationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); _, _, output, arguments = self.fixture(root)
             code, text, runner = self.run_main(arguments, lambda command, **_: self.completed(command)); self.assertEqual(0, code, text); report = json.loads(output.read_text()); self.assertEqual("PASSED", report["result"]["state"]); self.assertTrue(all(report["result"]["cleanup"].values()))
-            commands = [item.args[0] for item in runner.call_args_list]; database_run = next(item for item in commands if item[:2] == ["docker", "run"] and "postgres:17.6" in item); self.assertNotIn("--publish", database_run); self.assertTrue(any("type=tmpfs" in item for item in database_run)); self.assertNotIn("--volume", database_run)
+            commands = [item.args[0] for item in runner.call_args_list]; database_run = next(item for item in commands if item[:3] == ["docker", "run", "--detach"]); self.assertNotIn("--publish", database_run); self.assertTrue(any("type=tmpfs" in item for item in database_run)); self.assertNotIn("--volume", database_run); self.assertEqual("sha256:" + "a" * 64, database_run[-1])
             network_create = next(item for item in commands if item[:3] == ["docker", "network", "create"]); self.assertIn("--internal", network_create)
+            self.assertEqual({"postgres", "flyway"}, set(report["result"]["images"])); self.assertEqual("sha256:" + "a" * 64, report["result"]["images"]["postgres"]["imageId"])
 
     def test_flyway_failure_is_reported_and_resources_are_cleaned(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -101,8 +104,22 @@ class RelationalMigrationVerificationTests(unittest.TestCase):
     def test_ephemeral_credential_is_redacted_from_report(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); _, _, output, arguments = self.fixture(root); secret = "ephemeral-verification-secret"
-            with mock.patch.object(verification.secrets, "token_urlsafe", return_value=secret): code, _, _ = self.run_main(arguments, lambda command, **_: self.completed(command, output=secret))
+            def result(command, **_):
+                if command[:2] == ["docker", "version"]: return self.completed(command, output="29.1.3")
+                if command[:2] == ["docker", "pull"]: return self.completed(command, output="pull ok")
+                return self.completed(command, output=secret)
+            with mock.patch.object(verification.secrets, "token_urlsafe", return_value=secret): code, _, _ = self.run_main(arguments, result)
             self.assertEqual(0, code); self.assertNotIn(secret, output.read_text()); self.assertIn("[REDACTED]", output.read_text())
+
+    def test_long_output_is_marked_as_truncated(self) -> None:
+        value = "x" * (verification.MAX_OUTPUT + 25); result = verification.bounded(value, "not-present")
+        self.assertIn("앞부분 25자 생략됨", result); self.assertTrue(result.endswith("x" * verification.MAX_OUTPUT))
+
+    def test_approved_digest_mismatch_is_blocked(self) -> None:
+        reference = "flyway/flyway@sha256:" + "b" * 64; inspected = json.dumps([{"Id": "sha256:" + "a" * 64, "RepoDigests": ["flyway/flyway@sha256:" + "c" * 64]}])
+        def result(command, _timeout): return subprocess.CompletedProcess(command, 0, inspected if "inspect" in command else "pulled", "")
+        with mock.patch.object(verification, "run", side_effect=result):
+            with self.assertRaisesRegex(ValueError, "does not match the approved reference"): verification.prepare_image(reference, 30, [])
 
     def test_changed_plan_is_blocked_before_docker_execution(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -111,11 +128,11 @@ class RelationalMigrationVerificationTests(unittest.TestCase):
 
     def test_user_view_discloses_real_effects_and_limits(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory); plan_path, _, _, _ = self.fixture(root); plan = json.loads(plan_path.read_text()); view = render(plan, hashlib.sha256(plan_path.read_bytes()).hexdigest()); self.assertIn("Docker 이미지가 없으면 내려받음", view); self.assertIn("production DB 접속 안 함", view); self.assertIn("별도 승인", view); self.assertIn("rollback은 검증하지 않음", view)
+            root = Path(directory); plan_path, _, _, _ = self.fixture(root); plan = json.loads(plan_path.read_text()); view = render(plan, hashlib.sha256(plan_path.read_bytes()).hexdigest()); self.assertIn("Docker 이미지가 없으면 내려받음", view); self.assertIn("Docker cache에 남음", view); self.assertIn("실행 흐름", view); self.assertIn("production DB 접속 안 함", view); self.assertIn("별도 승인", view); self.assertIn("rollback은 검증하지 않음", view)
 
     def test_result_view_preserves_cleanup_and_scope_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory); _, _, output, arguments = self.fixture(root); code, _, _ = self.run_main(arguments, lambda command, **_: self.completed(command)); self.assertEqual(0, code); report = json.loads(output.read_text()); validate_report(report, output, root); view = render_report(report); self.assertIn("상태: PASSED", view); self.assertIn("내부 Docker 네트워크: 정리 완료", view); self.assertIn("production 데이터·권한", view)
+            root = Path(directory); _, _, output, arguments = self.fixture(root); code, _, _ = self.run_main(arguments, lambda command, **_: self.completed(command)); self.assertEqual(0, code); report = json.loads(output.read_text()); validate_report(report, output, root); view = render_report(report); self.assertIn("상태: PASSED", view); self.assertIn("내부 Docker 네트워크: 정리 완료", view); self.assertIn("production 데이터·권한", view); self.assertIn("실제 실행 이미지", view)
 
 
 if __name__ == "__main__": unittest.main(verbosity=2)

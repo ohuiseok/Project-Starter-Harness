@@ -32,3 +32,8 @@ Successful verification proves that the approved migration executes and
 validates in the selected isolated PostgreSQL/Flyway image pair. It does not
 prove production permissions, production data compatibility, lock duration,
 rollback behavior, performance, or deployment success.
+
+The accepted Flyway repositories are Redgate-published `redgate/flyway` and
+`flyway/flyway`. Prefer an exact patch-version tag that is actually published;
+the runner pulls it, records its image ID and repository digest, and executes
+the immutable image ID rather than resolving the tag again.

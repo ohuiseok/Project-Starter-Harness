@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""Opt-in real Docker smoke test for isolated relational verification."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parent.parent
+SCRIPTS = ROOT / ".agents/skills/spring-project-start/scripts"
+sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(SCRIPTS))
+
+from render_relational_migration_verification_report import validate  # noqa: E402
+from tests.test_relational_migration_verification import RelationalMigrationVerificationTests  # noqa: E402
+
+
+def command(arguments: list[str], timeout: int = 900) -> subprocess.CompletedProcess:
+    return subprocess.run(arguments, capture_output=True, text=True, check=False, timeout=timeout)
+
+
+def main() -> int:
+    available = command(["docker", "version", "--format", "{{.Server.Version}}"], 20)
+    if available.returncode:
+        print("DOCKER_SMOKE_STATE: UNKNOWN"); print("REASON: Docker Engine is unavailable"); return 3
+    with tempfile.TemporaryDirectory(prefix="harness-docker-smoke-") as directory:
+        target = Path(directory); fixture = RelationalMigrationVerificationTests(); _, _, output, arguments = fixture.fixture(target)
+        invocation = [sys.executable, str(SCRIPTS / "run_relational_migration_verification.py"), *arguments[1:]]
+        result = subprocess.run(invocation, text=True, timeout=1200, check=False)
+        if not output.is_file(): print("DOCKER_SMOKE_STATE: FAILED\nREASON: verification report was not written"); return 1
+        report = json.loads(output.read_text(encoding="utf-8")); validate(report, output, target)
+        remaining_containers = command(["docker", "ps", "--all", "--quiet", "--filter", "label=starter-harness.relational-verification=true"], 30)
+        remaining_networks = command(["docker", "network", "ls", "--quiet", "--filter", "label=starter-harness.relational-verification=true"], 30)
+        clean = remaining_containers.returncode == 0 and remaining_networks.returncode == 0 and not remaining_containers.stdout.strip() and not remaining_networks.stdout.strip()
+        passed = result.returncode == 0 and report["result"]["state"] == "PASSED" and clean
+        print(f"DOCKER_SMOKE_STATE: {'PASSED' if passed else 'FAILED'}")
+        if report["result"].get("failure"): print(f"FAILURE: {report['result']['failure']}")
+        if not passed:
+            for event in report["result"]["events"][-3:]: print(f"LAST_EVENT: {event['step']} · exit {event['exitCode']} · {event['output'][-500:].strip()}")
+        print(f"DOCKER_SERVER_VERSION: {report['runtime']['dockerServerVersion']}")
+        for name, evidence in report["result"]["images"].items(): print(f"IMAGE_{name.upper()}_ID: {evidence['imageId']}")
+        print(f"LABELED_RESOURCES_REMAIN: {'no' if clean else 'yes'}")
+        print("TARGET_DATABASE_ACCESSED: no\nPERSISTENT_VOLUME_CREATED: no")
+        return 0 if passed else 1
+
+
+if __name__ == "__main__": sys.exit(main())
