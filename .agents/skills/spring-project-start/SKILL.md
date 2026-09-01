@@ -165,6 +165,11 @@ details from `templates/relational-artifact-plan.json`, then use
 credential roles from array order. This milestone renders only in temporary
 storage and writes the report/view; it does not apply the generated files or
 execute Docker, Testcontainers, Flyway, tests, ports, volumes, or database I/O.
+After the exact dry-run view is explicitly approved, use
+`apply_approved_relational_artifacts.py` with the approval template. It must
+re-render and revalidate immediately before atomic file replacement, back up
+updates and evidence, roll back partial failure, and write only the separate
+relational baseline on success. File approval never approves runtime execution.
 
 ## Technology Selection
 

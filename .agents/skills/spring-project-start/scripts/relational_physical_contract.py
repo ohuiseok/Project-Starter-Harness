@@ -114,7 +114,6 @@ def validate_physical_model(physical: dict, logical: dict, metadata: dict, targe
     if migration["strategy"] != adapter["migrationStrategy"] or migration["sourceOfTruth"] != "VERSIONED_MIGRATION": blockers.append("migration source strategy does not match the adapter")
     migration_path = inside(target.resolve(), text(migration["plannedSourcePath"], "migrationPlan.plannedSourcePath", False), "migrationPlan.plannedSourcePath")
     if not re.fullmatch(r"V[0-9][0-9._]*__[a-z0-9_]+\.sql", migration_path.name): blockers.append("planned Flyway migration name is invalid")
-    if migration_path.exists(): blockers.append("planned Flyway migration path already exists")
     if migration["requiredRecovery"] not in RECOVERY_REQUIREMENTS: raise ValueError("migration requiredRecovery is invalid")
     if migration["applyAuthorized"] is not False: blockers.append("physical contract must not authorize migration execution")
     risk = physical["riskAssessment"]

@@ -18,3 +18,12 @@ and separate file-application approval from later database/container execution.
 DDL is classified transactionally only when it contains the supported CREATE
 subset. This dry run is not proof that a future migration succeeds against a
 real PostgreSQL instance; that requires a later isolated execution milestone.
+
+After the exact report is displayed, file application requires a separate
+approval containing its SHA-256 and canonical target. Apply revalidates every
+contract input, independently re-renders all bytes, and rechecks target hashes
+and modes immediately before each atomic replacement. Replaced files, the
+report, approval, artifact plan, and prior relational baseline are backed up.
+Partial failure rolls back files and baseline. Success writes the separate
+`.starter-harness-relational.json` ownership baseline last. Applying files never
+authorizes or runs Flyway, Docker, Testcontainers, tests, ports, or database I/O.
