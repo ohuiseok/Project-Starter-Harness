@@ -1,0 +1,14 @@
+{
+  "contractVersion": 1,
+  "contractId": "persistence",
+  "kind": "PERSISTENCE",
+  "featureId": "F001",
+  "route": {"path": "docs/features/F001/design-route.json", "sha256": "UNKNOWN"},
+  "disposition": "CREATE",
+  "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []},
+  "artifact": {"format": "DATA_MODEL", "path": "UNKNOWN"},
+  "modelSha256": "UNKNOWN",
+  "traceability": [],
+  "evidencePaths": [],
+  "approval": {"status": "DRAFT", "approvedBy": null, "approvedAt": null, "approvedContentSha256": null}
+}

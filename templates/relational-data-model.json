@@ -1,0 +1,20 @@
+{
+  "modelVersion": 1,
+  "modelId": "unknown",
+  "storeKind": "RELATIONAL",
+  "storeId": "default",
+  "purpose": "UNKNOWN",
+  "physicalArtifactStrategy": "DEFERRED",
+  "physicalArtifactCustom": null,
+  "runtimeProvisioning": {
+    "strategy": "DEFERRED",
+    "databaseEngine": "UNKNOWN",
+    "customDatabaseEngine": null,
+    "customDescription": null,
+    "imageReference": null,
+    "composePath": null,
+    "credentialSecretNames": []
+  },
+  "entities": [],
+  "relationships": []
+}

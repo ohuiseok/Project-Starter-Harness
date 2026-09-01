@@ -14,7 +14,7 @@ from validate_feature_specs import load_object, text, validate_approval
 
 
 CONTRACT_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-FORMATS = {"OPENAPI", "JSON_SCHEMA", "ASYNCAPI", "MARKDOWN", "MERMAID", "OTHER", "UNKNOWN"}
+FORMATS = {"OPENAPI", "JSON_SCHEMA", "DATA_MODEL", "ASYNCAPI", "MARKDOWN", "MERMAID", "OTHER", "UNKNOWN"}
 
 
 def sha256(path: Path) -> str:

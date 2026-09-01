@@ -130,6 +130,22 @@ APIs section of `references/http-api-contracts.md`; require baseline OpenAPI
 evidence, generate a deterministic compatibility report, and never apply the
 proposed extension during contract approval.
 
+For a route v2 `PERSISTENCE` instance with disposition `CREATE`, read
+`references/relational-data-contracts.md`. When the selected store is relational,
+prepare a logical model from `templates/relational-data-model.json`, derive exact
+metadata from `templates/relational-data-contract.json` with
+`create_relational_data_contract.py`, validate it with
+`validate_relational_data_contract.py`,
+and render its Markdown and Mermaid view. Record whether local development will
+use Docker Compose, Testcontainers, both, an external database, a custom method,
+or a deferred decision. Container choices record pinned image references and
+secret names only; contract approval never installs or starts a database.
+After the user approves the view, use
+`record_relational_data_contract_approval.py`, which rechecks the exact model,
+route inputs, metadata, and view atomically without changing the model. This
+milestone does not support persistence `EXTEND` or `REUSE`, or non-relational
+physical models; keep those explicit instead of coercing them into an ERD.
+
 ## Technology Selection
 
 For a new project, a missing profile, or a requested stack change, read
