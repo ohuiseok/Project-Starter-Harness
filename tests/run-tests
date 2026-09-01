@@ -245,6 +245,14 @@ for required in \
   "$SKILL_ROOT/scripts/render_existing_http_api_contract.py" \
   "$SKILL_ROOT/scripts/record_existing_http_api_contract_approval.py" \
   "$SKILL_ROOT/scripts/migrate_existing_http_api_contract_v2.py" \
+  "$SKILL_ROOT/references/relational-physical-contracts.md" \
+  "$SKILL_ROOT/references/relational-artifact-dry-runs.md" \
+  "$SKILL_ROOT/scripts/create_relational_physical_contract.py" \
+  "$SKILL_ROOT/scripts/validate_relational_physical_contract.py" \
+  "$SKILL_ROOT/scripts/render_relational_physical_contract.py" \
+  "$SKILL_ROOT/scripts/record_relational_physical_contract_approval.py" \
+  "$SKILL_ROOT/scripts/render_relational_artifact_dry_run.py" \
+  "$SKILL_ROOT/scripts/render_relational_artifact_dry_run_markdown.py" \
   "$HARNESS_ROOT/templates/project-profile.md" \
   "$HARNESS_ROOT/templates/project-profile.json" \
   "$HARNESS_ROOT/templates/generation-plan.json" \
@@ -257,7 +265,10 @@ for required in \
   "$HARNESS_ROOT/templates/feature-spec.md" \
   "$HARNESS_ROOT/templates/design-route.json" \
   "$HARNESS_ROOT/templates/design-contract.json" \
-  "$HARNESS_ROOT/templates/http-api-openapi.json"; do
+  "$HARNESS_ROOT/templates/http-api-openapi.json" \
+  "$HARNESS_ROOT/templates/relational-physical-contract.json" \
+  "$HARNESS_ROOT/templates/relational-physical-model.json" \
+  "$HARNESS_ROOT/templates/relational-artifact-plan.json"; do
   if [ -f "$required" ]; then
     pass "starter contract: $(basename "$required") exists"
   else
@@ -450,7 +461,12 @@ expect_out "relational data contracts: all focused scenarios ran" "Ran 14 tests"
 OUT="$(python3 "$HARNESS_ROOT/tests/test_relational_physical_contract.py" 2>&1)"
 CODE=$?
 expect_code "relational physical contracts: focused regression suite passes" 0
-expect_out "relational physical contracts: all focused scenarios ran" "Ran 14 tests"
+expect_out "relational physical contracts: all focused scenarios ran" "Ran 15 tests"
+
+OUT="$(python3 "$HARNESS_ROOT/tests/test_relational_artifact_dry_run.py" 2>&1)"
+CODE=$?
+expect_code "relational artifact dry run: focused regression suite passes" 0
+expect_out "relational artifact dry run: all focused scenarios ran" "Ran 8 tests"
 
 OUT="$(python3 "$SKILL_ROOT/scripts/validate_feature_specs.py" \
   --project-brief "$HARNESS_ROOT/templates/project-brief.json" 2>&1)"

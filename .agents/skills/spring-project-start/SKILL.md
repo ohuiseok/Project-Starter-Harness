@@ -158,6 +158,14 @@ versioned migration, Docker Compose, and Testcontainers artifacts only. It must
 not render or apply migrations, create source/config files, start containers,
 touch volumes, access a database, or authorize any of those actions.
 
+After physical-contract approval, read
+`references/relational-artifact-dry-runs.md`. Prepare the explicit rendering
+details from `templates/relational-artifact-plan.json`, then use
+`render_relational_artifact_dry_run.py` and its Markdown renderer. Never infer
+credential roles from array order. This milestone renders only in temporary
+storage and writes the report/view; it does not apply the generated files or
+execute Docker, Testcontainers, Flyway, tests, ports, volumes, or database I/O.
+
 ## Technology Selection
 
 For a new project, a missing profile, or a requested stack change, read

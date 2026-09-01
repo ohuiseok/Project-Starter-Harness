@@ -210,7 +210,10 @@ def validate_physical_model(physical: dict, logical: dict, metadata: dict, targe
             if check_id in constraint_ids: raise ValueError(f"duplicate constraintId: {check_id}")
             constraint_ids.add(check_id); sql_name(check["name"], f"{check_location}.name")
             expression = text(check["expression"], f"{check_location}.expression", False)
-            if any(token in expression for token in (";", "--", "/*", "*/")): blockers.append(f"unsafe check expression: {check['constraintId']}")
+            expression_names = set(re.findall(r"[a-z_][a-z0-9_]*", expression.lower()))
+            column_names = {column["name"] for column in columns}
+            if not re.fullmatch(r"[a-zA-Z0-9_ ()<>=!]+", expression) or expression_names - column_names - {"and", "or", "not", "true", "false", "null"}:
+                blockers.append(f"unsafe or unresolved check expression: {check['constraintId']}")
             invariant_refs = set(check["invariantRefs"])
             if not invariant_refs or invariant_refs - {rule["invariantId"] for entity in logical["entities"] for rule in entity["invariants"]}: blockers.append(f"check constraint has invalid invariant links: {check_id}")
             check_invariants[check_id] = invariant_refs

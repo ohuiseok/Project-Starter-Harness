@@ -138,6 +138,13 @@ class RelationalPhysicalContractTests(unittest.TestCase):
             fixture[6].write_text(json.dumps(physical))
             self.assertTrue(any("matching check constraint" in item for item in self.validate(root, fixture)[1]))
 
+    def test_check_expression_cannot_reference_unknown_sql_names(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); fixture = self.fixture(root); physical = json.loads(fixture[6].read_text())
+            physical["tables"][0]["checkConstraints"][0]["expression"] = "end_date >= injected_function(start_date)"
+            fixture[6].write_text(json.dumps(physical))
+            self.assertTrue(any("unsafe or unresolved check expression" in item for item in self.validate(root, fixture)[1]))
+
     def test_user_view_separates_design_from_execution(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             metadata, physical, logical, *_ = self.fixture(Path(directory))
