@@ -234,6 +234,11 @@ for required in \
   "$SKILL_ROOT/scripts/migrate_design_route_v2.py" \
   "$SKILL_ROOT/scripts/validate_design_contract.py" \
   "$SKILL_ROOT/scripts/render_design_contract.py" \
+  "$SKILL_ROOT/scripts/http_api_contract.py" \
+  "$SKILL_ROOT/scripts/create_http_api_contract.py" \
+  "$SKILL_ROOT/scripts/validate_http_api_contract.py" \
+  "$SKILL_ROOT/scripts/render_http_api_contract.py" \
+  "$SKILL_ROOT/scripts/record_http_api_contract_approval.py" \
   "$HARNESS_ROOT/templates/project-profile.md" \
   "$HARNESS_ROOT/templates/project-profile.json" \
   "$HARNESS_ROOT/templates/generation-plan.json" \
@@ -245,7 +250,8 @@ for required in \
   "$HARNESS_ROOT/templates/feature-spec.json" \
   "$HARNESS_ROOT/templates/feature-spec.md" \
   "$HARNESS_ROOT/templates/design-route.json" \
-  "$HARNESS_ROOT/templates/design-contract.json"; do
+  "$HARNESS_ROOT/templates/design-contract.json" \
+  "$HARNESS_ROOT/templates/http-api-openapi.json"; do
   if [ -f "$required" ]; then
     pass "starter contract: $(basename "$required") exists"
   else
@@ -419,6 +425,11 @@ OUT="$(python3 "$HARNESS_ROOT/tests/test_design_contract.py" 2>&1)"
 CODE=$?
 expect_code "design contracts: focused regression suite passes" 0
 expect_out "design contracts: all focused scenarios ran" "Ran 3 tests"
+
+OUT="$(python3 "$HARNESS_ROOT/tests/test_http_api_contract.py" 2>&1)"
+CODE=$?
+expect_code "HTTP API contracts: focused regression suite passes" 0
+expect_out "HTTP API contracts: all focused scenarios ran" "Ran 10 tests"
 
 OUT="$(python3 "$SKILL_ROOT/scripts/validate_feature_specs.py" \
   --project-brief "$HARNESS_ROOT/templates/project-brief.json" 2>&1)"

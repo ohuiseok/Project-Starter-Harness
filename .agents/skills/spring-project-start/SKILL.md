@@ -118,6 +118,15 @@ never duplicate request or response schemas in metadata. Validate metadata with
 `render_design_contract.py`. A ready contract permits implementation planning,
 not source-file application.
 
+For a route v2 `HTTP_API` instance with disposition `CREATE`, read
+`references/http-api-contracts.md` completely. Materialize an agent-prepared
+OpenAPI JSON draft and derived metadata with `create_http_api_contract.py`,
+validate them with `validate_http_api_contract.py`, and render the basic view
+with `render_http_api_contract.py`. After the user approves that view, use
+`record_http_api_contract_approval.py`; it rechecks current route inputs and the
+exact OpenAPI without modifying the OpenAPI artifact. Do not use this CREATE
+workflow for `EXTEND` or `REUSE`.
+
 ## Technology Selection
 
 For a new project, a missing profile, or a requested stack change, read
