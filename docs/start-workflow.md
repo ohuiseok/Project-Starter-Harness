@@ -20,6 +20,8 @@ Target과 환경 확인
   |
 기능 명세 승인과 마일스톤 확정
   |
+필요한 설계의 생성·확장·재사용 경로 승인
+  |
 구현
   |
 테스트 또는 실행 확인
@@ -117,6 +119,18 @@ Spring 소스가 있다고 다른 모드로 전환하지 않습니다. 다음 ev
 두 JSON과 두 Markdown을 적용 직전 재검증하는 하나의 트랜잭션으로 갱신합니다. 중간 실패
 시 하네스가 쓴 내용과 여전히 같은 파일만 rollback하여 외부 변경을 보호합니다.
 
+## 설계 라우팅
+
+승인된 기능과 기술 프로필을 바탕으로 `design-route.json`에서 API, 상태 저장, 메시징,
+예약 작업, 화면, 외부 연동, 보안, 검증을 `CREATE`, `EXTEND`, `REUSE`, `NOT_NEEDED`,
+`DEFERRED`, `UNKNOWN`으로 분류합니다. 라우팅 문서는 상세 API 필드나 테이블을 담지 않고
+필요한 후속 계약과 대상 프로젝트·모듈·데이터 저장소만 정합니다.
+
+기존 설계를 확장하거나 재사용하려면 실제 target 파일 경로와 해시가 필요합니다. 기능
+명세, 기술 프로필, evidence 중 하나라도 바뀌면 stale로 판정합니다. 사용자에게는
+`이번에 만들거나 활용할 설계 / 지금 확인할 사항 / 나중에 설계할 사항`만 먼저 보여주며,
+승인된 라우팅은 계약 설계만 허용하고 코드 적용을 승인하지는 않습니다.
+
 ## 기술 선택
 
 보안, 운영 DB, 마이그레이션, 메시징, 캐시, 배치, 컨테이너, 프론트엔드,
@@ -186,6 +200,7 @@ dry-run이 안전한 `UPDATE`를 판별하게 합니다.
 | `templates/project-brief.md` | `<target>/docs/project-brief.md` | 프로젝트 개요의 생성된 사용자 보기 |
 | `templates/feature-spec.json` | `<target>/docs/features/<feature-id>/spec.json` | 한 기능의 구현 전 계약 |
 | `templates/feature-spec.md` | `<target>/docs/features/<feature-id>/spec.md` | 기능 명세의 생성된 사용자 보기 |
+| `templates/design-route.json` | `<target>/docs/features/<feature-id>/design-route.json` | 필요한 후속 설계와 대상의 구조화 경로 |
 | `templates/project-profile.json` | `<target>/docs/project-profile.json` | 구조화된 기술 선택의 기준 |
 | `templates/project-profile.md` | `<target>/docs/project-profile.md` | 사람이 읽는 선택 이유와 검토 결과 |
 | `templates/generation-plan.json` | `<target>/docs/generation-plan.json` | readiness 통과 후 생성 계획 컴파일 |

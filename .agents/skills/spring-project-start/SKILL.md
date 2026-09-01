@@ -35,10 +35,12 @@ session should deliver one coherent milestone that can be verified.
 12. Create or confirm the technology profile using the Technology Selection
     workflow below.
 13. Complete and approve the selected feature specification.
-14. Confirm one coherent, verifiable milestone and implement it.
-15. Add only technology justified by requirements or the current stage.
-16. Verify with tests or a run check.
-17. Update `<target>/docs/progress.md` and close with the session summary.
+14. Read `references/design-routing.md`, create and approve the design route,
+    then create only the contracts selected by that route.
+15. Confirm one coherent, verifiable milestone and implement it.
+16. Add only technology justified by requirements or the current stage.
+17. Verify with tests or a run check.
+18. Update `<target>/docs/progress.md` and close with the session summary.
 
 ## Feature Specification
 
@@ -83,6 +85,22 @@ synchronize the candidate status, and regenerate both Markdown views; never ask
 the user to copy or verify a hash. One user response may approve both summaries,
 but store two independent approvals. Regenerate derived Markdown automatically
 after an approved JSON change when no independent edit would be overwritten.
+
+## Design Routing
+
+After feature and technology approval, route the current slice with
+`templates/design-route.json`. Record it at
+`<target>/docs/features/<feature-id>/design-route.json` and generate the sibling
+Markdown view. Use actual target files as evidence for `EXTEND` and `REUSE`.
+Active routes must reference technology-profile project IDs and, for complex
+persistence, data-store IDs. Do not put detailed API fields, entities, or UI
+design in this manifest.
+
+Validate current inputs and evidence with `validate_design_route.py`. After the
+user confirms the displayed summary, use `record_design_route_approval.py`; it
+rechecks the route, feature, profile, code evidence, and Markdown before safely
+updating the JSON and view. `DESIGN_READY: yes` permits contract design, not
+source-file application.
 
 ## Technology Selection
 

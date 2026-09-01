@@ -65,6 +65,9 @@ rollback하며, 성공 시 다음 비교를 위한 baseline manifest를 기록�
 | `spring-project-start/scripts/record_spec_approval.py` | 승인 상태 동기화와 JSON·Markdown 원자적 갱신 |
 | `spring-project-start/scripts/next_feature_id.py` | 프로젝트 개요와 기존 디렉터리에서 다음 기능 ID 확인 |
 | `spring-project-start/scripts/migrate_feature_spec_v2.py` | v1 기능 명세를 원본 보존 상태로 v2 검토본에 변환 |
+| `spring-project-start/scripts/validate_design_route.py` | 설계 경로와 입력·코드 evidence·대상 참조 검증 |
+| `spring-project-start/scripts/render_design_route.py` | 설계 경로의 기본·상세 Markdown 생성 |
+| `spring-project-start/scripts/record_design_route_approval.py` | 표시된 설계 경로를 재검증하고 JSON·Markdown 승인 |
 
 Exit code:
 
