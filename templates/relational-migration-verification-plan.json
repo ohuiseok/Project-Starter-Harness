@@ -1,8 +1,10 @@
 {
-  "migrationVerificationPlanVersion": 2,
+  "migrationVerificationPlanVersion": 3,
   "planId": "unknown",
   "target": "UNKNOWN",
   "relationalBaseline": {"path": ".starter-harness-relational.json", "sha256": "UNKNOWN"},
+  "physicalContract": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "physicalModel": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
   "migrations": [{"version": "UNKNOWN", "description": "UNKNOWN", "path": "UNKNOWN", "sha256": "UNKNOWN"}],
   "database": {"name": "harness_verify", "schema": "public"},
   "images": {"postgres": "UNKNOWN", "flyway": "UNKNOWN"},

@@ -20,16 +20,18 @@ sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(SCRIPTS))
 import run_relational_migration_verification as verification  # noqa: E402
 import recover_relational_migration_verification as recovery  # noqa: E402
 from migrate_relational_migration_verification_plan_v2 import migrate as migrate_plan_v2  # noqa: E402
+from migrate_relational_migration_verification_plan_v3 import migrate as migrate_plan_v3  # noqa: E402
 from render_relational_migration_verification_plan import render  # noqa: E402
 from render_relational_migration_verification_report import render as render_report, validate as validate_report  # noqa: E402
+from relational_schema_fingerprint import expression as schema_expression  # noqa: E402
 import tests.test_relational_artifact_apply as apply_tests  # noqa: E402
 
 
 class RelationalMigrationVerificationTests(unittest.TestCase):
     def fixture(self, root: Path):
         applying = apply_tests.RelationalArtifactApplyTests(); _, _, apply_arguments = applying.fixture(root); self.assertEqual(0, applying.run_apply(apply_arguments)[0])
-        migration = root / "src/main/resources/db/migration/V1__create_leave_requests.sql"; baseline = root / ".starter-harness-relational.json"
-        plan = {"migrationVerificationPlanVersion": 2, "planId": "leave-migration-check", "target": str(root.resolve()), "relationalBaseline": {"path": ".starter-harness-relational.json", "sha256": hashlib.sha256(baseline.read_bytes()).hexdigest()}, "migrations": [{"version": "1", "description": "create leave requests", "path": migration.relative_to(root).as_posix(), "sha256": hashlib.sha256(migration.read_bytes()).hexdigest()}], "database": {"name": "harness_verify", "schema": "public"}, "images": {"postgres": "postgres:17.6", "flyway": "flyway/flyway:13.4.0"}, "limits": {"startupTimeoutSeconds": 10, "commandTimeoutSeconds": 30, "tmpfsBytes": 67108864}, "isolation": {"publishPorts": False, "persistentVolumes": False, "targetDatabaseAccess": False, "cleanupRequired": True}}
+        migration = root / "src/main/resources/db/migration/V1__create_leave_requests.sql"; baseline = root / ".starter-harness-relational.json"; physical_contract = next(root.glob("docs/**/physical/metadata.json")); physical_model = physical_contract.parent / "physical-model.json"
+        plan = {"migrationVerificationPlanVersion": 3, "planId": "leave-migration-check", "target": str(root.resolve()), "relationalBaseline": {"path": ".starter-harness-relational.json", "sha256": hashlib.sha256(baseline.read_bytes()).hexdigest()}, "physicalContract": {"path": physical_contract.relative_to(root).as_posix(), "sha256": hashlib.sha256(physical_contract.read_bytes()).hexdigest()}, "physicalModel": {"path": physical_model.relative_to(root).as_posix(), "sha256": hashlib.sha256(physical_model.read_bytes()).hexdigest()}, "migrations": [{"version": "1", "description": "create leave requests", "path": migration.relative_to(root).as_posix(), "sha256": hashlib.sha256(migration.read_bytes()).hexdigest()}], "database": {"name": "harness_verify", "schema": "public"}, "images": {"postgres": "postgres:17.6", "flyway": "flyway/flyway:13.4.0"}, "limits": {"startupTimeoutSeconds": 10, "commandTimeoutSeconds": 30, "tmpfsBytes": 67108864}, "isolation": {"publishPorts": False, "persistentVolumes": False, "targetDatabaseAccess": False, "cleanupRequired": True}}
         plan_path = root / "verification-plan.json"; plan_path.write_text(json.dumps(plan)); approval = {"migrationVerificationApprovalVersion": 1, "approved": True, "planSha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(), "target": str(root.resolve()), "approvedBy": "test-user", "approvedAt": "2026-09-01T00:00:00Z"}; approval_path = root / "verification-approval.json"; approval_path.write_text(json.dumps(approval)); output = root / "verification-report.json"
         arguments = ["run_relational_migration_verification.py", "--plan", str(plan_path), "--approval", str(approval_path), "--target", str(root), "--output", str(output)]
         return plan_path, approval_path, output, arguments
@@ -40,6 +42,8 @@ class RelationalMigrationVerificationTests(unittest.TestCase):
             output = json.dumps([{"Id": "sha256:" + "a" * 64, "RepoDigests": [f"{command[-1].split(':')[0]}@sha256:" + "b" * 64]}])
         if "info" in command:
             output = json.dumps({"migrations": [{"category": "Versioned", "version": "1", "description": "create leave requests", "state": "Success"}]})
+        if "psql" in command:
+            output = json.dumps({"tables": [{"name": "leave_requests"}], "columns": [{"table": "leave_requests", "name": "leave_request_id", "type": "uuid", "nullable": False, "default": None}, {"table": "leave_requests", "name": "start_date", "type": "date", "nullable": False, "default": None}, {"table": "leave_requests", "name": "end_date", "type": "date", "nullable": False, "default": None}], "constraints": [{"table": "leave_requests", "name": "pk_leave_requests", "type": "p", "columns": ["leave_request_id"], "referencedTable": None, "referencedColumns": None, "onDelete": " ", "onUpdate": " ", "definition": "PRIMARY KEY (leave_request_id)"}, {"table": "leave_requests", "name": "ck_leave_requests_date_range", "type": "c", "columns": None, "referencedTable": None, "referencedColumns": None, "onDelete": " ", "onUpdate": " ", "definition": "CHECK ((end_date >= start_date))"}], "indexes": []})
         return subprocess.CompletedProcess(command, returncode, output, "" if returncode == 0 else output)
 
     def run_main(self, arguments, side_effect):
@@ -71,6 +75,19 @@ class RelationalMigrationVerificationTests(unittest.TestCase):
             def result(command, **_): return subprocess.CompletedProcess(command, 0, json.dumps(history), "") if "info" in command else self.completed(command)
             code, _, _ = self.run_main(arguments, result); self.assertEqual(1, code); report = json.loads(output.read_text()); self.assertEqual("FAILED", report["result"]["state"]); self.assertIn("does not match approved migration 1", report["result"]["failure"]); self.assertTrue(all(report["result"]["cleanup"].values()))
 
+    def test_schema_mismatch_reports_exact_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); _, _, output, arguments = self.fixture(root)
+            def result(command, **_):
+                if "psql" not in command: return self.completed(command)
+                catalog = json.loads(self.completed(command).stdout); catalog["columns"][0]["nullable"] = True
+                return subprocess.CompletedProcess(command, 0, json.dumps(catalog), "")
+            code, _, _ = self.run_main(arguments, result); self.assertEqual(1, code); report = json.loads(output.read_text()); schema = report["result"]["schemaFingerprint"]; self.assertEqual("MISMATCHED", schema["state"]); self.assertEqual("tables.leave_requests.columns.leave_request_id.nullable", schema["differences"][0]["path"]); self.assertTrue(all(report["result"]["cleanup"].values()))
+
+    def test_check_normalization_preserves_boolean_precedence(self) -> None:
+        self.assertEqual("(aorb)andc", schema_expression("CHECK ((a OR b) AND c)".removeprefix("CHECK ")))
+        self.assertNotEqual(schema_expression("((a OR b) AND c)"), schema_expression("(a OR (b AND c))"))
+
     def test_duplicate_version_is_blocked_before_docker(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); plan_path, approval_path, _, arguments = self.fixture(root); plan = json.loads(plan_path.read_text()); duplicate = dict(plan["migrations"][0]); duplicate["version"] = "1.0"; plan["migrations"].append(duplicate); plan_path.write_text(json.dumps(plan)); approval = json.loads(approval_path.read_text()); approval["planSha256"] = hashlib.sha256(plan_path.read_bytes()).hexdigest(); approval_path.write_text(json.dumps(approval))
@@ -85,6 +102,11 @@ class RelationalMigrationVerificationTests(unittest.TestCase):
     def test_legacy_plan_migrates_to_unapproved_single_item_chain(self) -> None:
         legacy = {"migrationVerificationPlanVersion": 1, "planId": "legacy", "target": "/tmp/example", "relationalBaseline": {"path": ".starter-harness-relational.json", "sha256": "a" * 64}, "migration": {"path": "db/V01_2__add_user_status.sql", "sha256": "b" * 64}, "database": {}, "images": {}, "limits": {}, "isolation": {}}
         migrated = migrate_plan_v2(legacy); self.assertEqual(2, migrated["migrationVerificationPlanVersion"]); self.assertEqual("1.2", migrated["migrations"][0]["version"]); self.assertEqual("add user status", migrated["migrations"][0]["description"]); self.assertNotIn("migration", migrated)
+
+    def test_v2_plan_migrates_to_v3_with_exact_physical_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); plan_path, _, _, _ = self.fixture(root); source = json.loads(plan_path.read_text()); contract = root / source.pop("physicalContract")["path"]; model = root / source.pop("physicalModel")["path"]; source["migrationVerificationPlanVersion"] = 2
+            migrated = migrate_plan_v3(source, contract, model, root); self.assertEqual(3, migrated["migrationVerificationPlanVersion"]); self.assertEqual(hashlib.sha256(model.read_bytes()).hexdigest(), migrated["physicalModel"]["sha256"])
 
     def test_flyway_failure_is_reported_and_resources_are_cleaned(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -161,13 +183,18 @@ class RelationalMigrationVerificationTests(unittest.TestCase):
             root = Path(directory); plan, _, output, arguments = self.fixture(root); plan.write_text(plan.read_text() + "\n")
             code, text, runner = self.run_main(arguments, lambda command, **_: self.completed(command)); self.assertEqual(1, code); self.assertIn("exact verification plan", text); runner.assert_not_called(); self.assertFalse(output.exists())
 
+    def test_changed_physical_model_is_blocked_before_docker(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); plan_path, _, _, arguments = self.fixture(root); plan = json.loads(plan_path.read_text()); model = root / plan["physicalModel"]["path"]; model.write_text(model.read_text() + "\n")
+            code, text, runner = self.run_main(arguments, lambda command, **_: self.completed(command)); self.assertEqual(1, code); self.assertIn("physical model changed", text); runner.assert_not_called()
+
     def test_user_view_discloses_real_effects_and_limits(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); plan_path, _, _, _ = self.fixture(root); plan = json.loads(plan_path.read_text()); view = render(plan, hashlib.sha256(plan_path.read_bytes()).hexdigest()); self.assertIn("Docker 이미지가 없으면 내려받음", view); self.assertIn("Docker cache에 남음", view); self.assertIn("실행 흐름", view); self.assertIn("production DB 접속 안 함", view); self.assertIn("별도 승인", view); self.assertIn("rollback은 검증하지 않음", view)
 
     def test_result_view_preserves_cleanup_and_scope_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory); _, _, output, arguments = self.fixture(root); code, _, _ = self.run_main(arguments, lambda command, **_: self.completed(command)); self.assertEqual(0, code); report = json.loads(output.read_text()); validate_report(report, output, root); view = render_report(report); self.assertIn("상태: PASSED", view); self.assertIn("내부 Docker 네트워크: 정리 완료", view); self.assertIn("production 데이터·권한", view); self.assertIn("실제 실행 이미지", view)
+            root = Path(directory); _, _, output, arguments = self.fixture(root); code, _, _ = self.run_main(arguments, lambda command, **_: self.completed(command)); self.assertEqual(0, code); report = json.loads(output.read_text()); validate_report(report, output, root); view = render_report(report); self.assertIn("상태: PASSED", view); self.assertIn("내부 Docker 네트워크: 정리 완료", view); self.assertIn("production 데이터·권한", view); self.assertIn("실제 실행 이미지", view); self.assertIn("Physical model 일치", view); self.assertIn("MATCHED", view)
 
 
 if __name__ == "__main__": unittest.main(verbosity=2)

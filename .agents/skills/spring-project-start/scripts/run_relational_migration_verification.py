@@ -20,6 +20,9 @@ from pathlib import Path, PurePosixPath
 from apply_approved_generation import non_empty, validate_sha
 from apply_approved_relational_artifacts import BASELINE_NAME, validate_existing_baseline
 from validate_feature_specs import load_object
+from validate_feature_specs import validate_approval as validate_document_approval
+from relational_physical_contract import validate_physical_model
+from relational_schema_fingerprint import actual as actual_schema, catalog_query, differences as schema_differences, expected as expected_schema, fingerprint
 
 
 NAME = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
@@ -48,9 +51,16 @@ def version_key(value: str) -> tuple[int, ...]:
     return tuple(parts)
 
 
-def validate_plan(plan: dict, plan_path: Path, target: Path) -> tuple[list[Path], dict]:
-    required = {"migrationVerificationPlanVersion", "planId", "target", "relationalBaseline", "migrations", "database", "images", "limits", "isolation"}
-    if not isinstance(plan, dict) or set(plan) != required or plan["migrationVerificationPlanVersion"] != 2: raise ValueError("migration verification plan is invalid; migrate legacy version 1 plans before approval")
+def target_file_ref(value: object, root: Path, label: str) -> Path:
+    if not isinstance(value, dict) or set(value) != {"path", "sha256"}: raise ValueError(f"{label} reference is invalid")
+    name = relative(value["path"]); validate_sha(value["sha256"], f"{label} hash"); path = root / name; resolved = path.resolve()
+    if path.is_symlink() or root not in resolved.parents or not resolved.is_file() or sha(resolved) != value["sha256"]: raise ValueError(f"{label} changed after verification planning or escapes target")
+    return resolved
+
+
+def validate_plan(plan: dict, plan_path: Path, target: Path) -> tuple[list[Path], dict, dict]:
+    required = {"migrationVerificationPlanVersion", "planId", "target", "relationalBaseline", "physicalContract", "physicalModel", "migrations", "database", "images", "limits", "isolation"}
+    if not isinstance(plan, dict) or set(plan) != required or plan["migrationVerificationPlanVersion"] != 3: raise ValueError("migration verification plan is invalid; migrate legacy plans before approval")
     if not isinstance(plan["planId"], str) or not PLAN_ID.fullmatch(plan["planId"]): raise ValueError("verification planId is invalid")
     root = target.resolve(strict=True)
     if Path(str(plan["target"])).resolve() != root: raise ValueError("verification plan target does not match")
@@ -59,6 +69,10 @@ def validate_plan(plan: dict, plan_path: Path, target: Path) -> tuple[list[Path]
     validate_sha(baseline_ref["sha256"], "verification baseline hash")
     if baseline_path.is_symlink() or not baseline_path.is_file() or sha(baseline_path) != baseline_ref["sha256"]: raise ValueError("relational baseline changed after verification planning")
     validate_existing_baseline(baseline_path); baseline = load_object(baseline_path)
+    contract_path = target_file_ref(plan["physicalContract"], root, "physical contract"); physical_path = target_file_ref(plan["physicalModel"], root, "physical model"); metadata = load_object(contract_path); physical = load_object(physical_path)
+    if not isinstance(metadata, dict) or metadata.get("artifact", {}).get("path") != physical_path.relative_to(root).as_posix() or metadata.get("physicalModelSha256") != sha(physical_path) or not validate_document_approval(metadata.get("approval"), "approval", metadata): raise ValueError("physical contract is not approved and current")
+    logical_ref = metadata.get("logicalModel"); logical_path = target_file_ref(logical_ref, root, "logical model"); logical = load_object(logical_path); blockers = validate_physical_model(physical, logical, metadata, root)
+    if blockers or physical.get("adapterId") != "postgresql-flyway": raise ValueError("physical model is not ready for PostgreSQL schema verification: " + "; ".join(blockers))
     migration_refs = plan["migrations"]
     if not isinstance(migration_refs, list) or not migration_refs: raise ValueError("at least one versioned migration is required")
     migrations = []; migration_names = []; seen_versions = set(); previous = None
@@ -68,10 +82,10 @@ def validate_plan(plan: dict, plan_path: Path, target: Path) -> tuple[list[Path]
         if key in seen_versions: raise ValueError(f"duplicate Flyway migration version: {migration_ref['version']}")
         if previous is not None and key <= previous: raise ValueError("migration chain must be in ascending Flyway version order")
         seen_versions.add(key); previous = key
-        migration_name = relative(migration_ref["path"]); migration = root / migration_name; filename = VERSIONED_FILE.fullmatch(migration.name)
+        migration_name = relative(migration_ref["path"]); migration_path = root / migration_name; migration = migration_path.resolve(); filename = VERSIONED_FILE.fullmatch(migration.name)
         if not filename or tuple(int(part) for part in re.split(r"[._]", filename.group(1))) != key or filename.group(2).replace("_", " ") != migration_ref["description"]: raise ValueError(f"migration identity does not match its Flyway filename: {migration_name}")
         validate_sha(migration_ref["sha256"], f"migration {migration_ref['version']} hash")
-        if migration.is_symlink() or not migration.is_file() or sha(migration) != migration_ref["sha256"]: raise ValueError(f"migration changed after verification planning: {migration_name}")
+        if migration_path.is_symlink() or root not in migration.parents or not migration.is_file() or sha(migration) != migration_ref["sha256"]: raise ValueError(f"migration changed after verification planning or escapes target: {migration_name}")
         if baseline["files"].get(migration_name) != migration_ref["sha256"]: raise ValueError(f"migration is not owned by the current relational baseline: {migration_name}")
         migrations.append(migration); migration_names.append(migration_name)
     parents = {PurePosixPath(name).parent for name in migration_names}
@@ -85,6 +99,7 @@ def validate_plan(plan: dict, plan_path: Path, target: Path) -> tuple[list[Path]
     if missing: raise ValueError(f"migration chain omits baseline-owned versioned migration at or below the target: {', '.join(missing)}")
     database = plan["database"]
     if not isinstance(database, dict) or set(database) != {"name", "schema"} or any(not isinstance(database[key], str) or not NAME.fullmatch(database[key]) for key in database): raise ValueError("verification database identifiers are invalid")
+    if database["schema"] != physical["database"]["schemaName"]: raise ValueError("verification schema does not match the approved physical model")
     images = plan["images"]
     if not isinstance(images, dict) or set(images) != {"postgres", "flyway"} or any(not isinstance(value, str) or not IMAGE.fullmatch(value) or value.endswith(":latest") for value in images.values()): raise ValueError("verification images must be pinned and non-latest")
     if not re.fullmatch(r"(?:docker\.io/library/)?postgres(?::[^:]+|@sha256:[a-f0-9]{64})", images["postgres"]): raise ValueError("verification PostgreSQL image must use the official postgres repository")
@@ -95,7 +110,7 @@ def validate_plan(plan: dict, plan_path: Path, target: Path) -> tuple[list[Path]
     expected_isolation = {"publishPorts": False, "persistentVolumes": False, "targetDatabaseAccess": False, "cleanupRequired": True}
     if plan["isolation"] != expected_isolation: raise ValueError("verification isolation guarantees are invalid")
     if plan_path.is_symlink() or root not in (plan_path.resolve(), *plan_path.resolve().parents): raise ValueError("verification plan must be a target-owned regular file")
-    return migrations, baseline
+    return migrations, baseline, physical
 
 
 def validate_approval(approval: dict, plan_path: Path, target: Path) -> None:
@@ -180,10 +195,10 @@ def applied_chain(info_output: str, expected: list[dict]) -> list[dict]:
     return actual
 
 
-def execute(plan: dict, migrations: list[Path], journal: dict) -> dict:
+def execute(plan: dict, migrations: list[Path], physical: dict, journal: dict) -> dict:
     resources = journal["resources"]; network = resources["network"]; database_container = resources["databaseContainer"]; password = secrets.token_urlsafe(32); user = "harness_verify"; database = plan["database"]["name"]; timeout = plan["limits"]["commandTimeoutSeconds"]
     flyway_containers = resources["flywayContainers"]
-    events = []; images = {}; cleanup = {"databaseContainerRemoved": False, "flywayContainersRemoved": False, "networkRemoved": False}; env_file_name = None; migration_stage = tempfile.TemporaryDirectory(prefix="harness-migration-")
+    events = []; images = {}; expected_fingerprint = expected_schema(physical); schema_evidence = {"state": "NOT_RUN", "expectedSha256": fingerprint(expected_fingerprint), "actualSha256": None, "differences": []}; cleanup = {"databaseContainerRemoved": False, "flywayContainersRemoved": False, "networkRemoved": False}; env_file_name = None; migration_stage = tempfile.TemporaryDirectory(prefix="harness-migration-")
     try:
         for name, reference in plan["images"].items(): images[name] = prepare_image(reference, timeout, events)
         for migration in migrations: shutil.copy2(migration, Path(migration_stage.name) / migration.name)
@@ -216,6 +231,14 @@ def execute(plan: dict, migrations: list[Path], journal: dict) -> dict:
             result = run(command, timeout); events.append({"step": f"flyway {action}", "exitCode": result.returncode, "output": bounded(result.stdout + result.stderr, password)})
             if result.returncode: raise ValueError(f"Flyway {action} failed in isolated PostgreSQL")
             if action == "info": applied_migrations = applied_chain(result.stdout, plan["migrations"])
+        progress("SCHEMA", "PostgreSQL catalog와 physical model 비교")
+        catalog = run(["docker", "exec", database_container, "psql", "-X", "-v", "ON_ERROR_STOP=1", "-At", "-U", user, "-d", database, "-c", catalog_query(plan["database"]["schema"])], timeout)
+        events.append({"step": "schema catalog fingerprint", "exitCode": catalog.returncode, "output": bounded(catalog.stdout + catalog.stderr, password)})
+        if catalog.returncode: raise ValueError("PostgreSQL schema catalog extraction failed")
+        try: observed_fingerprint = actual_schema(json.loads(catalog.stdout), plan["database"]["schema"])
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error: raise ValueError("PostgreSQL schema catalog evidence is invalid") from error
+        differences = schema_differences(expected_fingerprint, observed_fingerprint); schema_evidence = {"state": "MATCHED" if not differences else "MISMATCHED", "expectedSha256": fingerprint(expected_fingerprint), "actualSha256": fingerprint(observed_fingerprint), "differences": differences}
+        if differences: raise ValueError(f"PostgreSQL schema differs from the approved physical model at {len(differences)} path(s)")
         state = "PASSED"
     except (OSError, subprocess.TimeoutExpired, ValueError) as error:
         state = "FAILED"; failure = str(error)
@@ -238,7 +261,7 @@ def execute(plan: dict, migrations: list[Path], journal: dict) -> dict:
         except (OSError, subprocess.TimeoutExpired): cleanup["networkRemoved"] = False
     if not all(cleanup.values()): state = "CLEANUP_FAILED"; failure = "isolated Docker resources could not be fully removed"
     progress("CLEANUP", "임시 Docker 자원 정리 확인")
-    result = {"state": state, "events": events, "cleanup": cleanup, "images": images, "appliedMigrations": applied_migrations if "applied_migrations" in locals() else [], "targetDatabaseAccessed": False, "targetSourceFilesChanged": False, "persistentVolumeCreated": False}
+    result = {"state": state, "events": events, "cleanup": cleanup, "images": images, "appliedMigrations": applied_migrations if "applied_migrations" in locals() else [], "schemaFingerprint": schema_evidence, "targetDatabaseAccessed": False, "targetSourceFilesChanged": False, "persistentVolumeCreated": False}
     if state != "PASSED": result["failure"] = failure
     return result
 
@@ -254,14 +277,14 @@ def main() -> int:
         if args.output.exists(): raise ValueError("verification output already exists")
         validate_storage(root); journal_path = root / JOURNAL_PATH
         if journal_path.exists(): raise ValueError(f"unfinished migration verification journal exists: {JOURNAL_PATH}; recover it before retrying")
-        plan = load_object(args.plan); migrations, _ = validate_plan(plan, args.plan, root); approval = load_object(args.approval); validate_approval(approval, args.plan, root)
+        plan = load_object(args.plan); migrations, _, physical = validate_plan(plan, args.plan, root); approval = load_object(args.approval); validate_approval(approval, args.plan, root)
         docker = run(["docker", "version", "--format", "{{.Server.Version}}"], 20)
         if docker.returncode: raise ValueError("Docker Engine is unavailable")
         journal = execution_resources(plan, root, args.plan); atomic_json(journal, journal_path)
-        execution = execute(plan, migrations, journal)
+        execution = execute(plan, migrations, physical, journal)
         if execution["state"] == "CLEANUP_FAILED":
             journal["state"] = "CLEANUP_REQUIRED"; journal["cleanup"] = execution["cleanup"]; atomic_json(journal, journal_path)
-        report = {"migrationVerificationReportVersion": 3, "plan": {"path": str(args.plan.resolve()), "sha256": sha(args.plan)}, "approval": {"path": str(args.approval.resolve()), "sha256": sha(args.approval), "approvedBy": approval["approvedBy"], "approvedAt": approval["approvedAt"]}, "target": str(root), "executedAt": dt.datetime.now(dt.timezone.utc).isoformat(), "runtime": {"dockerServerVersion": docker.stdout.strip()}, "result": execution}
+        report = {"migrationVerificationReportVersion": 4, "plan": {"path": str(args.plan.resolve()), "sha256": sha(args.plan)}, "approval": {"path": str(args.approval.resolve()), "sha256": sha(args.approval), "approvedBy": approval["approvedBy"], "approvedAt": approval["approvedAt"]}, "target": str(root), "executedAt": dt.datetime.now(dt.timezone.utc).isoformat(), "runtime": {"dockerServerVersion": docker.stdout.strip()}, "result": execution}
         atomic_json(report, args.output)
         if execution["state"] != "CLEANUP_FAILED": journal_path.unlink()
     except (OSError, ValueError, subprocess.TimeoutExpired) as error: print(f"RELATIONAL_MIGRATION_VERIFICATION_VALID: no\nERROR: {error}", file=sys.stderr); return 1

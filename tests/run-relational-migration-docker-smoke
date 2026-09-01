@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(SCRIPTS))
 
 from render_relational_migration_verification_report import validate  # noqa: E402
 from tests.test_relational_migration_verification import RelationalMigrationVerificationTests  # noqa: E402
+from validate_feature_specs import approval_content_hash  # noqa: E402
 
 
 def command(arguments: list[str], timeout: int = 900) -> subprocess.CompletedProcess:
@@ -30,9 +31,11 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="harness-docker-smoke-") as directory:
         target = Path(directory); fixture = RelationalMigrationVerificationTests(); plan_path, approval_path, output, arguments = fixture.fixture(target)
         second = target / "src/main/resources/db/migration/V2__add_chain_probe.sql"
-        second.write_text("ALTER TABLE public.leave_requests ADD COLUMN chain_probe boolean NOT NULL DEFAULT false;\n", encoding="utf-8")
+        second.write_text("CREATE INDEX idx_leave_requests_start_date ON public.leave_requests (start_date);\n", encoding="utf-8")
         relative = second.relative_to(target).as_posix(); baseline_path = target / ".starter-harness-relational.json"; baseline = json.loads(baseline_path.read_text(encoding="utf-8")); baseline["files"][relative] = hashlib.sha256(second.read_bytes()).hexdigest(); baseline["modes"][relative] = 0o644; baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
-        plan = json.loads(plan_path.read_text(encoding="utf-8")); plan["relationalBaseline"]["sha256"] = hashlib.sha256(baseline_path.read_bytes()).hexdigest(); plan["migrations"].append({"version": "2", "description": "add chain probe", "path": relative, "sha256": hashlib.sha256(second.read_bytes()).hexdigest()}); plan_path.write_text(json.dumps(plan), encoding="utf-8")
+        plan = json.loads(plan_path.read_text(encoding="utf-8")); physical_path = target / plan["physicalModel"]["path"]; contract_path = target / plan["physicalContract"]["path"]; physical = json.loads(physical_path.read_text(encoding="utf-8")); contract = json.loads(contract_path.read_text(encoding="utf-8")); requirement = contract["traceability"][0]["requirementRefs"][0]
+        physical["queryPatterns"] = [{"queryPatternId": "leave-by-start-date", "description": "Find leave requests by start date.", "tableId": "leave-requests-table", "columnIds": ["leave-start-date-column"], "requirementRefs": [requirement]}]; physical["tables"][0]["indexes"] = [{"indexId": "leave-start-date-index", "name": "idx_leave_requests_start_date", "columnIds": ["leave-start-date-column"], "unique": False, "queryPatternRefs": ["leave-by-start-date"]}]; physical_path.write_text(json.dumps(physical), encoding="utf-8"); contract["physicalModelSha256"] = hashlib.sha256(physical_path.read_bytes()).hexdigest(); contract["approval"]["approvedContentSha256"] = approval_content_hash(contract); contract_path.write_text(json.dumps(contract), encoding="utf-8")
+        plan["physicalModel"]["sha256"] = hashlib.sha256(physical_path.read_bytes()).hexdigest(); plan["physicalContract"]["sha256"] = hashlib.sha256(contract_path.read_bytes()).hexdigest(); plan["relationalBaseline"]["sha256"] = hashlib.sha256(baseline_path.read_bytes()).hexdigest(); plan["migrations"].append({"version": "2", "description": "add chain probe", "path": relative, "sha256": hashlib.sha256(second.read_bytes()).hexdigest()}); plan_path.write_text(json.dumps(plan), encoding="utf-8")
         approval = json.loads(approval_path.read_text(encoding="utf-8")); approval["planSha256"] = hashlib.sha256(plan_path.read_bytes()).hexdigest(); approval_path.write_text(json.dumps(approval), encoding="utf-8")
         invocation = [sys.executable, str(SCRIPTS / "run_relational_migration_verification.py"), *arguments[1:]]
         result = subprocess.run(invocation, text=True, timeout=1200, check=False)
@@ -49,6 +52,8 @@ def main() -> int:
         print(f"DOCKER_SERVER_VERSION: {report['runtime']['dockerServerVersion']}")
         for name, evidence in report["result"]["images"].items(): print(f"IMAGE_{name.upper()}_ID: {evidence['imageId']}")
         print(f"APPLIED_MIGRATION_VERSIONS: {','.join(item['version'] for item in report['result']['appliedMigrations'])}")
+        print(f"SCHEMA_FINGERPRINT_STATE: {report['result']['schemaFingerprint']['state']}")
+        print(f"SCHEMA_FINGERPRINT_SHA256: {report['result']['schemaFingerprint']['actualSha256']}")
         print(f"LABELED_RESOURCES_REMAIN: {'no' if clean else 'yes'}")
         print("TARGET_DATABASE_ACCESSED: no\nPERSISTENT_VOLUME_CREATED: no")
         return 0 if passed else 1
