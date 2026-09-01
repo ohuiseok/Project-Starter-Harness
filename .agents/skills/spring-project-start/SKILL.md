@@ -182,6 +182,9 @@ may use only disposable internal-network containers and tmpfs, must clean up on
 every path, and must never use project credentials or contact a target database.
 If its pending journal remains, do not rerun verification; recover only its
 exact labeled resources with `recover_relational_migration_verification.py`.
+Verification plan v2 owns an ordered, non-empty versioned migration chain. A
+legacy single-migration v1 plan must be migrated to a separate draft with
+`migrate_relational_migration_verification_plan_v2.py` and approved again.
 
 ## Technology Selection
 

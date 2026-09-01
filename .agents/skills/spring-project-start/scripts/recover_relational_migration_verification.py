@@ -21,18 +21,20 @@ def validate_journal(document: dict, target: Path) -> tuple[str, list[str], str]
     if not isinstance(document, dict): raise ValueError("migration verification journal is invalid")
     required = {"migrationVerificationJournalVersion", "state", "target", "planSha256", "planId", "createdAt", "label", "resources"}
     if document.get("state") == "CLEANUP_REQUIRED": required.add("cleanup")
-    if not isinstance(document, dict) or set(document) != required or document.get("migrationVerificationJournalVersion") != 1: raise ValueError("migration verification journal is invalid")
+    journal_version = document.get("migrationVerificationJournalVersion")
+    if set(document) != required or journal_version not in {1, 2}: raise ValueError("migration verification journal is invalid")
     if document["state"] not in {"RUNNING", "CLEANUP_REQUIRED"} or Path(str(document["target"])).resolve() != target: raise ValueError("migration verification journal target or state is invalid")
     if document["label"] != RESOURCE_LABEL: raise ValueError("migration verification resource label is invalid")
     resources = document["resources"]
     if not isinstance(resources, dict) or set(resources) != {"network", "databaseContainer", "flywayContainers"}: raise ValueError("migration verification resources are invalid")
     flyway = resources["flywayContainers"]
-    if not isinstance(flyway, dict) or set(flyway) != {"migrate", "validate"}: raise ValueError("migration verification Flyway resources are invalid")
+    actions = {1: {"migrate", "validate"}, 2: {"migrate", "validate", "info"}}[journal_version]
+    if not isinstance(flyway, dict) or set(flyway) != actions: raise ValueError("migration verification Flyway resources are invalid")
     match = re.fullmatch(r"harness-verify-([a-f0-9]{12})", resources["network"] if isinstance(resources["network"], str) else "")
     if not match or not SUFFIX.fullmatch(match.group(1)): raise ValueError("migration verification network name is unsafe")
-    suffix = match.group(1); expected = {"databaseContainer": f"harness-postgres-{suffix}", "migrate": f"harness-flyway-migrate-{suffix}", "validate": f"harness-flyway-validate-{suffix}"}
-    if resources["databaseContainer"] != expected["databaseContainer"] or flyway != {"migrate": expected["migrate"], "validate": expected["validate"]}: raise ValueError("migration verification resource names do not share the journal suffix")
-    return resources["network"], [resources["databaseContainer"], flyway["migrate"], flyway["validate"]], suffix
+    suffix = match.group(1); expected_database = f"harness-postgres-{suffix}"; expected_flyway = {action: f"harness-flyway-{action}-{suffix}" for action in actions}
+    if resources["databaseContainer"] != expected_database or flyway != expected_flyway: raise ValueError("migration verification resource names do not share the journal suffix")
+    return resources["network"], [expected_database, *(flyway[action] for action in sorted(actions))], suffix
 
 
 def labeled(resource_type: str, name: str) -> bool | None:

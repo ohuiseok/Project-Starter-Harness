@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -27,7 +28,12 @@ def main() -> int:
     if available.returncode:
         print("DOCKER_SMOKE_STATE: UNKNOWN"); print("REASON: Docker Engine is unavailable"); return 3
     with tempfile.TemporaryDirectory(prefix="harness-docker-smoke-") as directory:
-        target = Path(directory); fixture = RelationalMigrationVerificationTests(); _, _, output, arguments = fixture.fixture(target)
+        target = Path(directory); fixture = RelationalMigrationVerificationTests(); plan_path, approval_path, output, arguments = fixture.fixture(target)
+        second = target / "src/main/resources/db/migration/V2__add_chain_probe.sql"
+        second.write_text("ALTER TABLE public.leave_requests ADD COLUMN chain_probe boolean NOT NULL DEFAULT false;\n", encoding="utf-8")
+        relative = second.relative_to(target).as_posix(); baseline_path = target / ".starter-harness-relational.json"; baseline = json.loads(baseline_path.read_text(encoding="utf-8")); baseline["files"][relative] = hashlib.sha256(second.read_bytes()).hexdigest(); baseline["modes"][relative] = 0o644; baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+        plan = json.loads(plan_path.read_text(encoding="utf-8")); plan["relationalBaseline"]["sha256"] = hashlib.sha256(baseline_path.read_bytes()).hexdigest(); plan["migrations"].append({"version": "2", "description": "add chain probe", "path": relative, "sha256": hashlib.sha256(second.read_bytes()).hexdigest()}); plan_path.write_text(json.dumps(plan), encoding="utf-8")
+        approval = json.loads(approval_path.read_text(encoding="utf-8")); approval["planSha256"] = hashlib.sha256(plan_path.read_bytes()).hexdigest(); approval_path.write_text(json.dumps(approval), encoding="utf-8")
         invocation = [sys.executable, str(SCRIPTS / "run_relational_migration_verification.py"), *arguments[1:]]
         result = subprocess.run(invocation, text=True, timeout=1200, check=False)
         if not output.is_file(): print("DOCKER_SMOKE_STATE: FAILED\nREASON: verification report was not written"); return 1
@@ -42,6 +48,7 @@ def main() -> int:
             for event in report["result"]["events"][-3:]: print(f"LAST_EVENT: {event['step']} · exit {event['exitCode']} · {event['output'][-500:].strip()}")
         print(f"DOCKER_SERVER_VERSION: {report['runtime']['dockerServerVersion']}")
         for name, evidence in report["result"]["images"].items(): print(f"IMAGE_{name.upper()}_ID: {evidence['imageId']}")
+        print(f"APPLIED_MIGRATION_VERSIONS: {','.join(item['version'] for item in report['result']['appliedMigrations'])}")
         print(f"LABELED_RESOURCES_REMAIN: {'no' if clean else 'yes'}")
         print("TARGET_DATABASE_ACCESSED: no\nPERSISTENT_VOLUME_CREATED: no")
         return 0 if passed else 1

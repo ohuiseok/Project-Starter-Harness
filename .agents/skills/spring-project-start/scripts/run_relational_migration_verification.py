@@ -25,6 +25,7 @@ from validate_feature_specs import load_object
 NAME = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 PLAN_ID = re.compile(r"^[a-z][a-z0-9-]*$")
 IMAGE = re.compile(r"^[a-z0-9][a-z0-9._/-]*(?::[A-Za-z0-9][A-Za-z0-9._-]*|@sha256:[a-f0-9]{64})$")
+VERSIONED_FILE = re.compile(r"^V([0-9]+(?:[._][0-9]+)*)__([A-Za-z0-9][A-Za-z0-9._-]*)\.sql$")
 MAX_OUTPUT = 12000
 JOURNAL_PATH = Path(".starter-harness/verification/pending.json")
 RESOURCE_LABEL = "starter-harness.relational-verification=true"
@@ -40,9 +41,16 @@ def relative(value: object) -> str:
     return value
 
 
-def validate_plan(plan: dict, plan_path: Path, target: Path) -> tuple[Path, dict]:
-    required = {"migrationVerificationPlanVersion", "planId", "target", "relationalBaseline", "migration", "database", "images", "limits", "isolation"}
-    if not isinstance(plan, dict) or set(plan) != required or plan["migrationVerificationPlanVersion"] != 1: raise ValueError("migration verification plan is invalid")
+def version_key(value: str) -> tuple[int, ...]:
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)*", value): raise ValueError("migration version must use canonical numeric dot notation")
+    parts = [int(part) for part in value.split(".")]
+    while len(parts) > 1 and parts[-1] == 0: parts.pop()
+    return tuple(parts)
+
+
+def validate_plan(plan: dict, plan_path: Path, target: Path) -> tuple[list[Path], dict]:
+    required = {"migrationVerificationPlanVersion", "planId", "target", "relationalBaseline", "migrations", "database", "images", "limits", "isolation"}
+    if not isinstance(plan, dict) or set(plan) != required or plan["migrationVerificationPlanVersion"] != 2: raise ValueError("migration verification plan is invalid; migrate legacy version 1 plans before approval")
     if not isinstance(plan["planId"], str) or not PLAN_ID.fullmatch(plan["planId"]): raise ValueError("verification planId is invalid")
     root = target.resolve(strict=True)
     if Path(str(plan["target"])).resolve() != root: raise ValueError("verification plan target does not match")
@@ -51,12 +59,30 @@ def validate_plan(plan: dict, plan_path: Path, target: Path) -> tuple[Path, dict
     validate_sha(baseline_ref["sha256"], "verification baseline hash")
     if baseline_path.is_symlink() or not baseline_path.is_file() or sha(baseline_path) != baseline_ref["sha256"]: raise ValueError("relational baseline changed after verification planning")
     validate_existing_baseline(baseline_path); baseline = load_object(baseline_path)
-    migration_ref = plan["migration"]
-    if not isinstance(migration_ref, dict) or set(migration_ref) != {"path", "sha256"}: raise ValueError("migration reference is invalid")
-    migration_name = relative(migration_ref["path"]); migration = root / migration_name
-    validate_sha(migration_ref["sha256"], "migration hash")
-    if migration.is_symlink() or not migration.is_file() or sha(migration) != migration_ref["sha256"]: raise ValueError("migration changed after verification planning")
-    if baseline["files"].get(migration_name) != migration_ref["sha256"]: raise ValueError("migration is not owned by the current relational baseline")
+    migration_refs = plan["migrations"]
+    if not isinstance(migration_refs, list) or not migration_refs: raise ValueError("at least one versioned migration is required")
+    migrations = []; migration_names = []; seen_versions = set(); previous = None
+    for index, migration_ref in enumerate(migration_refs):
+        if not isinstance(migration_ref, dict) or set(migration_ref) != {"version", "description", "path", "sha256"}: raise ValueError(f"migration reference {index + 1} is invalid")
+        key = version_key(migration_ref["version"])
+        if key in seen_versions: raise ValueError(f"duplicate Flyway migration version: {migration_ref['version']}")
+        if previous is not None and key <= previous: raise ValueError("migration chain must be in ascending Flyway version order")
+        seen_versions.add(key); previous = key
+        migration_name = relative(migration_ref["path"]); migration = root / migration_name; filename = VERSIONED_FILE.fullmatch(migration.name)
+        if not filename or tuple(int(part) for part in re.split(r"[._]", filename.group(1))) != key or filename.group(2).replace("_", " ") != migration_ref["description"]: raise ValueError(f"migration identity does not match its Flyway filename: {migration_name}")
+        validate_sha(migration_ref["sha256"], f"migration {migration_ref['version']} hash")
+        if migration.is_symlink() or not migration.is_file() or sha(migration) != migration_ref["sha256"]: raise ValueError(f"migration changed after verification planning: {migration_name}")
+        if baseline["files"].get(migration_name) != migration_ref["sha256"]: raise ValueError(f"migration is not owned by the current relational baseline: {migration_name}")
+        migrations.append(migration); migration_names.append(migration_name)
+    parents = {PurePosixPath(name).parent for name in migration_names}
+    if len(parents) != 1: raise ValueError("one verification plan must contain one migration directory chain")
+    parent = next(iter(parents)); planned_names = set(migration_names); target_version = previous
+    required_names = set()
+    for owned_name in baseline["files"]:
+        owned_path = PurePosixPath(owned_name); match = VERSIONED_FILE.fullmatch(owned_path.name)
+        if owned_path.parent == parent and match and version_key(".".join(match.group(1).replace("_", ".").split("."))) <= target_version: required_names.add(owned_name)
+    missing = sorted(required_names - planned_names)
+    if missing: raise ValueError(f"migration chain omits baseline-owned versioned migration at or below the target: {', '.join(missing)}")
     database = plan["database"]
     if not isinstance(database, dict) or set(database) != {"name", "schema"} or any(not isinstance(database[key], str) or not NAME.fullmatch(database[key]) for key in database): raise ValueError("verification database identifiers are invalid")
     images = plan["images"]
@@ -69,7 +95,7 @@ def validate_plan(plan: dict, plan_path: Path, target: Path) -> tuple[Path, dict
     expected_isolation = {"publishPorts": False, "persistentVolumes": False, "targetDatabaseAccess": False, "cleanupRequired": True}
     if plan["isolation"] != expected_isolation: raise ValueError("verification isolation guarantees are invalid")
     if plan_path.is_symlink() or root not in (plan_path.resolve(), *plan_path.resolve().parents): raise ValueError("verification plan must be a target-owned regular file")
-    return migration, baseline
+    return migrations, baseline
 
 
 def validate_approval(approval: dict, plan_path: Path, target: Path) -> None:
@@ -129,7 +155,7 @@ def atomic_json(document: dict, destination: Path) -> None:
 
 def execution_resources(plan: dict, target: Path, plan_path: Path) -> dict:
     suffix = secrets.token_hex(6)
-    return {"migrationVerificationJournalVersion": 1, "state": "RUNNING", "target": str(target), "planSha256": sha(plan_path), "planId": plan["planId"], "createdAt": dt.datetime.now(dt.timezone.utc).isoformat(), "label": RESOURCE_LABEL, "resources": {"network": f"harness-verify-{suffix}", "databaseContainer": f"harness-postgres-{suffix}", "flywayContainers": {action: f"harness-flyway-{action}-{suffix}" for action in ("migrate", "validate")}}}
+    return {"migrationVerificationJournalVersion": 2, "state": "RUNNING", "target": str(target), "planSha256": sha(plan_path), "planId": plan["planId"], "createdAt": dt.datetime.now(dt.timezone.utc).isoformat(), "label": RESOURCE_LABEL, "resources": {"network": f"harness-verify-{suffix}", "databaseContainer": f"harness-postgres-{suffix}", "flywayContainers": {action: f"harness-flyway-{action}-{suffix}" for action in ("migrate", "validate", "info")}}}
 
 
 def validate_storage(root: Path) -> None:
@@ -137,13 +163,30 @@ def validate_storage(root: Path) -> None:
         if directory.exists() and (directory.is_symlink() or not directory.is_dir()): raise ValueError(f"verification evidence directory is unsafe: {directory.relative_to(root)}")
 
 
-def execute(plan: dict, migration: Path, journal: dict) -> dict:
+def applied_chain(info_output: str, expected: list[dict]) -> list[dict]:
+    try: document = json.loads(info_output)
+    except json.JSONDecodeError as error: raise ValueError("Flyway info JSON output is invalid") from error
+    migrations = document.get("migrations") if isinstance(document, dict) else None
+    if not isinstance(migrations, list): raise ValueError("Flyway info JSON does not contain migrations")
+    actual = []
+    for item in migrations:
+        if not isinstance(item, dict) or item.get("category") != "Versioned": continue
+        version = item.get("version"); description = item.get("description"); state = item.get("state")
+        if not all(isinstance(value, str) for value in (version, description, state)): raise ValueError("Flyway versioned migration evidence is incomplete")
+        actual.append({"version": version, "description": description, "state": state})
+    if len(actual) != len(expected): raise ValueError("Flyway applied migration count does not match the approved chain")
+    for planned, observed in zip(expected, actual):
+        if version_key(observed["version"].replace("_", ".")) != version_key(planned["version"]) or observed["description"] != planned["description"] or observed["state"].lower() != "success": raise ValueError(f"Flyway applied history does not match approved migration {planned['version']}")
+    return actual
+
+
+def execute(plan: dict, migrations: list[Path], journal: dict) -> dict:
     resources = journal["resources"]; network = resources["network"]; database_container = resources["databaseContainer"]; password = secrets.token_urlsafe(32); user = "harness_verify"; database = plan["database"]["name"]; timeout = plan["limits"]["commandTimeoutSeconds"]
     flyway_containers = resources["flywayContainers"]
     events = []; images = {}; cleanup = {"databaseContainerRemoved": False, "flywayContainersRemoved": False, "networkRemoved": False}; env_file_name = None; migration_stage = tempfile.TemporaryDirectory(prefix="harness-migration-")
     try:
         for name, reference in plan["images"].items(): images[name] = prepare_image(reference, timeout, events)
-        staged_migration = Path(migration_stage.name) / migration.name; shutil.copy2(migration, staged_migration)
+        for migration in migrations: shutil.copy2(migration, Path(migration_stage.name) / migration.name)
         with tempfile.NamedTemporaryFile("w", prefix="harness-flyway-", suffix=".env", delete=False) as env_file:
             env_file.write(f"POSTGRES_DB={database}\nPOSTGRES_USER={user}\nPOSTGRES_PASSWORD={password}\nFLYWAY_URL=jdbc:postgresql://{database_container}:5432/{database}\nFLYWAY_USER={user}\nFLYWAY_PASSWORD={password}\nFLYWAY_LOCATIONS=filesystem:/flyway/sql\nFLYWAY_SCHEMAS={plan['database']['schema']}\n")
             env_file_name = env_file.name
@@ -165,11 +208,14 @@ def execute(plan: dict, migration: Path, journal: dict) -> dict:
             if time.monotonic() >= deadline: raise ValueError("isolated PostgreSQL startup timed out")
             time.sleep(0.25)
         mount = f"type=bind,source={Path(migration_stage.name).resolve()},destination=/flyway/sql,readonly"
-        for action in ("migrate", "validate"):
+        applied_migrations = []
+        for action in ("migrate", "validate", "info"):
             progress("FLYWAY", action)
             command = ["docker", "run", "--rm", "--name", flyway_containers[action], "--label", RESOURCE_LABEL, "--network", network, "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=67108864", "--security-opt", "no-new-privileges", "--memory", "1g", "--cpus", "1", "--pids-limit", "512", "--env-file", env_file_name, "--mount", mount, images["flyway"]["imageId"], action]
+            if action == "info": command.append("-outputType=json")
             result = run(command, timeout); events.append({"step": f"flyway {action}", "exitCode": result.returncode, "output": bounded(result.stdout + result.stderr, password)})
             if result.returncode: raise ValueError(f"Flyway {action} failed in isolated PostgreSQL")
+            if action == "info": applied_migrations = applied_chain(result.stdout, plan["migrations"])
         state = "PASSED"
     except (OSError, subprocess.TimeoutExpired, ValueError) as error:
         state = "FAILED"; failure = str(error)
@@ -192,7 +238,7 @@ def execute(plan: dict, migration: Path, journal: dict) -> dict:
         except (OSError, subprocess.TimeoutExpired): cleanup["networkRemoved"] = False
     if not all(cleanup.values()): state = "CLEANUP_FAILED"; failure = "isolated Docker resources could not be fully removed"
     progress("CLEANUP", "임시 Docker 자원 정리 확인")
-    result = {"state": state, "events": events, "cleanup": cleanup, "images": images, "targetDatabaseAccessed": False, "targetSourceFilesChanged": False, "persistentVolumeCreated": False}
+    result = {"state": state, "events": events, "cleanup": cleanup, "images": images, "appliedMigrations": applied_migrations if "applied_migrations" in locals() else [], "targetDatabaseAccessed": False, "targetSourceFilesChanged": False, "persistentVolumeCreated": False}
     if state != "PASSED": result["failure"] = failure
     return result
 
@@ -208,14 +254,14 @@ def main() -> int:
         if args.output.exists(): raise ValueError("verification output already exists")
         validate_storage(root); journal_path = root / JOURNAL_PATH
         if journal_path.exists(): raise ValueError(f"unfinished migration verification journal exists: {JOURNAL_PATH}; recover it before retrying")
-        plan = load_object(args.plan); migration, _ = validate_plan(plan, args.plan, root); approval = load_object(args.approval); validate_approval(approval, args.plan, root)
+        plan = load_object(args.plan); migrations, _ = validate_plan(plan, args.plan, root); approval = load_object(args.approval); validate_approval(approval, args.plan, root)
         docker = run(["docker", "version", "--format", "{{.Server.Version}}"], 20)
         if docker.returncode: raise ValueError("Docker Engine is unavailable")
         journal = execution_resources(plan, root, args.plan); atomic_json(journal, journal_path)
-        execution = execute(plan, migration, journal)
+        execution = execute(plan, migrations, journal)
         if execution["state"] == "CLEANUP_FAILED":
             journal["state"] = "CLEANUP_REQUIRED"; journal["cleanup"] = execution["cleanup"]; atomic_json(journal, journal_path)
-        report = {"migrationVerificationReportVersion": 2, "plan": {"path": str(args.plan.resolve()), "sha256": sha(args.plan)}, "approval": {"path": str(args.approval.resolve()), "sha256": sha(args.approval), "approvedBy": approval["approvedBy"], "approvedAt": approval["approvedAt"]}, "target": str(root), "executedAt": dt.datetime.now(dt.timezone.utc).isoformat(), "runtime": {"dockerServerVersion": docker.stdout.strip()}, "result": execution}
+        report = {"migrationVerificationReportVersion": 3, "plan": {"path": str(args.plan.resolve()), "sha256": sha(args.plan)}, "approval": {"path": str(args.approval.resolve()), "sha256": sha(args.approval), "approvedBy": approval["approvedBy"], "approvedAt": approval["approvedAt"]}, "target": str(root), "executedAt": dt.datetime.now(dt.timezone.utc).isoformat(), "runtime": {"dockerServerVersion": docker.stdout.strip()}, "result": execution}
         atomic_json(report, args.output)
         if execution["state"] != "CLEANUP_FAILED": journal_path.unlink()
     except (OSError, ValueError, subprocess.TimeoutExpired) as error: print(f"RELATIONAL_MIGRATION_VERIFICATION_VALID: no\nERROR: {error}", file=sys.stderr); return 1

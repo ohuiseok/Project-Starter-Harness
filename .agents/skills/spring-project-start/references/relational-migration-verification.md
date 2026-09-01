@@ -1,15 +1,18 @@
 # Isolated Relational Migration Verification
 
-This milestone executes only an already-applied, baseline-owned Flyway migration
-against a disposable PostgreSQL container. It requires a separate exact-plan
+This milestone executes an ordered chain of already-applied, baseline-owned
+versioned Flyway migrations against a disposable PostgreSQL container. It
+requires a separate exact-plan
 approval because Docker image pulls, containers, a private network, processes,
 and temporary memory are real host-side effects.
 
 The runner uses pinned PostgreSQL and Flyway image references, no published
 ports, no persistent volume, a bounded tmpfs data directory, a random ephemeral
 credential passed through a mode-0600 temporary env file, command timeouts, and
-unique labeled resource names. It runs `flyway migrate` followed by
-`flyway validate`, records only redacted bounded output, and always attempts to
+unique labeled resource names. It stages only the exact approved chain, runs
+`flyway migrate`, `flyway validate`, and JSON `flyway info`, then compares the
+successful versioned history with the approved versions and descriptions. It
+records only redacted bounded output and always attempts to
 remove the database container and network. It never reads application secrets,
 connects to a configured or production database, starts the project's Compose
 service, or changes target source files. It writes only its evidence report.
@@ -28,8 +31,21 @@ Docker tmpfs is removed with the container, but on hosts configured with swap
 the operating system may write memory pages to swap. The plan view must disclose
 this limitation.
 
-Successful verification proves that the approved migration executes and
-validates in the selected isolated PostgreSQL/Flyway image pair. It does not
+Plan version 2 requires a non-empty `migrations` array. Every item fixes the
+canonical numeric-dot version, Flyway description, target-relative path, and
+SHA-256. Versions must be unique and ascending but need not be contiguous. Each
+path must be a supported `V...__....sql` file owned by the current relational
+baseline. Repeatable, undo, baseline-on-migrate, repair, and out-of-order flows
+are outside this milestone. A version 1 plan must be migrated into a separate
+version 2 draft and explicitly approved again.
+Within the selected migration directory, the plan must include every
+baseline-owned versioned migration at or below its target version; this prevents
+an intermediate dependency from being silently omitted. A different store or
+service migration directory requires its own verification plan.
+
+Successful verification proves that the approved migration chain executes,
+validates, and matches Flyway's successful history in the selected isolated
+PostgreSQL/Flyway image pair. It does not
 prove production permissions, production data compatibility, lock duration,
 rollback behavior, performance, or deployment success.
 
