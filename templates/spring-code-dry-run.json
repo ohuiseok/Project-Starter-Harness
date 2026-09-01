@@ -1,0 +1,14 @@
+{
+  "springCodeDryRunVersion": 1,
+  "implementationPlan": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "target": "UNKNOWN",
+  "baseline": null,
+  "userFlow": {"name": "UNKNOWN", "trigger": "UNKNOWN", "steps": [], "outcome": "UNKNOWN"},
+  "qualityChecks": [],
+  "generatedFiles": [],
+  "plannedChanges": {"state": "NOT_COMPUTED", "creates": [], "updates": [], "conflicts": [], "unchanged": [], "desiredManifest": {"manifestVersion": 1, "files": {}, "modes": {}}},
+  "verification": {"compilation": "NOT_RUN", "automatedTests": "NOT_RUN", "reason": "Dry run does not execute target code."},
+  "targetSourceChanged": false,
+  "readyForApproval": false,
+  "executionReady": false
+}

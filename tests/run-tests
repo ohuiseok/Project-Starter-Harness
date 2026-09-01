@@ -250,6 +250,7 @@ for required in \
   "$SKILL_ROOT/references/relational-migration-verification.md" \
   "$SKILL_ROOT/references/spring-implementation-planning.md" \
   "$SKILL_ROOT/references/spring-implementation-capabilities.json" \
+  "$SKILL_ROOT/references/spring-code-dry-runs.md" \
   "$SKILL_ROOT/scripts/create_relational_physical_contract.py" \
   "$SKILL_ROOT/scripts/validate_relational_physical_contract.py" \
   "$SKILL_ROOT/scripts/render_relational_physical_contract.py" \
@@ -270,6 +271,9 @@ for required in \
   "$SKILL_ROOT/scripts/validate_spring_implementation_plan.py" \
   "$SKILL_ROOT/scripts/render_spring_implementation_plan.py" \
   "$SKILL_ROOT/scripts/record_spring_implementation_plan_approval.py" \
+  "$SKILL_ROOT/scripts/spring_code_dry_run.py" \
+  "$SKILL_ROOT/scripts/render_spring_code_dry_run.py" \
+  "$SKILL_ROOT/scripts/render_spring_code_dry_run_markdown.py" \
   "$HARNESS_ROOT/templates/project-profile.md" \
   "$HARNESS_ROOT/templates/project-profile.json" \
   "$HARNESS_ROOT/templates/generation-plan.json" \
@@ -290,7 +294,8 @@ for required in \
   "$HARNESS_ROOT/templates/relational-artifact-baseline.json" \
   "$HARNESS_ROOT/templates/relational-migration-verification-plan.json" \
   "$HARNESS_ROOT/templates/relational-migration-verification-approval.json" \
-  "$HARNESS_ROOT/templates/implementation-plan.json"; do
+  "$HARNESS_ROOT/templates/implementation-plan.json" \
+  "$HARNESS_ROOT/templates/spring-code-dry-run.json"; do
   if [ -f "$required" ]; then
     pass "starter contract: $(basename "$required") exists"
   else
@@ -504,6 +509,11 @@ OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_implementation_plan.py" 2>&1)"
 CODE=$?
 expect_code "Spring implementation planning: focused regression suite passes" 0
 expect_out "Spring implementation planning: all focused scenarios ran" "Ran 6 tests"
+
+OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_code_dry_run.py" 2>&1)"
+CODE=$?
+expect_code "Spring code dry run: focused regression suite passes" 0
+expect_out "Spring code dry run: all focused scenarios ran" "Ran 7 tests"
 
 OUT="$(python3 "$SKILL_ROOT/scripts/validate_feature_specs.py" \
   --project-brief "$HARNESS_ROOT/templates/project-brief.json" 2>&1)"

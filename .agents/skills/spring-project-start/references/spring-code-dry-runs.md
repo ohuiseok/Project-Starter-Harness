@@ -1,0 +1,18 @@
+# Spring Code Dry Runs
+
+A code dry run reviews an exact candidate implementation without applying it.
+The candidate is rendered in temporary storage by the agent and must match every
+component and path in an approved implementation plan. Extra and missing files
+are blocking, even when they look useful.
+
+The first milestone accepts Java files only. It checks package and public type
+identity, required Spring stereotypes, the service-owned write transaction,
+API/entity separation, and requirement references in the planned automated
+tests. These lexical checks are safety gates, not proof that code compiles or
+behaves correctly. Compilation and tests remain `NOT_RUN` until a separately
+approved apply milestone.
+
+The user view begins with behavior, change counts, architecture checks, and
+unresolved conflicts. Exact source previews and SHA-256 values are details.
+A clear report is reviewable but never executable. Updates require the canonical
+implementation baseline; an unrelated existing file is always a conflict.

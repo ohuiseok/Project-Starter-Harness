@@ -200,6 +200,16 @@ dry run. Planning and approval must not create or modify source, build,
 configuration, migration, or test files, and do not authorize test execution,
 commit, or push in the target repository.
 
+After exact implementation-plan approval, read
+`references/spring-code-dry-runs.md`. Render the proposed Java files only in
+temporary storage and run `render_spring_code_dry_run.py`. Candidate files must
+exactly match the approved component graph; missing or extra files, identity or
+Spring-role mismatches, API/entity leakage, missing requirement traceability,
+unowned target content, and stale inputs are blocking. Render the user-first
+Markdown view with `render_spring_code_dry_run_markdown.py`. A clear report is
+ready only for review of a later atomic apply. It must not change target source,
+compile code, run tests, access databases or containers, commit, or push.
+
 ## Technology Selection
 
 For a new project, a missing profile, or a requested stack change, read
