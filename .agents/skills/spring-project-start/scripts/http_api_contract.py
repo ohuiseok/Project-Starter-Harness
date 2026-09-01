@@ -49,6 +49,30 @@ def operations(document: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]
     return result
 
 
+def resolve_local_ref(
+    document: dict[str, Any], value: Any, location: str, stack: tuple[str, ...] = (),
+) -> Any:
+    """Resolve one local OpenAPI component reference for semantic validation."""
+    if not isinstance(value, dict) or "$ref" not in value:
+        return value
+    reference = text(value["$ref"], f"{location}.$ref", False)
+    if not reference.startswith("#/"):
+        return value
+    if reference in stack:
+        raise ValueError(f"{location} contains a cyclic local OpenAPI reference: {reference}")
+    current: Any = document
+    for raw in reference[2:].split("/"):
+        token = raw.replace("~1", "/").replace("~0", "~")
+        if not isinstance(current, dict) or token not in current:
+            raise ValueError(f"{location} has an unresolved local OpenAPI reference: {reference}")
+        current = current[token]
+    if not isinstance(current, dict):
+        raise ValueError(f"{location} local OpenAPI reference must resolve to an object: {reference}")
+    resolved = resolve_local_ref(document, current, location, stack + (reference,))
+    siblings = {key: child for key, child in value.items() if key != "$ref"}
+    return {**resolved, **siblings} if siblings else resolved
+
+
 def derived_traceability(document: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {
@@ -130,9 +154,10 @@ def validate_openapi(
             raise ValueError(f"{location}.responses must be a non-empty object")
         if not any(str(code).startswith("2") for code in responses):
             blockers.append(f"operation has no success response: {operation_id}")
-        for code, response in responses.items():
+        for code, response_value in responses.items():
             if code != "default" and not STATUS.fullmatch(str(code)):
                 raise ValueError(f"{location}.responses has invalid status code: {code}")
+            response = resolve_local_ref(document, response_value, f"{location}.responses.{code}")
             if not isinstance(response, dict) or (
                 "$ref" not in response and not isinstance(response.get("description"), str)
             ):
@@ -146,9 +171,9 @@ def validate_openapi(
         if request_body is not None:
             if not isinstance(request_body, dict):
                 raise ValueError(f"{location}.requestBody must be an object")
-            if "$ref" in request_body:
-                pass
-            elif not isinstance(request_body.get("content"), dict):
+            request_body = resolve_local_ref(document, request_body, f"{location}.requestBody")
+            external_request_body = isinstance(request_body.get("$ref"), str) and not request_body["$ref"].startswith("#/")
+            if not external_request_body and not isinstance(request_body.get("content"), dict):
                 raise ValueError(f"{location}.requestBody requires content")
             for media_type, media in request_body.get("content", {}).items():
                 if not isinstance(media, dict) or "schema" not in media:
@@ -171,8 +196,11 @@ def validate_openapi(
         for owner in (path_item, operation):
             if isinstance(owner.get("parameters"), list):
                 parameters.extend(owner["parameters"])
+        resolved_parameters = [
+            resolve_local_ref(document, item, f"{location}.parameters") for item in parameters
+        ]
         declared = {
-            item.get("name") for item in parameters
+            item.get("name") for item in resolved_parameters
             if isinstance(item, dict) and item.get("in") == "path" and item.get("required") is True
         }
         if placeholders != declared:

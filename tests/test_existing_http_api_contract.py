@@ -18,7 +18,7 @@ SCRIPTS = ROOT / ".agents/skills/spring-project-start/scripts"
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(SCRIPTS))
 
-from existing_http_api_contract import compare_openapi, validate_existing_contract  # noqa: E402
+from existing_http_api_contract import compare_openapi, controller_mappings, validate_existing_contract  # noqa: E402
 from migrate_existing_http_api_contract_v2 import migrate  # noqa: E402
 import record_existing_http_api_contract_approval  # noqa: E402
 from render_existing_http_api_contract import render, render_recovery  # noqa: E402
@@ -170,6 +170,46 @@ class ExistingHttpApiContractTests(unittest.TestCase):
         report = compare_openapi(baseline, proposed, "http-api")
         self.assertTrue(any(item["code"] == "REQUEST_SCHEMA_CHANGED" and item["level"] == "BREAKING" for item in report["changes"]))
 
+    def test_component_request_body_ref_change_is_compared_by_meaning(self) -> None:
+        baseline = openapi()
+        operation = baseline["paths"]["/api/leave-requests"]["post"]
+        baseline["components"]["requestBodies"] = {"LeaveRequest": operation.pop("requestBody")}
+        operation["requestBody"] = {"$ref": "#/components/requestBodies/LeaveRequest"}
+        proposed = copy.deepcopy(baseline)
+        schema = proposed["components"]["requestBodies"]["LeaveRequest"]["content"]["application/json"]["schema"]
+        schema.update({"properties": {"reason": {"type": "string"}}, "required": ["reason"]})
+        report = compare_openapi(baseline, proposed, "http-api")
+        self.assertTrue(any(item["code"] == "REQUEST_SCHEMA_CHANGED" and item["level"] == "BREAKING" for item in report["changes"]))
+
+    def test_component_response_and_header_refs_are_compared(self) -> None:
+        baseline = openapi()
+        operation = baseline["paths"]["/api/leave-requests"]["post"]
+        response = operation["responses"]["201"]
+        response["headers"] = {"Location": {"$ref": "#/components/headers/Location"}}
+        response["content"] = {"application/json": {"schema": {"type": "object", "properties": {"id": {"type": "string"}}}}}
+        baseline["components"]["headers"] = {"Location": {"schema": {"type": "string"}}}
+        baseline["components"]["responses"] = {"Created": response}
+        operation["responses"]["201"] = {"$ref": "#/components/responses/Created"}
+        proposed = copy.deepcopy(baseline)
+        del proposed["components"]["responses"]["Created"]["headers"]["Location"]
+        del proposed["components"]["responses"]["Created"]["content"]["application/json"]["schema"]["properties"]["id"]
+        report = compare_openapi(baseline, proposed, "http-api")
+        self.assertTrue(any(item["code"] == "RESPONSE_HEADER_REMOVED" for item in report["changes"]))
+        self.assertTrue(any(item["code"] == "RESPONSE_SCHEMA_CHANGED" and item["level"] == "BREAKING" for item in report["changes"]))
+
+    def test_component_header_ref_definition_change_is_compared(self) -> None:
+        baseline = openapi()
+        response = baseline["paths"]["/api/leave-requests"]["post"]["responses"]["201"]
+        response["headers"] = {"Location": {"$ref": "#/components/headers/Location"}}
+        baseline["components"]["headers"] = {"Location": {"schema": {"type": "string"}}}
+        proposed = copy.deepcopy(baseline)
+        proposed["components"]["headers"]["Location"]["schema"]["type"] = "integer"
+        report = compare_openapi(baseline, proposed, "http-api")
+        self.assertTrue(any(
+            item["code"] == "RESPONSE_HEADER_CHANGED" and item["level"] == "BREAKING"
+            for item in report["changes"]
+        ))
+
     def test_partial_reuse_ignores_unselected_operation_traceability(self) -> None:
         api = openapi()
         extra = copy.deepcopy(api["paths"]["/api/leave-requests"]["post"])
@@ -201,6 +241,24 @@ class ExistingHttpApiContractTests(unittest.TestCase):
         }
         report = compare_openapi(baseline, copy.deepcopy(baseline), "http-api")
         self.assertTrue(any(item["code"] == "EXTERNAL_REF_UNRESOLVED" and item["level"] == "UNKNOWN" for item in report["changes"]))
+
+    def test_partial_reuse_ignores_external_ref_from_unselected_operation(self) -> None:
+        baseline = openapi()
+        unrelated = copy.deepcopy(baseline["paths"]["/api/leave-requests"]["post"])
+        unrelated["operationId"] = "unrelated"
+        unrelated["requestBody"]["content"]["application/json"]["schema"] = {"$ref": "https://example.test/unrelated.json"}
+        baseline["paths"]["/unrelated"] = {"post": unrelated}
+        report = compare_openapi(baseline, copy.deepcopy(baseline), "http-api", {"requestLeave"})
+        self.assertFalse(any(item["code"] == "EXTERNAL_REF_UNRESOLVED" for item in report["changes"]))
+
+    def test_partial_reuse_follows_selected_local_refs_to_external_refs(self) -> None:
+        baseline = openapi()
+        baseline["paths"]["/api/leave-requests"]["post"]["requestBody"]["content"]["application/json"]["schema"] = {
+            "$ref": "#/components/schemas/LeaveRequest"
+        }
+        baseline["components"]["schemas"] = {"LeaveRequest": {"$ref": "https://example.test/leave.json"}}
+        report = compare_openapi(baseline, copy.deepcopy(baseline), "http-api", {"requestLeave"})
+        self.assertTrue(any(item["code"] == "EXTERNAL_REF_UNRESOLVED" for item in report["changes"]))
 
     def test_review_acceptance_requires_reason_source_and_user_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -260,6 +318,38 @@ class ExistingHttpApiContractTests(unittest.TestCase):
             self.assertEqual([], validate_existing_contract(
                 metadata, design_route, route_path, root, contract_path, feature_spec(), profile()
             )[1])
+
+    def test_controller_ignores_non_path_annotation_strings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "LeaveController.java"
+            path.write_text(
+                '@RestController\n@RequestMapping(path="/api", produces="application/json")\n'
+                'class LeaveController {\n@PostMapping(value="/leave-requests", consumes="application/json") void request() {}\n}',
+                encoding="utf-8",
+            )
+            result = controller_mappings(path)
+            self.assertEqual({("post", "/api/leave-requests")}, result.mappings)
+            self.assertEqual((), result.unknowns)
+
+    def test_request_mapping_with_method_only_uses_class_base(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "LeaveController.java"
+            path.write_text(
+                '@RestController\n@RequestMapping("/api/leave-requests")\nclass LeaveController {\n'
+                '@RequestMapping(method=RequestMethod.POST) void request() {}\n}', encoding="utf-8",
+            )
+            result = controller_mappings(path)
+            self.assertEqual({("post", "/api/leave-requests")}, result.mappings)
+            self.assertEqual((), result.unknowns)
+
+    def test_controller_positional_path_array_remains_supported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "LeaveController.java"
+            path.write_text(
+                '@RestController\nclass LeaveController {\n@GetMapping({"/one", "/two"}) void list() {}\n}',
+                encoding="utf-8",
+            )
+            self.assertEqual({("get", "/one"), ("get", "/two")}, controller_mappings(path).mappings)
 
     def test_controller_substring_path_is_not_false_evidence(self) -> None:
         source = '@RestController\nclass LeaveController {\n@PostMapping("/leave") void request() {}\n}'

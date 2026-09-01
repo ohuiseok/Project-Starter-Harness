@@ -7,7 +7,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from existing_http_api_contract import validate_existing_contract
+from existing_http_api_contract import contract_assessment_status, recovery_assessment, validate_existing_contract
 from validate_feature_specs import load_object
 
 
@@ -27,8 +27,12 @@ def main() -> int:
         )
         ready = approved and not blockers
     except (OSError, ValueError) as error:
-        print(f"EXISTING_HTTP_API_CONTRACT_VALID: no\nERROR: {error}")
-        return 1
+        assessment = recovery_assessment(error)
+        print("EXISTING_HTTP_API_CONTRACT_VALID: no")
+        print(f"ASSESSMENT_STATUS: {assessment['status']}")
+        print(f"PROBLEM: {assessment['problem']}")
+        return 3
+    print(f"ASSESSMENT_STATUS: {contract_assessment_status(approved, blockers)}")
     print("EXISTING_HTTP_API_CONTRACT_VALID: yes")
     print(f"APPROVED: {'yes' if approved else 'no'}")
     print(f"CONTRACT_READY: {'yes' if ready else 'no'}")

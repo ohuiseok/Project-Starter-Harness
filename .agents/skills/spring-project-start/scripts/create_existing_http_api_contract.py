@@ -85,7 +85,8 @@ def main() -> int:
         selected_operations = [item.get("subjectRef") for item in traceability if isinstance(item, dict)]
         if not selected_operations or not all(isinstance(item, str) and item for item in selected_operations):
             raise ValueError("traceability must select at least one operation")
-        report = compare_openapi(baseline, proposed, args.contract_id)
+        comparison_scope = set(selected_operations) if disposition == "REUSE" else None
+        report = compare_openapi(baseline, proposed, args.contract_id, comparison_scope)
         report_content = encoded(report)
         metadata = {
             "contractVersion": 1, "contractId": args.contract_id, "kind": "HTTP_API",

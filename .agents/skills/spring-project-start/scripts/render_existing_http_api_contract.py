@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from existing_http_api_contract import validate_existing_contract
+from existing_http_api_contract import contract_assessment_status, recovery_assessment, validate_existing_contract
 from http_api_contract import operations
 from render_design_route import atomic_write
 from validate_feature_specs import approval_content_hash, load_object
@@ -64,6 +64,7 @@ def render(metadata: dict, openapi: dict, report: dict, blockers: list[str], fea
             "REQUEST_CONTENT_TYPE_REMOVED": "기존 요청 형식이 제거됩니다.",
             "RESPONSE_CONTENT_TYPE_REMOVED": "기존 응답 형식이 제거됩니다.",
             "RESPONSE_HEADER_REMOVED": "기존 응답 헤더가 제거됩니다.",
+            "RESPONSE_HEADER_CHANGED": "기존 응답 헤더 정의가 변경됩니다.",
             "RESPONSE_REMOVED": "기존 응답이 제거됩니다.", "SECURITY_REQUIRED": "기존 공개 API에 인증이 새로 필요합니다.",
             "SECURITY_REMOVED": "기존 인증이 제거됩니다.", "SECURITY_CHANGED": "인증 방식이나 권한 범위가 변경됩니다.",
             "SECURITY_SCOPE_ADDED": "추가 권한 범위가 필요해집니다.",
@@ -81,6 +82,7 @@ def render(metadata: dict, openapi: dict, report: dict, blockers: list[str], fea
             "REQUEST_CONTENT_TYPE_REMOVED": "기존 요청 형식을 사용하는 클라이언트가 실패합니다.",
             "RESPONSE_CONTENT_TYPE_REMOVED": "기존 응답 형식을 기대하는 클라이언트가 실패합니다.",
             "RESPONSE_HEADER_REMOVED": "응답 헤더에 의존하는 클라이언트가 깨질 수 있습니다.",
+            "RESPONSE_HEADER_CHANGED": "응답 헤더를 해석하는 클라이언트가 깨질 수 있습니다.",
             "RESPONSE_REMOVED": "기존 클라이언트의 응답 처리가 깨질 수 있습니다.",
             "SECURITY_REQUIRED": "인증 없이 호출하던 기존 클라이언트가 실패합니다.",
             "SECURITY_REMOVED": "보호되던 기능이 공개될 수 있습니다.",
@@ -146,9 +148,8 @@ def render(metadata: dict, openapi: dict, report: dict, blockers: list[str], fea
         lines.extend(f"- {message}" for message in dict.fromkeys(messages))
     else:
         lines.append("- 없음")
-    status = "승인 완료" if metadata["approval"]["status"] == "APPROVED" and not blockers else (
-        "결정 확인 필요" if blockers else "승인 대기"
-    )
+    assessment = contract_assessment_status(metadata["approval"]["status"] == "APPROVED", blockers)
+    status = {"APPROVED": "승인 완료", "BLOCKED": "결정 확인 필요", "REVIEW": "승인 대기"}[assessment]
     lines.extend(["", "## 현재 상태", "", f"- {status}", "", "## 다음 행동", ""])
     if blockers:
         lines.extend(["- 추천: 차단된 변경을 수정하거나 새 버전 API로 분리", "- 항목별 변경 검토", "- 원하는 해결 방식을 직접 설명"])
@@ -159,23 +160,15 @@ def render(metadata: dict, openapi: dict, report: dict, blockers: list[str], fea
 
 
 def render_recovery(metadata: dict | None, error: Exception) -> str:
-    message = str(error)
-    if "cannot load JSON" in message:
-        problem = "기존 API 명세를 읽을 수 없어 현재 호환성을 확인할 수 없습니다."
-    elif "changed" in message or "stale" in message or "hash" in message:
-        problem = "이전에 검토한 API 증거가 변경되어 비교 결과를 다시 만들 필요가 있습니다."
-    elif "escapes target" in message:
-        problem = "API 증거가 대상 프로젝트 밖을 가리켜 안전하게 확인할 수 없습니다."
-    else:
-        problem = "현재 증거로 기존 API 계약을 확인할 수 없습니다."
+    assessment = recovery_assessment(error)
     contract_id = metadata.get("contractId", "기존 API") if isinstance(metadata, dict) else "기존 API"
     return "\n".join([
         f"# {contract_id} 재분석 필요", "",
         "<!-- 복구용 상태 화면. 내부 오류와 해시는 표시하지 않습니다. -->", "",
         "## 현재 상태", "", "- 입력 변경으로 재검토 필요", "",
-        "## 확인된 문제", "", f"- {problem}", "",
+        "## 확인된 문제", "", f"- {assessment['problem']}", "",
         "## 다음 행동", "",
-        "- 추천: 현재 OpenAPI와 Controller evidence로 다시 분석", "- 다른 증거 파일 선택", "- 상황을 직접 설명", "",
+        f"- 추천: {assessment['actions'][0]}", f"- {assessment['actions'][1]}", f"- {assessment['actions'][2]}", "",
     ])
 
 

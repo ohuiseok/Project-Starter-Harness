@@ -100,8 +100,46 @@ def external_references(value: Any) -> set[str]:
     return found
 
 
+def scoped_external_references(document: dict[str, Any], operation_ids: set[str]) -> set[str]:
+    """Find external refs reachable from selected operations and path parameters."""
+    found: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            reference = value.get("$ref")
+            if isinstance(reference, str):
+                if not reference.startswith("#/"):
+                    found.add(reference)
+                elif reference not in visited:
+                    visited.add(reference)
+                    visit(json_pointer(document, reference))
+            for key, child in value.items():
+                if key != "$ref":
+                    visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    for path, _, operation in operations(document):
+        if operation.get("operationId") not in operation_ids:
+            continue
+        visit(operation)
+        path_parameters = document.get("paths", {}).get(path, {}).get("parameters", [])
+        visit(path_parameters)
+        for requirement in effective_security(document, operation):
+            if not isinstance(requirement, dict):
+                continue
+            definitions = document.get("components", {}).get("securitySchemes", {})
+            for name in requirement:
+                if isinstance(definitions, dict) and name in definitions:
+                    visit(definitions[name])
+    return found
+
+
 def request_schemas(document: dict[str, Any], operation: dict[str, Any]) -> dict[str, Any]:
-    content = operation.get("requestBody", {}).get("content", {})
+    request_body = resolve_schema(document, operation.get("requestBody", {}))
+    content = request_body.get("content", {}) if isinstance(request_body, dict) else {}
     return {
         media_type: resolve_schema(document, media.get("schema", {}))
         for media_type, media in content.items() if isinstance(media, dict)
@@ -110,7 +148,8 @@ def request_schemas(document: dict[str, Any], operation: dict[str, Any]) -> dict
 
 def response_schemas(document: dict[str, Any], operation: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
-    for code, response in operation.get("responses", {}).items():
+    for code, raw_response in operation.get("responses", {}).items():
+        response = resolve_schema(document, raw_response)
         content = response.get("content", {}) if isinstance(response, dict) else {}
         result[str(code)] = {
             media_type: resolve_schema(document, media.get("schema", {}))
@@ -169,11 +208,20 @@ def schema_breaks(old: Any, new: Any, request: bool) -> bool:
     return False
 
 
-def compare_openapi(baseline: dict[str, Any], proposed: dict[str, Any], contract_id: str) -> dict[str, Any]:
+def compare_openapi(
+    baseline: dict[str, Any], proposed: dict[str, Any], contract_id: str,
+    selected_operation_ids: set[str] | None = None,
+) -> dict[str, Any]:
     before = operation_map(baseline)
     after = operation_map(proposed)
     changes: list[dict[str, Any]] = []
-    for reference in sorted(external_references(baseline) | external_references(proposed)):
+    references = (
+        scoped_external_references(baseline, selected_operation_ids)
+        | scoped_external_references(proposed, selected_operation_ids)
+        if selected_operation_ids is not None
+        else external_references(baseline) | external_references(proposed)
+    )
+    for reference in sorted(references):
         changes.append(change("UNKNOWN", "EXTERNAL_REF_UNRESOLVED", reference, reference, reference,
                               "External schema content cannot be verified from current evidence.",
                               "Provide a local immutable schema or record the external artifact as evidence."))
@@ -215,7 +263,8 @@ def compare_openapi(baseline: dict[str, Any], proposed: dict[str, Any], contract
         if removed_responses:
             changes.append(change("BREAKING", "RESPONSE_REMOVED", operation_id, sorted(removed_responses), [],
                                   "Clients can no longer handle the documented response contract.", "Keep existing responses or version the API."))
-        old_body, new_body = old.get("requestBody", {}), new.get("requestBody", {})
+        old_body = resolve_schema(baseline, old.get("requestBody", {}))
+        new_body = resolve_schema(proposed, new.get("requestBody", {}))
         if old_body.get("required") is not True and new_body.get("required") is True:
             changes.append(change("BREAKING", "REQUEST_BODY_REQUIRED", operation_id, False, True,
                                   "Existing calls without a body will fail.", "Keep the body optional or version the API."))
@@ -257,8 +306,8 @@ def compare_openapi(baseline: dict[str, Any], proposed: dict[str, Any], contract
                 changes.append(change(level, "RESPONSE_SCHEMA_CHANGED", f"{operation_id}:{code}",
                                       old_responses[code], new_responses[code], "Client response handling may change.",
                                       "Preserve existing fields and types or version the response."))
-            old_response = old.get("responses", {}).get(code, {})
-            new_response = new.get("responses", {}).get(code, {})
+            old_response = resolve_schema(baseline, old.get("responses", {}).get(code, {}))
+            new_response = resolve_schema(proposed, new.get("responses", {}).get(code, {}))
             old_headers = old_response.get("headers", {}) if isinstance(old_response, dict) else {}
             new_headers = new_response.get("headers", {}) if isinstance(new_response, dict) else {}
             removed_headers = set(old_headers) - set(new_headers)
@@ -266,6 +315,14 @@ def compare_openapi(baseline: dict[str, Any], proposed: dict[str, Any], contract
                 changes.append(change("BREAKING", "RESPONSE_HEADER_REMOVED", f"{operation_id}:{code}",
                                       sorted(removed_headers), [], "Clients may depend on a removed response header.",
                                       "Keep the response header or version the API."))
+            for header in sorted(set(old_headers) & set(new_headers)):
+                old_header = resolve_schema(baseline, old_headers[header])
+                new_header = resolve_schema(proposed, new_headers[header])
+                if old_header != new_header:
+                    level = "BREAKING" if schema_breaks(old_header, new_header, False) else "REVIEW"
+                    changes.append(change(level, "RESPONSE_HEADER_CHANGED", f"{operation_id}:{code}:{header}",
+                                          old_header, new_header, "Client response header handling may change.",
+                                          "Preserve the existing header contract or version the API."))
     return {
         "reportVersion": 1, "contractId": contract_id,
         "baselineSha256": hashlib.sha256(encoded(baseline)).hexdigest(),
@@ -302,10 +359,47 @@ def join_path(base: str, child: str) -> str:
 def annotation_paths(arguments: str | None) -> tuple[list[str], bool]:
     if not arguments:
         return [""], False
-    paths = QUOTED.findall(arguments)
     content = arguments[1:-1].strip()
-    unresolved = bool(content and not paths)
-    return (paths or [""]), unresolved
+    named = re.search(
+        r"(?:^|,)\s*(?:path|value)\s*=\s*(\{[^}]*\}|arrayOf\([^)]*\)|[\"'][^\"']*[\"']|[^,]+)",
+        content, re.S,
+    )
+    if named:
+        expression = named.group(1).strip()
+    else:
+        if content.startswith("{") and "}" in content:
+            first = content[:content.index("}") + 1]
+        elif content.startswith("arrayOf(") and ")" in content:
+            first = content[:content.index(")") + 1]
+        else:
+            first = content.split(",", 1)[0].strip()
+        expression = "" if not first or re.match(r"\w+\s*=", first) else first
+    if not expression:
+        return [""], False
+    paths = QUOTED.findall(expression)
+    return (paths or [""]), not bool(paths)
+
+
+def contract_assessment_status(approved: bool, blockers: list[str]) -> str:
+    if blockers:
+        return "BLOCKED"
+    return "APPROVED" if approved else "REVIEW"
+
+
+def recovery_assessment(error: Exception) -> dict[str, Any]:
+    message = str(error)
+    if "cannot load JSON" in message:
+        problem = "기존 API 명세를 읽을 수 없어 현재 호환성을 확인할 수 없습니다."
+    elif "changed" in message or "stale" in message or "hash" in message:
+        problem = "이전에 검토한 API 증거가 변경되어 비교 결과를 다시 만들 필요가 있습니다."
+    elif "escapes target" in message:
+        problem = "API 증거가 대상 프로젝트 밖을 가리켜 안전하게 확인할 수 없습니다."
+    else:
+        problem = "현재 증거로 기존 API 계약을 확인할 수 없습니다."
+    return {
+        "status": "UNKNOWN", "problem": problem,
+        "actions": ["현재 OpenAPI와 Controller evidence로 다시 분석", "다른 증거 파일 선택", "상황을 직접 설명"],
+    }
 
 
 def controller_mappings(path: Path) -> ControllerMappings:
@@ -432,7 +526,8 @@ def validate_existing_contract(
     if digest(comparison_path) != comparison_ref["sha256"]:
         blockers.append("compatibility report changed after assessment")
     report = load_object(comparison_path)
-    expected = compare_openapi(baseline, proposed, metadata["contractId"])
+    comparison_scope = set(selected) if disposition == "REUSE" else None
+    expected = compare_openapi(baseline, proposed, metadata["contractId"], comparison_scope)
     if report != expected:
         blockers.append("compatibility report does not match current OpenAPI artifacts")
     if disposition == "REUSE" and report["changes"]:

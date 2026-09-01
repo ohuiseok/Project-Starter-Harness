@@ -47,7 +47,9 @@ approval still does not apply the proposal to the existing interface.
 Metadata selects only the operation IDs used by the current feature. Validation,
 traceability, Controller evidence, and the basic user view apply to that subset;
 unrelated operations in a large service contract are not forced into the
-feature. The compatibility report still protects the complete proposed change.
+feature. REUSE external-reference checks follow only the selected operations and
+their reachable local components. An EXTEND compatibility report still protects
+the complete proposed change.
 
 Local JSON Pointer `$ref` values are resolved recursively before schema
 comparison, including component changes and cycles. External references are
@@ -80,8 +82,9 @@ composed annotations, or mappings without a literal HTTP method are `UNKNOWN`;
 substring path matches are never proof.
 
 Compatibility assessment also protects removed or changed parameters, a newly
-required request body, removed request or response media types, and removed
-response headers. When baseline evidence is stale, malformed, outside the
+required request body, removed request or response media types, and removed or
+changed response headers. Component-level request bodies, responses, parameters,
+headers, and schemas are resolved through local JSON Pointer references. When baseline evidence is stale, malformed, outside the
 target, or otherwise unreadable, rendering still produces a safe recovery view
 with the current state and three next actions. It does not expose internal paths
 or raw errors in the basic view.

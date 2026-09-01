@@ -122,6 +122,37 @@ class HttpApiContractTests(unittest.TestCase):
             api, feature_spec(), profile(), metadata
         )))
 
+    def test_local_parameter_ref_satisfies_path_template(self) -> None:
+        api = openapi()
+        operation = api["paths"]["/api/leave-requests"]["post"]
+        api["paths"] = {"/api/leave-requests/{requestId}": {"post": operation}}
+        operation["parameters"] = [{"$ref": "#/components/parameters/RequestId"}]
+        api["components"]["parameters"] = {
+            "RequestId": {"in": "path", "name": "requestId", "required": True, "schema": {"type": "string"}}
+        }
+        metadata = {"traceability": derived_traceability(api)}
+        blockers = validate_openapi(api, feature_spec(), profile(), metadata)
+        self.assertFalse(any("path parameters do not match" in item for item in blockers))
+
+    def test_component_response_ref_is_semantically_validated(self) -> None:
+        api = openapi()
+        operation = api["paths"]["/api/leave-requests"]["post"]
+        api["components"]["responses"] = {"Created": {"description": "Created"}}
+        operation["responses"]["201"] = {"$ref": "#/components/responses/Created"}
+        metadata = {"traceability": derived_traceability(api)}
+        self.assertEqual([], validate_openapi(api, feature_spec(), profile(), metadata))
+
+    def test_nested_local_response_ref_is_semantically_validated(self) -> None:
+        api = openapi()
+        operation = api["paths"]["/api/leave-requests"]["post"]
+        api["components"]["responses"] = {
+            "Created": {"$ref": "#/components/responses/CreatedDefinition"},
+            "CreatedDefinition": {"description": "Created"},
+        }
+        operation["responses"]["201"] = {"$ref": "#/components/responses/Created"}
+        metadata = {"traceability": derived_traceability(api)}
+        self.assertEqual([], validate_openapi(api, feature_spec(), profile(), metadata))
+
     def test_user_view_is_derived_from_openapi(self) -> None:
         api = openapi()
         metadata = {"approval": {"status": "DRAFT"}, "traceability": derived_traceability(api)}
