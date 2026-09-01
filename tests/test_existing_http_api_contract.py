@@ -21,7 +21,7 @@ sys.path.insert(0, str(SCRIPTS))
 from existing_http_api_contract import compare_openapi, validate_existing_contract  # noqa: E402
 from migrate_existing_http_api_contract_v2 import migrate  # noqa: E402
 import record_existing_http_api_contract_approval  # noqa: E402
-from render_existing_http_api_contract import render  # noqa: E402
+from render_existing_http_api_contract import render, render_recovery  # noqa: E402
 from http_api_contract import derived_traceability, encoded, validate_openapi  # noqa: E402
 from tests.test_design_route import refresh, route  # noqa: E402
 from tests.test_feature_specs import feature_spec  # noqa: E402
@@ -132,6 +132,34 @@ class ExistingHttpApiContractTests(unittest.TestCase):
             for item in report["changes"]
         ))
 
+    def test_existing_parameter_type_change_is_breaking(self) -> None:
+        baseline = openapi()
+        operation = baseline["paths"]["/api/leave-requests"]["post"]
+        operation["parameters"] = [{"in": "query", "name": "year", "required": False, "schema": {"type": "integer"}}]
+        proposed = copy.deepcopy(baseline)
+        proposed["paths"]["/api/leave-requests"]["post"]["parameters"][0]["schema"]["type"] = "string"
+        report = compare_openapi(baseline, proposed, "http-api")
+        self.assertTrue(any(item["code"] == "PARAMETER_CHANGED" and item["level"] == "BREAKING" for item in report["changes"]))
+
+    def test_request_content_type_removal_is_breaking(self) -> None:
+        baseline = openapi()
+        content = baseline["paths"]["/api/leave-requests"]["post"]["requestBody"]["content"]
+        content["application/xml"] = copy.deepcopy(content["application/json"])
+        proposed = copy.deepcopy(baseline)
+        del proposed["paths"]["/api/leave-requests"]["post"]["requestBody"]["content"]["application/xml"]
+        report = compare_openapi(baseline, proposed, "http-api")
+        self.assertTrue(any(item["code"] == "REQUEST_CONTENT_TYPE_REMOVED" for item in report["changes"]))
+
+    def test_response_header_removal_is_breaking(self) -> None:
+        baseline = openapi()
+        baseline["paths"]["/api/leave-requests"]["post"]["responses"]["201"]["headers"] = {
+            "Location": {"schema": {"type": "string"}}
+        }
+        proposed = copy.deepcopy(baseline)
+        del proposed["paths"]["/api/leave-requests"]["post"]["responses"]["201"]["headers"]
+        report = compare_openapi(baseline, proposed, "http-api")
+        self.assertTrue(any(item["code"] == "RESPONSE_HEADER_REMOVED" for item in report["changes"]))
+
     def test_local_ref_component_change_is_compared_by_meaning(self) -> None:
         baseline = openapi()
         operation = baseline["paths"]["/api/leave-requests"]["post"]
@@ -224,6 +252,42 @@ class ExistingHttpApiContractTests(unittest.TestCase):
                 metadata, design_route, route_path, root, contract_path, feature_spec(), profile()
             )[1]))
 
+    def test_controller_class_and_method_paths_are_joined_exactly(self) -> None:
+        source = '@RestController\n@RequestMapping("/api")\nclass LeaveController {\n@PostMapping("/leave-requests") void request() {}\n}'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metadata, design_route, route_path, contract_path = self.fixture(root, controller=source)
+            self.assertEqual([], validate_existing_contract(
+                metadata, design_route, route_path, root, contract_path, feature_spec(), profile()
+            )[1])
+
+    def test_controller_substring_path_is_not_false_evidence(self) -> None:
+        source = '@RestController\nclass LeaveController {\n@PostMapping("/leave") void request() {}\n}'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metadata, design_route, route_path, contract_path = self.fixture(root, controller=source)
+            self.assertTrue(any("does not prove operation" in item for item in validate_existing_contract(
+                metadata, design_route, route_path, root, contract_path, feature_spec(), profile()
+            )[1]))
+
+    def test_controller_constant_path_is_unknown_not_confirmed(self) -> None:
+        source = '@RestController\nclass LeaveController {\n@PostMapping(LEAVE_PATH) void request() {}\n}'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metadata, design_route, route_path, contract_path = self.fixture(root, controller=source)
+            self.assertTrue(any("controller mapping is UNKNOWN" in item for item in validate_existing_contract(
+                metadata, design_route, route_path, root, contract_path, feature_spec(), profile()
+            )[1]))
+
+    def test_controller_constant_class_base_cannot_accidentally_confirm(self) -> None:
+        source = '@RestController\n@RequestMapping(API_BASE)\nclass LeaveController {\n@PostMapping("/api/leave-requests") void request() {}\n}'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metadata, design_route, route_path, contract_path = self.fixture(root, controller=source)
+            self.assertTrue(any("controller mapping is UNKNOWN" in item for item in validate_existing_contract(
+                metadata, design_route, route_path, root, contract_path, feature_spec(), profile()
+            )[1]))
+
     def test_controller_evidence_drift_is_detected_independently(self) -> None:
         source = '@RestController\nclass LeaveController {\n@PostMapping("/api/leave-requests") void request() {}\n}'
         with tempfile.TemporaryDirectory() as directory:
@@ -241,6 +305,12 @@ class ExistingHttpApiContractTests(unittest.TestCase):
             (root / metadata["baselineArtifact"]["path"]).write_text("{}", encoding="utf-8")
             with self.assertRaises(ValueError):
                 validate_existing_contract(metadata, design_route, route_path, root, contract_path, feature_spec(), profile())
+
+    def test_broken_evidence_still_has_a_safe_recovery_view(self) -> None:
+        markdown = render_recovery({"contractId": "member-api"}, ValueError("/secret/path: cannot load JSON"))
+        self.assertIn("재분석 필요", markdown)
+        self.assertIn("현재 OpenAPI와 Controller evidence로 다시 분석", markdown)
+        self.assertNotIn("/secret/path", markdown)
 
     def test_reuse_approval_does_not_modify_existing_openapi(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -7,6 +7,7 @@ import copy
 import hashlib
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -15,10 +16,10 @@ from validate_design_contract import inside, validate as validate_metadata
 from validate_feature_specs import SOURCES, load_object, text
 
 
-MAPPING = re.compile(r"@(Get|Post|Put|Delete|Patch)Mapping\s*\(\s*(?:value\s*=\s*|path\s*=\s*)?[\"']([^\"']*)[\"']")
-REQUEST_MAPPING = re.compile(
-    r"@RequestMapping\s*\([^)]*(?:value|path)\s*=\s*[\"']([^\"']*)[\"'][^)]*method\s*=\s*RequestMethod\.(GET|POST|PUT|DELETE|PATCH)"
-)
+ANNOTATION = re.compile(r"@(GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping)\s*(\([^)]*\))?", re.S)
+CLASS_DECLARATION = re.compile(r"\b(?:class|interface)\s+\w+")
+CUSTOM_MAPPING = re.compile(r"@(\w*Mapping)\b")
+QUOTED = re.compile(r"[\"']([^\"']*)[\"']")
 
 
 def digest(path: Path) -> str:
@@ -40,6 +41,20 @@ def required_parameters(operation: dict[str, Any]) -> set[tuple[str, str]]:
         (item.get("in"), item.get("name")) for item in operation.get("parameters", [])
         if isinstance(item, dict) and item.get("required") is True
     }
+
+
+def parameter_map(document: dict[str, Any], path: str, operation: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
+    items = []
+    path_item = document.get("paths", {}).get(path, {})
+    for owner in (path_item, operation):
+        if isinstance(owner, dict) and isinstance(owner.get("parameters"), list):
+            items.extend(owner["parameters"])
+    result = {}
+    for raw in items:
+        item = resolve_schema(document, raw)
+        if isinstance(item, dict) and isinstance(item.get("in"), str) and isinstance(item.get("name"), str):
+            result[(item["in"], item["name"])] = item
+    return result
 
 
 def json_pointer(document: dict[str, Any], reference: str) -> Any:
@@ -140,7 +155,9 @@ def schema_breaks(old: Any, new: Any, request: bool) -> bool:
         for name in set(old_properties) & set(new_properties):
             if schema_breaks(old_properties[name], new_properties[name], request):
                 return True
-    old_required, new_required = set(old.get("required", [])), set(new.get("required", []))
+    old_required_value, new_required_value = old.get("required", []), new.get("required", [])
+    old_required = set(old_required_value) if isinstance(old_required_value, list) else set()
+    new_required = set(new_required_value) if isinstance(new_required_value, list) else set()
     if request and new_required - old_required:
         return True
     if not request and old_required - new_required:
@@ -175,14 +192,39 @@ def compare_openapi(baseline: dict[str, Any], proposed: dict[str, Any], contract
             changes.append(change("BREAKING", "ENDPOINT_CHANGED", operation_id,
                                   f"{old_method.upper()} {old_path}", f"{new_method.upper()} {new_path}",
                                   "Existing calls no longer reach the same endpoint.", "Keep the endpoint or create a new version."))
-        added_required = required_parameters(new) - required_parameters(old)
+        old_parameters = parameter_map(baseline, old_path, old)
+        new_parameters = parameter_map(proposed, new_path, new)
+        removed_parameters = set(old_parameters) - set(new_parameters)
+        if removed_parameters:
+            changes.append(change("BREAKING", "PARAMETER_REMOVED", operation_id, sorted(removed_parameters), [],
+                                  "Existing clients may send parameters that are no longer accepted.", "Keep the parameter or version the API."))
+        added_required = {
+            key for key in set(new_parameters) - set(old_parameters) if new_parameters[key].get("required") is True
+        }
         if added_required:
             changes.append(change("BREAKING", "REQUIRED_PARAMETER_ADDED", operation_id, [], sorted(added_required),
                                   "Existing requests may be rejected.", "Make the parameter optional or version the API."))
+        for parameter in sorted(set(old_parameters) & set(new_parameters)):
+            if old_parameters[parameter] != new_parameters[parameter]:
+                newly_required = old_parameters[parameter].get("required") is not True and new_parameters[parameter].get("required") is True
+                level = "BREAKING" if newly_required or schema_breaks(old_parameters[parameter], new_parameters[parameter], True) else "REVIEW"
+                changes.append(change(level, "PARAMETER_CHANGED", f"{operation_id}:{parameter[0]}:{parameter[1]}",
+                                      old_parameters[parameter], new_parameters[parameter], "Parameter compatibility may change.",
+                                      "Preserve the existing parameter contract or version the API."))
         removed_responses = set(old.get("responses", {})) - set(new.get("responses", {}))
         if removed_responses:
             changes.append(change("BREAKING", "RESPONSE_REMOVED", operation_id, sorted(removed_responses), [],
                                   "Clients can no longer handle the documented response contract.", "Keep existing responses or version the API."))
+        old_body, new_body = old.get("requestBody", {}), new.get("requestBody", {})
+        if old_body.get("required") is not True and new_body.get("required") is True:
+            changes.append(change("BREAKING", "REQUEST_BODY_REQUIRED", operation_id, False, True,
+                                  "Existing calls without a body will fail.", "Keep the body optional or version the API."))
+        old_request_media = set(old_body.get("content", {})) if isinstance(old_body.get("content", {}), dict) else set()
+        new_request_media = set(new_body.get("content", {})) if isinstance(new_body.get("content", {}), dict) else set()
+        if old_request_media - new_request_media:
+            changes.append(change("BREAKING", "REQUEST_CONTENT_TYPE_REMOVED", operation_id,
+                                  sorted(old_request_media), sorted(new_request_media), "Some existing request formats are no longer accepted.",
+                                  "Keep existing content types or version the API."))
         old_security, new_security = security_state(baseline, old), security_state(proposed, new)
         old_requirements, new_requirements = old_security["requirements"], new_security["requirements"]
         if old_security != new_security:
@@ -205,11 +247,25 @@ def compare_openapi(baseline: dict[str, Any], proposed: dict[str, Any], contract
                                   "Request compatibility may change.", "Keep old accepted inputs or document why the change is safe."))
         old_responses, new_responses = response_schemas(baseline, old), response_schemas(proposed, new)
         for code in sorted(set(old_responses) & set(new_responses)):
+            removed_media = set(old_responses[code]) - set(new_responses[code])
+            if removed_media:
+                changes.append(change("BREAKING", "RESPONSE_CONTENT_TYPE_REMOVED", f"{operation_id}:{code}",
+                                      sorted(old_responses[code]), sorted(new_responses[code]),
+                                      "Clients lose a documented response format.", "Keep the content type or version the API."))
             if old_responses[code] != new_responses[code]:
                 level = "BREAKING" if schema_breaks(old_responses[code], new_responses[code], False) else "REVIEW"
                 changes.append(change(level, "RESPONSE_SCHEMA_CHANGED", f"{operation_id}:{code}",
                                       old_responses[code], new_responses[code], "Client response handling may change.",
                                       "Preserve existing fields and types or version the response."))
+            old_response = old.get("responses", {}).get(code, {})
+            new_response = new.get("responses", {}).get(code, {})
+            old_headers = old_response.get("headers", {}) if isinstance(old_response, dict) else {}
+            new_headers = new_response.get("headers", {}) if isinstance(new_response, dict) else {}
+            removed_headers = set(old_headers) - set(new_headers)
+            if removed_headers:
+                changes.append(change("BREAKING", "RESPONSE_HEADER_REMOVED", f"{operation_id}:{code}",
+                                      sorted(removed_headers), [], "Clients may depend on a removed response header.",
+                                      "Keep the response header or version the API."))
     return {
         "reportVersion": 1, "contractId": contract_id,
         "baselineSha256": hashlib.sha256(encoded(baseline)).hexdigest(),
@@ -226,11 +282,74 @@ def compare_openapi(baseline: dict[str, Any], proposed: dict[str, Any], contract
     }
 
 
-def controller_mappings(path: Path) -> set[tuple[str, str]]:
+@dataclass(frozen=True)
+class ControllerMappings:
+    mappings: set[tuple[str, str]]
+    unknowns: tuple[str, ...]
+
+
+def normalize_path(value: str) -> str:
+    if not value or value == "/":
+        return ""
+    return "/" + value.strip("/")
+
+
+def join_path(base: str, child: str) -> str:
+    combined = normalize_path(base) + normalize_path(child)
+    return combined or "/"
+
+
+def annotation_paths(arguments: str | None) -> tuple[list[str], bool]:
+    if not arguments:
+        return [""], False
+    paths = QUOTED.findall(arguments)
+    content = arguments[1:-1].strip()
+    unresolved = bool(content and not paths)
+    return (paths or [""]), unresolved
+
+
+def controller_mappings(path: Path) -> ControllerMappings:
     source = path.read_text(encoding="utf-8")
-    mappings = {(match.group(1).lower(), match.group(2) or "") for match in MAPPING.finditer(source)}
-    mappings.update((match.group(2).lower(), match.group(1)) for match in REQUEST_MAPPING.finditer(source))
-    return mappings
+    class_matches = list(CLASS_DECLARATION.finditer(source))
+    class_match = class_matches[0] if class_matches else None
+    class_position = class_match.start() if class_match else len(source)
+    annotations = list(ANNOTATION.finditer(source))
+    class_annotation = next((
+        item for item in reversed(annotations)
+        if item.start() < class_position and item.group(1) == "RequestMapping" and "RequestMethod." not in (item.group(2) or "")
+    ), None)
+    bases, base_unknown = annotation_paths(class_annotation.group(2) if class_annotation else None)
+    mappings: set[tuple[str, str]] = set()
+    unknowns: list[str] = []
+    if len(class_matches) > 1:
+        return ControllerMappings(set(), ("multiple class or interface boundaries cannot be resolved safely",))
+    if base_unknown:
+        return ControllerMappings(set(), ("class-level RequestMapping uses a non-literal path",))
+    method_names = {"GetMapping": "get", "PostMapping": "post", "PutMapping": "put", "DeleteMapping": "delete", "PatchMapping": "patch"}
+    for annotation in annotations:
+        if annotation is class_annotation or annotation.start() < class_position:
+            continue
+        name, arguments = annotation.group(1), annotation.group(2)
+        paths, unresolved = annotation_paths(arguments)
+        if name == "RequestMapping":
+            methods = [item.lower() for item in re.findall(r"RequestMethod\.(GET|POST|PUT|DELETE|PATCH)", arguments or "")]
+            if not methods:
+                unknowns.append("method RequestMapping has no literal HTTP method")
+                continue
+        else:
+            methods = [method_names[name]]
+        if unresolved:
+            unknowns.append(f"{name} uses a non-literal path")
+            continue
+        for method in methods:
+            for base in bases:
+                for child in paths:
+                    mappings.add((method, join_path(base, child)))
+    known_names = {"GetMapping", "PostMapping", "PutMapping", "DeleteMapping", "PatchMapping", "RequestMapping"}
+    for custom in CUSTOM_MAPPING.findall(source):
+        if custom not in known_names:
+            unknowns.append(f"custom mapping annotation cannot be resolved: {custom}")
+    return ControllerMappings(mappings, tuple(dict.fromkeys(unknowns)))
 
 
 def decorated_for_feature(document: dict[str, Any], traceability: list[dict[str, Any]]) -> dict[str, Any]:
@@ -293,11 +412,18 @@ def validate_existing_contract(
         blockers.append("baseline hash does not match route evidence")
     controller_paths = [path for path in metadata["evidencePaths"] if evidence.get(path, {}).get("kind") == "SPRING_CONTROLLER"]
     if controller_paths:
-        observed = set().union(*(controller_mappings(inside(root, path, "controller evidence")) for path in controller_paths))
+        controller_results = [controller_mappings(inside(root, path, "controller evidence")) for path in controller_paths]
+        observed = set().union(*(item.mappings for item in controller_results))
+        unknown_mapping_reasons = [reason for item in controller_results for reason in item.unknowns]
         for path, method, operation in operations(baseline):
             if operation["operationId"] not in set(selected):
                 continue
-            if not any(found_method == method and (not found_path or found_path in path) for found_method, found_path in observed):
+            normalized_openapi_path = normalize_path(path) or "/"
+            if (method, normalized_openapi_path) in observed:
+                continue
+            if unknown_mapping_reasons:
+                blockers.append(f"controller mapping is UNKNOWN for operation: {operation['operationId']}")
+            else:
                 blockers.append(f"controller evidence does not prove operation: {operation['operationId']}")
     comparison_ref = metadata.get("comparison")
     if not isinstance(comparison_ref, dict) or set(comparison_ref) != {"path", "sha256"}:

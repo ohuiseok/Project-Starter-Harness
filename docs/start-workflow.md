@@ -148,6 +148,11 @@ Controller evidence가 있으면 실제 Spring mapping도 대조하고, 상수�
 비교하며 외부 참조는 증거가 없으면 `UNKNOWN`입니다. 검토 항목을 수용하려면 이유·출처·
 사용자 확인을 각각 기록하고, 인증 제거나 약화는 일반 검토 수용으로 통과시킬 수 없습니다.
 사용자 화면에는 필드별 변경 전후, 영향, 추천 대응과 다음 행동을 함께 보여줍니다.
+Controller evidence는 클래스와 메서드의 literal mapping을 결합한 정확한 method/path만
+확정하며 부분 문자열은 증거로 쓰지 않습니다. 상수와 custom annotation은 `UNKNOWN`입니다.
+호환성 검사는 파라미터 변경·요청 본문 필수화·content type 제거·응답 헤더 제거도 포함합니다.
+baseline이 stale하거나 JSON이 깨져도 내부 오류만 출력하지 않고 재분석·다른 증거 선택·직접
+설명의 세 행동이 있는 안전한 복구 화면을 생성합니다.
 기본 화면과 readiness gate는 같은 assessment 결과를 사용합니다. 프로젝트·저장소 참조,
 evidence 누락, stale 입력, target 경계 같은 모든 차단 사유를 사용자 언어로 보여주고 현재
 상태를 `초안 작성 중 / 결정 확인 필요 / 입력 변경으로 재검토 필요 / 승인 대기 / 승인 완료`

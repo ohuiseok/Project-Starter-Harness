@@ -73,9 +73,18 @@ file with `migrate_existing_http_api_contract_v2.py`. The migration never
 inherits approval and returns every review to `PENDING` for explicit review.
 
 When route evidence includes files with kind `SPRING_CONTROLLER`, the harness
-checks literal Spring mapping annotations against baseline operations. A
-mapping expressed through constants or custom composed annotations that cannot
-be proved is a blocker, not an inferred match.
+joins literal class- and method-level Spring mapping paths and requires exact
+method/path equality with selected baseline operations. Literal arrays and
+standard Java or Kotlin mapping annotations are supported. Constants, custom
+composed annotations, or mappings without a literal HTTP method are `UNKNOWN`;
+substring path matches are never proof.
+
+Compatibility assessment also protects removed or changed parameters, a newly
+required request body, removed request or response media types, and removed
+response headers. When baseline evidence is stale, malformed, outside the
+target, or otherwise unreadable, rendering still produces a safe recovery view
+with the current state and three next actions. It does not expose internal paths
+or raw errors in the basic view.
 
 Create the evidence assessment with `create_existing_http_api_contract.py`,
 validate it with `validate_existing_http_api_contract.py`, and render it with
