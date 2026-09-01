@@ -14,6 +14,16 @@ remove the database container and network. It never reads application secrets,
 connects to a configured or production database, starts the project's Compose
 service, or changes target source files. It writes only its evidence report.
 
+Before creating Docker resources, the runner atomically records their exact
+names and required label in `.starter-harness/verification/pending.json`. A
+pending journal blocks another run. After an ordinary success or failure, the
+result report is written atomically before the journal is removed. If the
+process is interrupted or cleanup is incomplete, use
+`recover_relational_migration_verification.py --target <target-path>`. Recovery
+validates the journal, inspects every existing resource for the exact Harness
+label, refuses to remove an unlabeled resource, and preserves recovery evidence
+under `.starter-harness/verification/recovered/`.
+
 Docker tmpfs is removed with the container, but on hosts configured with swap
 the operating system may write memory pages to swap. The plan view must disclose
 this limitation.

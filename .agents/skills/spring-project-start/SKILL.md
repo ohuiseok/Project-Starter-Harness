@@ -180,6 +180,8 @@ verification plan, show all real Docker host effects, and obtain a separate
 exact-plan approval before `run_relational_migration_verification.py`. The runner
 may use only disposable internal-network containers and tmpfs, must clean up on
 every path, and must never use project credentials or contact a target database.
+If its pending journal remains, do not rerun verification; recover only its
+exact labeled resources with `recover_relational_migration_verification.py`.
 
 ## Technology Selection
 

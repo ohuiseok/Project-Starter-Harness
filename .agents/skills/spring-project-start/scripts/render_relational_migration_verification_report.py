@@ -35,8 +35,10 @@ def validate(report: dict, report_path: Path, target: Path) -> None:
 def render(report: dict) -> str:
     result = report["result"]; lines = ["# migration 격리 검증 결과", "", "## 결론", "", f"- 상태: {result['state']}", "- 실제 대상 DB 접속: 안 함", "- 대상 source 파일 변경: 없음", "- persistent volume 생성: 없음", "", "## 단계별 증거", ""]
     for event in result["events"]: lines.extend([f"### {event['step']} · exit {event['exitCode']}", "", "```text", event["output"].rstrip(), "```", ""])
-    lines.extend(["## 정리 결과", ""]); lines.extend(f"- {name}: {'완료' if value else '실패'}" for name, value in result["cleanup"].items())
+    cleanup_labels = {"databaseContainerRemoved": "임시 PostgreSQL 컨테이너", "flywayContainersRemoved": "Flyway 컨테이너", "networkRemoved": "내부 Docker 네트워크"}
+    lines.extend(["## 정리 결과", ""]); lines.extend(f"- {cleanup_labels[name]}: {'정리 완료' if value else '정리 실패'}" for name, value in result["cleanup"].items())
     if "failure" in result: lines.extend(["", "## 실패 원인", "", f"- {result['failure']}"])
+    if result["state"] == "CLEANUP_FAILED": lines.extend(["", "## 안전한 다음 조치", "", "- 새 검증을 실행하지 않음", "- pending journal을 임의로 삭제하지 않음", "- Harness의 migration verification 복구 절차로 라벨이 확인된 임시 자원만 정리", "- 복구가 완료된 뒤 새 계획을 다시 검토하고 승인"])
     lines.extend(["", "## 해석", "", "- PASSED는 선택한 빈 격리 PostgreSQL에서 Flyway migrate/validate가 성공했다는 의미", "- production 데이터·권한·성능·lock·rollback 성공을 의미하지 않음", ""]); return "\n".join(lines)
 
 

@@ -257,6 +257,7 @@ for required in \
   "$SKILL_ROOT/scripts/apply_approved_relational_artifacts.py" \
   "$SKILL_ROOT/scripts/recover_relational_artifact_transaction.py" \
   "$SKILL_ROOT/scripts/run_relational_migration_verification.py" \
+  "$SKILL_ROOT/scripts/recover_relational_migration_verification.py" \
   "$SKILL_ROOT/scripts/render_relational_migration_verification_plan.py" \
   "$SKILL_ROOT/scripts/render_relational_migration_verification_report.py" \
   "$HARNESS_ROOT/templates/project-profile.md" \
@@ -486,7 +487,7 @@ expect_out "relational artifact apply: all focused scenarios ran" "Ran 8 tests"
 OUT="$(python3 "$HARNESS_ROOT/tests/test_relational_migration_verification.py" 2>&1)"
 CODE=$?
 expect_code "relational migration verification: focused regression suite passes" 0
-expect_out "relational migration verification: all focused scenarios ran" "Ran 6 tests"
+expect_out "relational migration verification: all focused scenarios ran" "Ran 11 tests"
 
 OUT="$(python3 "$SKILL_ROOT/scripts/validate_feature_specs.py" \
   --project-brief "$HARNESS_ROOT/templates/project-brief.json" 2>&1)"

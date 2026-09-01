@@ -18,6 +18,7 @@ SCRIPTS = ROOT / ".agents/skills/spring-project-start/scripts"
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(SCRIPTS))
 
 import run_relational_migration_verification as verification  # noqa: E402
+import recover_relational_migration_verification as recovery  # noqa: E402
 from render_relational_migration_verification_plan import render  # noqa: E402
 from render_relational_migration_verification_report import render as render_report, validate as validate_report  # noqa: E402
 import tests.test_relational_artifact_apply as apply_tests  # noqa: E402
@@ -53,6 +54,50 @@ class RelationalMigrationVerificationTests(unittest.TestCase):
             def result(command, **_): return self.completed(command, 1, "migration failed") if command[-1] == "migrate" else self.completed(command)
             code, _, _ = self.run_main(arguments, result); self.assertEqual(1, code); report = json.loads(output.read_text()); self.assertEqual("FAILED", report["result"]["state"]); self.assertTrue(all(report["result"]["cleanup"].values()))
 
+    def test_cleanup_failure_keeps_recoverable_journal(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); _, _, output, arguments = self.fixture(root)
+            def result(command, **_):
+                if command[:3] == ["docker", "network", "rm"]: return self.completed(command, 1, "network still attached")
+                return self.completed(command)
+            code, _, _ = self.run_main(arguments, result); self.assertEqual(1, code)
+            report = json.loads(output.read_text()); self.assertEqual("CLEANUP_FAILED", report["result"]["state"])
+            journal = json.loads((root / verification.JOURNAL_PATH).read_text()); self.assertEqual("CLEANUP_REQUIRED", journal["state"])
+
+    def test_pending_journal_blocks_retry_before_docker(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); _, _, _, arguments = self.fixture(root); pending = root / verification.JOURNAL_PATH; pending.parent.mkdir(parents=True); pending.write_text("{}")
+            code, text, runner = self.run_main(arguments, lambda command, **_: self.completed(command)); self.assertEqual(1, code); self.assertIn("recover it before retrying", text); runner.assert_not_called()
+
+    def test_symlinked_evidence_directory_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory); _, _, _, arguments = self.fixture(root); (root / ".starter-harness/verification").symlink_to(outside, target_is_directory=True)
+            code, text, runner = self.run_main(arguments, lambda command, **_: self.completed(command)); self.assertEqual(1, code); self.assertIn("evidence directory is unsafe", text); runner.assert_not_called()
+
+    def test_recovery_removes_only_labeled_recorded_resources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); plan_path, _, _, _ = self.fixture(root)
+            plan = json.loads(plan_path.read_text())
+            with mock.patch.object(verification.secrets, "token_hex", return_value="abcdef123456"):
+                journal = verification.execution_resources(plan, root.resolve(), plan_path)
+            pending = root / verification.JOURNAL_PATH; verification.atomic_json(journal, pending)
+            def result(command, *_, **__):
+                if "inspect" in command: return self.completed(command, output="true\n")
+                return self.completed(command)
+            with mock.patch.object(recovery, "run", side_effect=result) as runner: recovered = recovery.recover(root)
+            self.assertEqual("RECOVERED", recovered["state"]); self.assertFalse(pending.exists())
+            self.assertTrue((root / ".starter-harness/verification/recovered/abcdef123456.json").is_file())
+            remove_commands = [item.args[0] for item in runner.call_args_list if "rm" in item.args[0]]; self.assertEqual(4, len(remove_commands))
+
+    def test_recovery_refuses_unlabeled_resource(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); plan_path, _, _, _ = self.fixture(root); plan = json.loads(plan_path.read_text())
+            with mock.patch.object(verification.secrets, "token_hex", return_value="abcdef123456"): journal = verification.execution_resources(plan, root.resolve(), plan_path)
+            pending = root / verification.JOURNAL_PATH; verification.atomic_json(journal, pending)
+            with mock.patch.object(recovery, "run", return_value=self.completed([], output="false\n")) as runner:
+                with self.assertRaisesRegex(ValueError, "refusing to remove unlabeled"): recovery.recover(root)
+            self.assertTrue(pending.is_file()); self.assertFalse(any("rm" in item.args[0] for item in runner.call_args_list))
+
     def test_ephemeral_credential_is_redacted_from_report(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); _, _, output, arguments = self.fixture(root); secret = "ephemeral-verification-secret"
@@ -70,7 +115,7 @@ class RelationalMigrationVerificationTests(unittest.TestCase):
 
     def test_result_view_preserves_cleanup_and_scope_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory); _, _, output, arguments = self.fixture(root); code, _, _ = self.run_main(arguments, lambda command, **_: self.completed(command)); self.assertEqual(0, code); report = json.loads(output.read_text()); validate_report(report, output, root); view = render_report(report); self.assertIn("상태: PASSED", view); self.assertIn("networkRemoved: 완료", view); self.assertIn("production 데이터·권한", view)
+            root = Path(directory); _, _, output, arguments = self.fixture(root); code, _, _ = self.run_main(arguments, lambda command, **_: self.completed(command)); self.assertEqual(0, code); report = json.loads(output.read_text()); validate_report(report, output, root); view = render_report(report); self.assertIn("상태: PASSED", view); self.assertIn("내부 Docker 네트워크: 정리 완료", view); self.assertIn("production 데이터·권한", view)
 
 
 if __name__ == "__main__": unittest.main(verbosity=2)

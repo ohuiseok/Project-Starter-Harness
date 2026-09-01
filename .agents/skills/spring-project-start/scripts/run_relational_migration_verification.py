@@ -26,6 +26,8 @@ NAME = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 PLAN_ID = re.compile(r"^[a-z][a-z0-9-]*$")
 IMAGE = re.compile(r"^[a-z0-9][a-z0-9._/-]*(?::[A-Za-z0-9][A-Za-z0-9._-]*|@sha256:[a-f0-9]{64})$")
 MAX_OUTPUT = 12000
+JOURNAL_PATH = Path(".starter-harness/verification/pending.json")
+RESOURCE_LABEL = "starter-harness.relational-verification=true"
 
 
 def sha(path: Path) -> str: return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -88,9 +90,36 @@ def run(command: list[str], timeout: int) -> subprocess.CompletedProcess:
 def bounded(value: str, secret: str) -> str: return value.replace(secret, "[REDACTED]")[-MAX_OUTPUT:]
 
 
-def execute(plan: dict, migration: Path) -> dict:
-    suffix = secrets.token_hex(6); network = f"harness-verify-{suffix}"; database_container = f"harness-postgres-{suffix}"; password = secrets.token_urlsafe(32); user = "harness_verify"; database = plan["database"]["name"]; timeout = plan["limits"]["commandTimeoutSeconds"]
-    flyway_containers = {action: f"harness-flyway-{action}-{suffix}" for action in ("migrate", "validate")}
+def atomic_json(document: dict, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(document, handle, ensure_ascii=False, indent=2)
+            handle.write("\n"); handle.flush(); os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+        directory = os.open(destination.parent, os.O_RDONLY)
+        try: os.fsync(directory)
+        finally: os.close(directory)
+    except BaseException:
+        try: os.unlink(temporary)
+        except FileNotFoundError: pass
+        raise
+
+
+def execution_resources(plan: dict, target: Path, plan_path: Path) -> dict:
+    suffix = secrets.token_hex(6)
+    return {"migrationVerificationJournalVersion": 1, "state": "RUNNING", "target": str(target), "planSha256": sha(plan_path), "planId": plan["planId"], "createdAt": dt.datetime.now(dt.timezone.utc).isoformat(), "label": RESOURCE_LABEL, "resources": {"network": f"harness-verify-{suffix}", "databaseContainer": f"harness-postgres-{suffix}", "flywayContainers": {action: f"harness-flyway-{action}-{suffix}" for action in ("migrate", "validate")}}}
+
+
+def validate_storage(root: Path) -> None:
+    for directory in (root / ".starter-harness", root / ".starter-harness/verification"):
+        if directory.exists() and (directory.is_symlink() or not directory.is_dir()): raise ValueError(f"verification evidence directory is unsafe: {directory.relative_to(root)}")
+
+
+def execute(plan: dict, migration: Path, journal: dict) -> dict:
+    resources = journal["resources"]; network = resources["network"]; database_container = resources["databaseContainer"]; password = secrets.token_urlsafe(32); user = "harness_verify"; database = plan["database"]["name"]; timeout = plan["limits"]["commandTimeoutSeconds"]
+    flyway_containers = resources["flywayContainers"]
     events = []; cleanup = {"databaseContainerRemoved": False, "flywayContainersRemoved": False, "networkRemoved": False}; env_file_name = None; migration_stage = tempfile.TemporaryDirectory(prefix="harness-migration-")
     try:
         staged_migration = Path(migration_stage.name) / migration.name; shutil.copy2(migration, staged_migration)
@@ -100,8 +129,8 @@ def execute(plan: dict, migration: Path) -> dict:
         os.chmod(env_file_name, 0o600)
         postgres_tag = plan["images"]["postgres"].rsplit(":", 1)[-1]; major_match = re.match(r"([0-9]+)", postgres_tag); data_path = "/var/lib/postgresql" if major_match and int(major_match.group(1)) >= 18 else "/var/lib/postgresql/data"
         commands = [
-            ["docker", "network", "create", "--internal", "--label", "starter-harness.relational-verification=true", network],
-            ["docker", "run", "--detach", "--rm", "--name", database_container, "--network", network, "--label", "starter-harness.relational-verification=true", "--security-opt", "no-new-privileges", "--memory", "1g", "--cpus", "1", "--pids-limit", "512", "--env-file", env_file_name, "--mount", f"type=tmpfs,destination={data_path},tmpfs-size={plan['limits']['tmpfsBytes']}", plan["images"]["postgres"]],
+            ["docker", "network", "create", "--internal", "--label", RESOURCE_LABEL, network],
+            ["docker", "run", "--detach", "--rm", "--name", database_container, "--network", network, "--label", RESOURCE_LABEL, "--security-opt", "no-new-privileges", "--memory", "1g", "--cpus", "1", "--pids-limit", "512", "--env-file", env_file_name, "--mount", f"type=tmpfs,destination={data_path},tmpfs-size={plan['limits']['tmpfsBytes']}", plan["images"]["postgres"]],
         ]
         for command in commands:
             result = run(command, timeout)
@@ -115,7 +144,7 @@ def execute(plan: dict, migration: Path) -> dict:
             time.sleep(0.25)
         mount = f"type=bind,source={Path(migration_stage.name).resolve()},destination=/flyway/sql,readonly"
         for action in ("migrate", "validate"):
-            command = ["docker", "run", "--rm", "--name", flyway_containers[action], "--label", "starter-harness.relational-verification=true", "--network", network, "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=67108864", "--security-opt", "no-new-privileges", "--memory", "1g", "--cpus", "1", "--pids-limit", "512", "--env-file", env_file_name, "--mount", mount, plan["images"]["flyway"], action]
+            command = ["docker", "run", "--rm", "--name", flyway_containers[action], "--label", RESOURCE_LABEL, "--network", network, "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=67108864", "--security-opt", "no-new-privileges", "--memory", "1g", "--cpus", "1", "--pids-limit", "512", "--env-file", env_file_name, "--mount", mount, plan["images"]["flyway"], action]
             result = run(command, timeout); events.append({"step": f"flyway {action}", "exitCode": result.returncode, "output": bounded(result.stdout + result.stderr, password)})
             if result.returncode: raise ValueError(f"Flyway {action} failed in isolated PostgreSQL")
         state = "PASSED"
@@ -153,12 +182,18 @@ def main() -> int:
             if path.is_symlink(): raise ValueError(f"{label} must not be a symbolic link")
             if root not in (path.resolve(), *path.resolve().parents): raise ValueError(f"{label} escapes target")
         if args.output.exists(): raise ValueError("verification output already exists")
+        validate_storage(root); journal_path = root / JOURNAL_PATH
+        if journal_path.exists(): raise ValueError(f"unfinished migration verification journal exists: {JOURNAL_PATH}; recover it before retrying")
         plan = load_object(args.plan); migration, _ = validate_plan(plan, args.plan, root); approval = load_object(args.approval); validate_approval(approval, args.plan, root)
         docker = run(["docker", "version", "--format", "{{.Server.Version}}"], 20)
         if docker.returncode: raise ValueError("Docker Engine is unavailable")
-        execution = execute(plan, migration)
+        journal = execution_resources(plan, root, args.plan); atomic_json(journal, journal_path)
+        execution = execute(plan, migration, journal)
+        if execution["state"] == "CLEANUP_FAILED":
+            journal["state"] = "CLEANUP_REQUIRED"; journal["cleanup"] = execution["cleanup"]; atomic_json(journal, journal_path)
         report = {"migrationVerificationReportVersion": 1, "plan": {"path": str(args.plan.resolve()), "sha256": sha(args.plan)}, "approval": {"path": str(args.approval.resolve()), "sha256": sha(args.approval), "approvedBy": approval["approvedBy"], "approvedAt": approval["approvedAt"]}, "target": str(root), "executedAt": dt.datetime.now(dt.timezone.utc).isoformat(), "result": execution}
-        args.output.parent.mkdir(parents=True, exist_ok=True); args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        atomic_json(report, args.output)
+        if execution["state"] != "CLEANUP_FAILED": journal_path.unlink()
     except (OSError, ValueError, subprocess.TimeoutExpired) as error: print(f"RELATIONAL_MIGRATION_VERIFICATION_VALID: no\nERROR: {error}", file=sys.stderr); return 1
     print(f"RELATIONAL_MIGRATION_VERIFICATION_VALID: {'yes' if execution['state'] == 'PASSED' else 'no'}"); print(f"VERIFICATION_STATE: {execution['state']}"); print("TARGET_DATABASE_ACCESSED: no"); print("TARGET_SOURCE_FILES_CHANGED: no"); print("PERSISTENT_VOLUME_CREATED: no"); return 0 if execution["state"] == "PASSED" else 1
 
