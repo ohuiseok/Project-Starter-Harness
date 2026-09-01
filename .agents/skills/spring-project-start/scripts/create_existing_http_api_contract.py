@@ -82,6 +82,9 @@ def main() -> int:
         )
         if not isinstance(traceability, list):
             raise ValueError("traceability source must contain a traceability array")
+        selected_operations = [item.get("subjectRef") for item in traceability if isinstance(item, dict)]
+        if not selected_operations or not all(isinstance(item, str) and item for item in selected_operations):
+            raise ValueError("traceability must select at least one operation")
         report = compare_openapi(baseline, proposed, args.contract_id)
         report_content = encoded(report)
         metadata = {
@@ -92,7 +95,14 @@ def main() -> int:
             "artifact": {"format": "OPENAPI", "path": artifact_path.relative_to(root).as_posix()},
             "baselineArtifact": {"format": "OPENAPI", "path": baseline_relative, "sha256": digest(baseline_path)},
             "comparison": {"path": comparison_output.relative_to(root).as_posix(), "sha256": hashlib.sha256(report_content).hexdigest()},
-            "acceptedCompatibilityReviews": [],
+            "selectedOperations": selected_operations,
+            "compatibilityReviews": [
+                {
+                    "reviewId": f"{item['code']}:{item['location']}", "status": "PENDING",
+                    "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": False,
+                }
+                for item in report["changes"] if item["level"] == "REVIEW"
+            ],
             "traceability": traceability, "evidencePaths": selected["evidencePaths"],
             "approval": {"status": "DRAFT", "approvedBy": None, "approvedAt": None, "approvedContentSha256": None},
         }

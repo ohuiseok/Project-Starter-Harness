@@ -62,6 +62,7 @@ def derived_traceability(document: dict[str, Any]) -> list[dict[str, Any]]:
 
 def validate_openapi(
     document: dict[str, Any], feature: dict[str, Any], profile: dict[str, Any], metadata: dict[str, Any],
+    selected_operation_ids: set[str] | None = None,
 ) -> list[str]:
     reject_openapi_secrets(document)
     version = text(document.get("openapi"), "openapi", False)
@@ -86,9 +87,24 @@ def validate_openapi(
     covered_business: set[str] = set()
     has_error_response = False
     secured_operations = 0
-    all_operations = operations(document)
-    if not all_operations:
+    document_operations = operations(document)
+    if not document_operations:
         raise ValueError("paths must contain at least one HTTP operation")
+    all_ids: list[str] = []
+    for path, method, operation in document_operations:
+        operation_id = text(operation.get("operationId"), f"paths.{path}.{method}.operationId", False)
+        if operation_id in all_ids:
+            raise ValueError(f"duplicate operationId: {operation_id}")
+        all_ids.append(operation_id)
+    if selected_operation_ids is not None:
+        missing_selected = selected_operation_ids - set(all_ids)
+        if missing_selected:
+            blockers.append("selected operations are missing from OpenAPI: " + ", ".join(sorted(missing_selected)))
+        all_operations = [item for item in document_operations if item[2]["operationId"] in selected_operation_ids]
+        if not all_operations:
+            blockers.append("no selected API operation can be validated")
+    else:
+        all_operations = document_operations
     global_security = document.get("security")
     schemes = document.get("components", {}).get("securitySchemes", {})
     if not isinstance(schemes, dict):
@@ -98,8 +114,6 @@ def validate_openapi(
         if not path.startswith("/"):
             raise ValueError(f"OpenAPI path must start with '/': {path}")
         operation_id = text(operation.get("operationId"), f"{location}.operationId", False)
-        if operation_id in seen_ids:
-            raise ValueError(f"duplicate operationId: {operation_id}")
         seen_ids.add(operation_id)
         text(operation.get("summary"), f"{location}.summary", False)
         refs = operation.get("x-harness-requirement-refs")
@@ -196,7 +210,10 @@ def validate_openapi(
         blockers.append("technology profile security decision is unresolved")
     if feature.get("authorization") and secured_operations == 0:
         blockers.append("authorized feature has no secured API operation")
-    if metadata.get("traceability") != derived_traceability(document):
+    expected_traceability = derived_traceability(document)
+    if selected_operation_ids is not None:
+        expected_traceability = [item for item in expected_traceability if item["subjectRef"] in selected_operation_ids]
+    if metadata.get("traceability") != expected_traceability:
         blockers.append("contract traceability does not match OpenAPI operations")
     return blockers
 

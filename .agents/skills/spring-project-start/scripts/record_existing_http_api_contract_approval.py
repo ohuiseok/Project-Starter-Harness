@@ -61,7 +61,7 @@ def main() -> int:
         if hashlib.sha256(comparison_original).hexdigest() != args.expected_comparison_hash:
             raise ValueError("compatibility report changed after it was shown")
         markdown_path = args.contract.with_suffix(".md")
-        markdown_original = render(metadata, openapi, report, []).encode()
+        markdown_original = render(metadata, openapi, report, [], feature).encode()
         read_expected(markdown_path, markdown_original, "existing HTTP API Markdown")
         approved = approved_copy(metadata, args.approved_by, args.approved_at)
         approved_state, approved_blockers, approved_api, approved_report = validate_existing_contract(
@@ -71,7 +71,7 @@ def main() -> int:
             raise ValueError("approved contract is invalid: " + "; ".join(approved_blockers))
         writes = [
             (args.contract, original, encoded(approved)),
-            (markdown_path, markdown_original, render(approved, approved_api, approved_report, []).encode()),
+            (markdown_path, markdown_original, render(approved, approved_api, approved_report, [], feature).encode()),
         ]
         written: list[tuple[Path, bytes, bytes]] = []
         try:

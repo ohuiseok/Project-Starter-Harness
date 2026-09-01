@@ -44,13 +44,33 @@ code evidence. `REUSE` points to that exact file and never copies or edits it.
 `EXTEND` writes a separate proposed OpenAPI and compares it with the baseline;
 approval still does not apply the proposal to the existing interface.
 
+Metadata selects only the operation IDs used by the current feature. Validation,
+traceability, Controller evidence, and the basic user view apply to that subset;
+unrelated operations in a large service contract are not forced into the
+feature. The compatibility report still protects the complete proposed change.
+
+Local JSON Pointer `$ref` values are resolved recursively before schema
+comparison, including component changes and cycles. External references are
+`UNKNOWN` until their immutable content is supplied as evidence.
+
 The compatibility report treats removed operations or responses, changed path
 or method, newly required parameters or authentication, incompatible schema
 types, removed properties or enum values, and newly required request fields as
 breaking. Breaking changes cannot be approved as an in-place extension. Other
-schema differences are `REVIEW` and require their exact current review IDs in
-`acceptedCompatibilityReviews`; a general approval does not silently accept
-them.
+schema differences are `REVIEW`. Every review has a structured decision with
+status, reason, source, and user-confirmation flag. An accepted review without a
+resolved reason and explicit user confirmation remains blocked; a general
+approval does not silently accept it. Authentication removal or weakening is a
+non-waivable security blocker in this workflow.
+
+The basic view shows selected operations only, expands feature IDs into their
+approved descriptions, and explains each difference with before/after values,
+impact, recommendation, accepted risks, and next actions.
+
+Legacy metadata with `acceptedCompatibilityReviews` has neither a selected
+operation boundary nor a recorded acceptance reason. Migrate it to a separate
+file with `migrate_existing_http_api_contract_v2.py`. The migration never
+inherits approval and returns every review to `PENDING` for explicit review.
 
 When route evidence includes files with kind `SPRING_CONTROLLER`, the harness
 checks literal Spring mapping annotations against baseline operations. A

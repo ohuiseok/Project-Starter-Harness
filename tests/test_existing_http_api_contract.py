@@ -19,9 +19,10 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(SCRIPTS))
 
 from existing_http_api_contract import compare_openapi, validate_existing_contract  # noqa: E402
+from migrate_existing_http_api_contract_v2 import migrate  # noqa: E402
 import record_existing_http_api_contract_approval  # noqa: E402
 from render_existing_http_api_contract import render  # noqa: E402
-from http_api_contract import derived_traceability, encoded  # noqa: E402
+from http_api_contract import derived_traceability, encoded, validate_openapi  # noqa: E402
 from tests.test_design_route import refresh, route  # noqa: E402
 from tests.test_feature_specs import feature_spec  # noqa: E402
 from tests.test_http_api_contract import openapi, profile  # noqa: E402
@@ -77,7 +78,11 @@ class ExistingHttpApiContractTests(unittest.TestCase):
             "artifact": {"format": "OPENAPI", "path": artifact_path.relative_to(root).as_posix()},
             "baselineArtifact": {"format": "OPENAPI", "path": baseline_path.relative_to(root).as_posix(), "sha256": hashlib.sha256(baseline_path.read_bytes()).hexdigest()},
             "comparison": {"path": comparison_path.relative_to(root).as_posix(), "sha256": hashlib.sha256(comparison_path.read_bytes()).hexdigest()},
-            "acceptedCompatibilityReviews": [],
+            "selectedOperations": [item["subjectRef"] for item in derived_traceability(proposed)],
+            "compatibilityReviews": [
+                {"reviewId": f"{item['code']}:{item['location']}", "status": "PENDING", "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": False}
+                for item in report["changes"] if item["level"] == "REVIEW"
+            ],
             "traceability": derived_traceability(proposed), "evidencePaths": copy.deepcopy(selected["evidencePaths"]),
             "approval": {"status": "APPROVED", "approvedBy": "test-user", "approvedAt": "2026-09-01T00:00:00Z", "approvedContentSha256": None},
         }
@@ -127,6 +132,80 @@ class ExistingHttpApiContractTests(unittest.TestCase):
             for item in report["changes"]
         ))
 
+    def test_local_ref_component_change_is_compared_by_meaning(self) -> None:
+        baseline = openapi()
+        operation = baseline["paths"]["/api/leave-requests"]["post"]
+        operation["requestBody"]["content"]["application/json"]["schema"] = {"$ref": "#/components/schemas/LeaveRequest"}
+        baseline["components"]["schemas"] = {"LeaveRequest": {"type": "object", "properties": {"reason": {"type": "string"}}}}
+        proposed = copy.deepcopy(baseline)
+        proposed["components"]["schemas"]["LeaveRequest"]["required"] = ["reason"]
+        report = compare_openapi(baseline, proposed, "http-api")
+        self.assertTrue(any(item["code"] == "REQUEST_SCHEMA_CHANGED" and item["level"] == "BREAKING" for item in report["changes"]))
+
+    def test_partial_reuse_ignores_unselected_operation_traceability(self) -> None:
+        api = openapi()
+        extra = copy.deepcopy(api["paths"]["/api/leave-requests"]["post"])
+        extra["operationId"] = "unrelatedAdminOperation"
+        extra["summary"] = "Unrelated admin operation"
+        extra.pop("x-harness-requirement-refs")
+        api["paths"]["/admin"] = {"post": extra}
+        metadata = {"traceability": derived_traceability(openapi())}
+        self.assertEqual([], validate_openapi(api, feature_spec(), profile(), metadata, {"requestLeave"}))
+
+    def test_security_removal_is_a_non_waivable_security_change(self) -> None:
+        baseline = openapi()
+        proposed = copy.deepcopy(baseline)
+        proposed["paths"]["/api/leave-requests"]["post"]["security"] = []
+        report = compare_openapi(baseline, proposed, "http-api")
+        self.assertTrue(any(item["code"] == "SECURITY_REMOVED" and item["level"] == "SECURITY" for item in report["changes"]))
+
+    def test_referenced_security_scheme_definition_change_is_detected(self) -> None:
+        baseline = openapi()
+        proposed = copy.deepcopy(baseline)
+        proposed["components"]["securitySchemes"]["bearerAuth"]["bearerFormat"] = "opaque"
+        report = compare_openapi(baseline, proposed, "http-api")
+        self.assertTrue(any(item["code"] == "SECURITY_CHANGED" and item["level"] == "SECURITY" for item in report["changes"]))
+
+    def test_external_ref_remains_unknown(self) -> None:
+        baseline = openapi()
+        baseline["paths"]["/api/leave-requests"]["post"]["requestBody"]["content"]["application/json"]["schema"] = {
+            "$ref": "https://schemas.example.test/leave.json"
+        }
+        report = compare_openapi(baseline, copy.deepcopy(baseline), "http-api")
+        self.assertTrue(any(item["code"] == "EXTERNAL_REF_UNRESOLVED" and item["level"] == "UNKNOWN" for item in report["changes"]))
+
+    def test_review_acceptance_requires_reason_source_and_user_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metadata, design_route, route_path, contract_path = self.fixture(root, "EXTEND")
+            baseline = openapi()
+            artifact_path = root / metadata["artifact"]["path"]
+            proposed = json.loads(artifact_path.read_text(encoding="utf-8"))
+            schema = proposed["paths"]["/api/leave-requests"]["post"]["requestBody"]["content"]["application/json"]["schema"]
+            schema["properties"] = {"optionalNote": {"type": "string"}}
+            artifact_path.write_bytes(encoded(proposed))
+            report = compare_openapi(baseline, proposed, "http-api")
+            comparison_path = root / metadata["comparison"]["path"]
+            comparison_path.write_bytes(encoded(report))
+            metadata["comparison"]["sha256"] = hashlib.sha256(comparison_path.read_bytes()).hexdigest()
+            metadata["traceability"] = derived_traceability(proposed)
+            metadata["selectedOperations"] = [item["subjectRef"] for item in metadata["traceability"]]
+            review_id = next(f"{item['code']}:{item['location']}" for item in report["changes"] if item["level"] == "REVIEW")
+            metadata["compatibilityReviews"] = [{
+                "reviewId": review_id, "status": "ACCEPTED", "reason": "UNKNOWN",
+                "source": "USER_STATED", "confirmedByUser": False,
+            }]
+            metadata["approval"]["approvedContentSha256"] = approval_content_hash(metadata)
+            blockers = validate_existing_contract(metadata, design_route, route_path, root, contract_path, feature_spec(), profile())[1]
+            self.assertTrue(any("lacks user-confirmed reason" in item for item in blockers))
+            metadata["compatibilityReviews"][0].update({
+                "reason": "No client has consumed the optional field yet.", "confirmedByUser": True,
+            })
+            metadata["approval"]["approvedContentSha256"] = approval_content_hash(metadata)
+            self.assertEqual([], validate_existing_contract(
+                metadata, design_route, route_path, root, contract_path, feature_spec(), profile()
+            )[1])
+
     def test_controller_evidence_can_prove_mapping(self) -> None:
         source = '@RestController\nclass LeaveController {\n@PostMapping("/api/leave-requests") void request() {}\n}'
         with tempfile.TemporaryDirectory() as directory:
@@ -173,7 +252,7 @@ class ExistingHttpApiContractTests(unittest.TestCase):
             comparison_path = root / metadata["comparison"]["path"]
             api_before = api_path.read_bytes()
             report = json.loads(comparison_path.read_text(encoding="utf-8"))
-            contract_path.with_suffix(".md").write_text(render(metadata, openapi(), report, []), encoding="utf-8")
+            contract_path.with_suffix(".md").write_text(render(metadata, openapi(), report, [], feature_spec()), encoding="utf-8")
             feature_path, project_path, profile_path = root / "feature.json", root / "project.json", root / "profile.json"
             feature_path.write_text(json.dumps(feature_spec()), encoding="utf-8")
             project_path.write_text("{}", encoding="utf-8")
@@ -195,6 +274,34 @@ class ExistingHttpApiContractTests(unittest.TestCase):
                 self.assertEqual(0, record_existing_http_api_contract_approval.main())
             self.assertEqual("APPROVED", json.loads(contract_path.read_text(encoding="utf-8"))["approval"]["status"])
             self.assertEqual(api_before, api_path.read_bytes())
+
+    def test_user_view_shows_change_impact_and_actions(self) -> None:
+        baseline = openapi()
+        proposed = copy.deepcopy(baseline)
+        proposed["paths"]["/api/leave-requests"]["post"]["security"] = []
+        report = compare_openapi(baseline, proposed, "http-api")
+        metadata = {
+            "disposition": "EXTEND", "selectedOperations": ["requestLeave"],
+            "traceability": derived_traceability(proposed), "compatibilityReviews": [],
+            "approval": {"status": "DRAFT"},
+        }
+        markdown = render(metadata, proposed, report, ["EXTEND contains a security regression or unresolved security change"], feature_spec())
+        self.assertIn("차이:", markdown)
+        self.assertIn("영향:", markdown)
+        self.assertIn("추천:", markdown)
+        self.assertIn("## 다음 행동", markdown)
+
+    def test_legacy_review_migration_does_not_inherit_approval(self) -> None:
+        legacy = {
+            "disposition": "EXTEND", "traceability": [{"subjectRef": "requestLeave", "requirementRefs": ["AC-F001-01"]}],
+            "acceptedCompatibilityReviews": ["REQUEST_SCHEMA_CHANGED:requestLeave"],
+            "approval": {"status": "APPROVED"},
+        }
+        report = {"changes": [{"level": "REVIEW", "code": "REQUEST_SCHEMA_CHANGED", "location": "requestLeave"}]}
+        migrated = migrate(legacy, report)
+        self.assertEqual("REVIEW_REQUIRED", migrated["approval"]["status"])
+        self.assertEqual("PENDING", migrated["compatibilityReviews"][0]["status"])
+        self.assertNotIn("acceptedCompatibilityReviews", migrated)
 
 
 if __name__ == "__main__":

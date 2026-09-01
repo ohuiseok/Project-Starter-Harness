@@ -12,7 +12,7 @@ from typing import Any
 
 from http_api_contract import encoded, operations, validate_openapi
 from validate_design_contract import inside, validate as validate_metadata
-from validate_feature_specs import load_object, text
+from validate_feature_specs import SOURCES, load_object, text
 
 
 MAPPING = re.compile(r"@(Get|Post|Put|Delete|Patch)Mapping\s*\(\s*(?:value\s*=\s*|path\s*=\s*)?[\"']([^\"']*)[\"']")
@@ -42,24 +42,88 @@ def required_parameters(operation: dict[str, Any]) -> set[tuple[str, str]]:
     }
 
 
-def schema_signature(operation: dict[str, Any]) -> str:
-    body = operation.get("requestBody", {})
-    return json.dumps(body, sort_keys=True, separators=(",", ":"))
+def json_pointer(document: dict[str, Any], reference: str) -> Any:
+    if not reference.startswith("#/"):
+        return {"$externalRef": reference}
+    current: Any = document
+    for raw in reference[2:].split("/"):
+        token = raw.replace("~1", "/").replace("~0", "~")
+        if not isinstance(current, dict) or token not in current:
+            raise ValueError(f"unresolved local OpenAPI reference: {reference}")
+        current = current[token]
+    return current
 
 
-def request_schema(operation: dict[str, Any]) -> dict[str, Any]:
+def resolve_schema(document: dict[str, Any], value: Any, stack: tuple[str, ...] = ()) -> Any:
+    if isinstance(value, dict):
+        if "$ref" in value:
+            reference = text(value["$ref"], "$ref", False)
+            if reference in stack:
+                return {"$recursiveRef": reference}
+            resolved = resolve_schema(document, json_pointer(document, reference), stack + (reference,))
+            siblings = {key: child for key, child in value.items() if key != "$ref"}
+            if siblings and isinstance(resolved, dict):
+                return {**resolved, **resolve_schema(document, siblings, stack)}
+            return resolved
+        return {key: resolve_schema(document, child, stack) for key, child in value.items()}
+    if isinstance(value, list):
+        return [resolve_schema(document, child, stack) for child in value]
+    return value
+
+
+def external_references(value: Any) -> set[str]:
+    found: set[str] = set()
+    if isinstance(value, dict):
+        reference = value.get("$ref")
+        if isinstance(reference, str) and not reference.startswith("#/"):
+            found.add(reference)
+        for child in value.values():
+            found.update(external_references(child))
+    elif isinstance(value, list):
+        for child in value:
+            found.update(external_references(child))
+    return found
+
+
+def request_schemas(document: dict[str, Any], operation: dict[str, Any]) -> dict[str, Any]:
     content = operation.get("requestBody", {}).get("content", {})
-    media = next(iter(content.values()), {}) if isinstance(content, dict) else {}
-    return media.get("schema", {}) if isinstance(media, dict) else {}
+    return {
+        media_type: resolve_schema(document, media.get("schema", {}))
+        for media_type, media in content.items() if isinstance(media, dict)
+    } if isinstance(content, dict) else {}
 
 
-def response_schemas(operation: dict[str, Any]) -> dict[str, Any]:
-    result = {}
+def response_schemas(document: dict[str, Any], operation: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
     for code, response in operation.get("responses", {}).items():
         content = response.get("content", {}) if isinstance(response, dict) else {}
-        media = next(iter(content.values()), {}) if isinstance(content, dict) else {}
-        result[str(code)] = media.get("schema", {}) if isinstance(media, dict) else {}
+        result[str(code)] = {
+            media_type: resolve_schema(document, media.get("schema", {}))
+            for media_type, media in content.items() if isinstance(media, dict)
+        } if isinstance(content, dict) else {}
     return result
+
+
+def effective_security(document: dict[str, Any], operation: dict[str, Any]) -> list[Any]:
+    value = operation["security"] if "security" in operation else document.get("security", [])
+    return value if isinstance(value, list) else []
+
+
+def security_state(document: dict[str, Any], operation: dict[str, Any]) -> dict[str, Any]:
+    requirements = effective_security(document, operation)
+    names = {name for item in requirements if isinstance(item, dict) for name in item}
+    definitions = document.get("components", {}).get("securitySchemes", {})
+    return {
+        "requirements": requirements,
+        "schemes": {name: definitions.get(name) for name in sorted(names)} if isinstance(definitions, dict) else {},
+    }
+
+
+def change(level: str, code: str, location: str, before: Any, after: Any, impact: str, recommendation: str) -> dict[str, Any]:
+    return {
+        "level": level, "code": code, "location": location,
+        "before": before, "after": after, "impact": impact, "recommendation": recommendation,
+    }
 
 
 def schema_breaks(old: Any, new: Any, request: bool) -> bool:
@@ -81,38 +145,71 @@ def schema_breaks(old: Any, new: Any, request: bool) -> bool:
         return True
     if not request and old_required - new_required:
         return True
+    handled = {"type", "enum", "properties", "required"}
+    for key in set(old) & set(new) - handled:
+        if schema_breaks(old[key], new[key], request):
+            return True
     return False
 
 
 def compare_openapi(baseline: dict[str, Any], proposed: dict[str, Any], contract_id: str) -> dict[str, Any]:
     before = operation_map(baseline)
     after = operation_map(proposed)
-    changes: list[dict[str, str]] = []
+    changes: list[dict[str, Any]] = []
+    for reference in sorted(external_references(baseline) | external_references(proposed)):
+        changes.append(change("UNKNOWN", "EXTERNAL_REF_UNRESOLVED", reference, reference, reference,
+                              "External schema content cannot be verified from current evidence.",
+                              "Provide a local immutable schema or record the external artifact as evidence."))
     for operation_id in sorted(set(before) - set(after)):
-        changes.append({"level": "BREAKING", "code": "OPERATION_REMOVED", "location": operation_id, "message": "Existing operation is removed."})
+        path, method, _ = before[operation_id]
+        changes.append(change("BREAKING", "OPERATION_REMOVED", operation_id, f"{method.upper()} {path}", None,
+                              "Existing clients lose an operation.", "Keep it or introduce a versioned replacement."))
     for operation_id in sorted(set(after) - set(before)):
-        changes.append({"level": "NON_BREAKING", "code": "OPERATION_ADDED", "location": operation_id, "message": "New operation is added."})
+        path, method, _ = after[operation_id]
+        changes.append(change("NON_BREAKING", "OPERATION_ADDED", operation_id, None, f"{method.upper()} {path}",
+                              "Existing clients can continue unchanged.", "Add tests for the new operation."))
     for operation_id in sorted(set(before) & set(after)):
         old_path, old_method, old = before[operation_id]
         new_path, new_method, new = after[operation_id]
         if (old_path, old_method) != (new_path, new_method):
-            changes.append({"level": "BREAKING", "code": "ENDPOINT_CHANGED", "location": operation_id, "message": "Path or method changes."})
+            changes.append(change("BREAKING", "ENDPOINT_CHANGED", operation_id,
+                                  f"{old_method.upper()} {old_path}", f"{new_method.upper()} {new_path}",
+                                  "Existing calls no longer reach the same endpoint.", "Keep the endpoint or create a new version."))
         added_required = required_parameters(new) - required_parameters(old)
         if added_required:
-            changes.append({"level": "BREAKING", "code": "REQUIRED_PARAMETER_ADDED", "location": operation_id, "message": "A required parameter is added."})
+            changes.append(change("BREAKING", "REQUIRED_PARAMETER_ADDED", operation_id, [], sorted(added_required),
+                                  "Existing requests may be rejected.", "Make the parameter optional or version the API."))
         removed_responses = set(old.get("responses", {})) - set(new.get("responses", {}))
         if removed_responses:
-            changes.append({"level": "BREAKING", "code": "RESPONSE_REMOVED", "location": operation_id, "message": "An existing response is removed."})
-        if not old.get("security", baseline.get("security")) and new.get("security", proposed.get("security")):
-            changes.append({"level": "BREAKING", "code": "SECURITY_REQUIRED", "location": operation_id, "message": "Authentication becomes required."})
-        if schema_signature(old) != schema_signature(new):
-            level = "BREAKING" if schema_breaks(request_schema(old), request_schema(new), True) else "REVIEW"
-            changes.append({"level": level, "code": "REQUEST_SCHEMA_CHANGED", "location": operation_id, "message": "Request schema changes."})
-        old_responses, new_responses = response_schemas(old), response_schemas(new)
+            changes.append(change("BREAKING", "RESPONSE_REMOVED", operation_id, sorted(removed_responses), [],
+                                  "Clients can no longer handle the documented response contract.", "Keep existing responses or version the API."))
+        old_security, new_security = security_state(baseline, old), security_state(proposed, new)
+        old_requirements, new_requirements = old_security["requirements"], new_security["requirements"]
+        if old_security != new_security:
+            if old_requirements and not new_requirements:
+                level, code, impact = "SECURITY", "SECURITY_REMOVED", "The operation becomes public or less protected."
+            elif not old_requirements and new_requirements:
+                level, code, impact = "BREAKING", "SECURITY_REQUIRED", "Existing unauthenticated clients will fail."
+            else:
+                old_scopes = {name: set(scopes) for item in old_requirements if isinstance(item, dict) for name, scopes in item.items()}
+                new_scopes = {name: set(scopes) for item in new_requirements if isinstance(item, dict) for name, scopes in item.items()}
+                strengthened = any(new_scopes.get(name, set()) - old_scopes.get(name, set()) for name in new_scopes)
+                level, code = ("BREAKING", "SECURITY_SCOPE_ADDED") if strengthened else ("SECURITY", "SECURITY_CHANGED")
+                impact = "Authentication scheme or required scopes change."
+            changes.append(change(level, code, operation_id, old_security, new_security, impact,
+                                  "Review authorization explicitly; do not accept it as a schema-only change."))
+        old_requests, new_requests = request_schemas(baseline, old), request_schemas(proposed, new)
+        if old_requests != new_requests:
+            level = "BREAKING" if schema_breaks(old_requests, new_requests, True) else "REVIEW"
+            changes.append(change(level, "REQUEST_SCHEMA_CHANGED", operation_id, old_requests, new_requests,
+                                  "Request compatibility may change.", "Keep old accepted inputs or document why the change is safe."))
+        old_responses, new_responses = response_schemas(baseline, old), response_schemas(proposed, new)
         for code in sorted(set(old_responses) & set(new_responses)):
             if old_responses[code] != new_responses[code]:
                 level = "BREAKING" if schema_breaks(old_responses[code], new_responses[code], False) else "REVIEW"
-                changes.append({"level": level, "code": "RESPONSE_SCHEMA_CHANGED", "location": f"{operation_id}:{code}", "message": "Response schema changes."})
+                changes.append(change(level, "RESPONSE_SCHEMA_CHANGED", f"{operation_id}:{code}",
+                                      old_responses[code], new_responses[code], "Client response handling may change.",
+                                      "Preserve existing fields and types or version the response."))
     return {
         "reportVersion": 1, "contractId": contract_id,
         "baselineSha256": hashlib.sha256(encoded(baseline)).hexdigest(),
@@ -121,6 +218,8 @@ def compare_openapi(baseline: dict[str, Any], proposed: dict[str, Any], contract
             "reused": len(set(before) & set(after)), "added": len(set(after) - set(before)),
             "removed": len(set(before) - set(after)),
             "breaking": sum(item["level"] == "BREAKING" for item in changes),
+            "security": sum(item["level"] == "SECURITY" for item in changes),
+            "unknown": sum(item["level"] == "UNKNOWN" for item in changes),
             "review": sum(item["level"] == "REVIEW" for item in changes),
         },
         "changes": changes,
@@ -167,13 +266,21 @@ def validate_existing_contract(
     proposed = load_object(artifact_path)
     if disposition == "REUSE" and artifact_path != baseline_path:
         blockers.append("REUSE must reference the existing OpenAPI without copying it")
+    selected = metadata.get("selectedOperations")
+    if not isinstance(selected, list) or not selected or not all(isinstance(item, str) and item for item in selected):
+        raise ValueError("selectedOperations must be a non-empty string array")
+    if len(selected) != len(set(selected)):
+        raise ValueError("selectedOperations must be unique")
+    trace_subjects = {item.get("subjectRef") for item in metadata["traceability"] if isinstance(item, dict)}
+    if trace_subjects != set(selected):
+        blockers.append("traceability must cover exactly the selected operations")
     decorated = decorated_for_feature(proposed, metadata["traceability"])
     validation_metadata = copy.deepcopy(metadata)
     validation_metadata["traceability"] = [
         {"subjectRef": op["operationId"], "requirementRefs": op.get("x-harness-requirement-refs", [])}
-        for _, _, op in operations(decorated)
+        for _, _, op in operations(decorated) if op["operationId"] in set(selected)
     ]
-    blockers.extend(validate_openapi(decorated, feature, profile, validation_metadata))
+    blockers.extend(validate_openapi(decorated, feature, profile, validation_metadata, set(selected)))
     evidence = {item["path"]: item for item in route["inputs"]["codeEvidence"]}
     for evidence_path in metadata["evidencePaths"]:
         evidence_file = inside(root, evidence_path, "evidence path")
@@ -188,6 +295,8 @@ def validate_existing_contract(
     if controller_paths:
         observed = set().union(*(controller_mappings(inside(root, path, "controller evidence")) for path in controller_paths))
         for path, method, operation in operations(baseline):
+            if operation["operationId"] not in set(selected):
+                continue
             if not any(found_method == method and (not found_path or found_path in path) for found_method, found_path in observed):
                 blockers.append(f"controller evidence does not prove operation: {operation['operationId']}")
     comparison_ref = metadata.get("comparison")
@@ -204,12 +313,34 @@ def validate_existing_contract(
         blockers.append("REUSE cannot contain interface changes")
     if disposition == "EXTEND" and report["summary"]["breaking"]:
         blockers.append("EXTEND contains breaking API changes")
-    accepted = metadata.get("acceptedCompatibilityReviews", [])
-    if not isinstance(accepted, list) or not all(isinstance(item, str) and item for item in accepted):
-        raise ValueError("acceptedCompatibilityReviews must be a string array")
+    if report["summary"].get("security"):
+        blockers.append("EXTEND contains a security regression or unresolved security change")
+    if report["summary"].get("unknown"):
+        blockers.append("API compatibility is UNKNOWN because external references cannot be verified")
     review_ids = {f"{item['code']}:{item['location']}" for item in report["changes"] if item["level"] == "REVIEW"}
-    if set(accepted) - review_ids:
+    reviews = metadata.get("compatibilityReviews")
+    if not isinstance(reviews, list):
+        raise ValueError("compatibilityReviews must be an array")
+    review_records: dict[str, dict[str, Any]] = {}
+    for index, item in enumerate(reviews):
+        if not isinstance(item, dict) or set(item) != {"reviewId", "status", "reason", "source", "confirmedByUser"}:
+            raise ValueError(f"compatibilityReviews[{index}] has invalid fields")
+        review_id = text(item["reviewId"], f"compatibilityReviews[{index}].reviewId", False)
+        if review_id in review_records:
+            raise ValueError("compatibilityReviews contains duplicate reviewId")
+        if item["status"] not in {"PENDING", "ACCEPTED"} or item["source"] not in SOURCES or not isinstance(item["confirmedByUser"], bool):
+            raise ValueError(f"compatibilityReviews[{index}] has invalid decision values")
+        text(item["reason"], f"compatibilityReviews[{index}].reason")
+        if item["status"] == "ACCEPTED" and (
+            item["reason"] == "UNKNOWN" or item["source"] == "UNKNOWN" or not item["confirmedByUser"]
+        ):
+            blockers.append(f"accepted compatibility review lacks user-confirmed reason: {review_id}")
+        review_records[review_id] = item
+    if set(review_records) - review_ids:
         blockers.append("accepted compatibility review does not exist in current report")
-    if disposition == "EXTEND" and review_ids - set(accepted):
+    if review_ids - set(review_records):
+        blockers.append("compatibility report reviews are missing decision records")
+    pending = {review_id for review_id, item in review_records.items() if item["status"] != "ACCEPTED"}
+    if disposition == "EXTEND" and pending:
         blockers.append("EXTEND has unresolved compatibility reviews")
     return approved, blockers, proposed, report
