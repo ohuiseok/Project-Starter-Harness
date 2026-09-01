@@ -27,8 +27,20 @@ checked. A changed input or evidence file makes the route stale.
 
 Every active route names a technology-profile project ID and a module path.
 Persistence in a multi-store profile also names the applicable data-store IDs.
+Route v2 assigns every instance a globally unique, stable `contractId` and may
+contain multiple instances of one kind. This is required when one feature
+creates, extends, or reuses contracts in several modules or services. Instances
+of one kind are either all active or represented by one inactive decision; do
+not mix active and inactive instances for the same kind.
 Do not duplicate API fields, entities, table columns, or screen details in the
 route; those belong to later contracts.
+
+Each active instance points its `artifactPath` to minimal contract metadata.
+That metadata links the route, target, evidence, approval, and feature
+traceability to one standard design artifact. The standard artifact remains the
+source of truth for interface detail. For example, OpenAPI owns HTTP paths,
+schemas, responses, examples, and security schemes; metadata must not repeat
+them.
 
 ## Conversation
 

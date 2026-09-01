@@ -104,6 +104,20 @@ source-file application.
 Render the basic route view with the same target-aware assessment used by the
 validator. Never hide a readiness blocker only in detailed or command output.
 
+Route schema v2 gives every routed artifact a stable `contractId` and permits
+multiple instances of the same kind for multi-module and distributed features.
+Do not add detailed interface fields to the route. Migrate a v1 route to a
+separate v2 file with `migrate_design_route_v2.py`; the migrated copy requires
+review and approval.
+
+Create selected detailed contracts from `templates/design-contract.json`.
+The metadata owns target identity, route linkage, evidence, traceability, and
+approval only. A standard artifact such as OpenAPI owns its interface details;
+never duplicate request or response schemas in metadata. Validate metadata with
+`validate_design_contract.py` and render its user view with
+`render_design_contract.py`. A ready contract permits implementation planning,
+not source-file application.
+
 ## Technology Selection
 
 For a new project, a missing profile, or a requested stack change, read

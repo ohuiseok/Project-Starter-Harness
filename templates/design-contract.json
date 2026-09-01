@@ -1,0 +1,28 @@
+{
+  "contractVersion": 1,
+  "contractId": "UNKNOWN",
+  "kind": "UNKNOWN",
+  "featureId": "F001",
+  "route": {
+    "path": "docs/features/F001/design-route.json",
+    "sha256": "UNKNOWN"
+  },
+  "disposition": "UNKNOWN",
+  "target": {
+    "projectId": "UNKNOWN",
+    "modulePath": "UNKNOWN",
+    "dataStoreIds": []
+  },
+  "artifact": {
+    "format": "UNKNOWN",
+    "path": "UNKNOWN"
+  },
+  "traceability": [],
+  "evidencePaths": [],
+  "approval": {
+    "status": "DRAFT",
+    "approvedBy": null,
+    "approvedAt": null,
+    "approvedContentSha256": null
+  }
+}

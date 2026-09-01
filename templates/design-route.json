@@ -1,5 +1,5 @@
 {
-  "routeVersion": 1,
+  "routeVersion": 2,
   "featureId": "F001",
   "inputs": {
     "feature": {"path": "docs/features/F001/spec.json", "sha256": "UNKNOWN"},
@@ -8,15 +8,15 @@
     "codeEvidence": []
   },
   "routes": [
-    {"kind": "HTTP_API", "requirementRef": "httpApi", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
-    {"kind": "PERSISTENCE", "requirementRef": "persistentState", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
-    {"kind": "MESSAGING", "requirementRef": "messaging", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
-    {"kind": "SCHEDULED_JOB", "requirementRef": "scheduledJob", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
-    {"kind": "SERVER_UI", "requirementRef": "serverRenderedUi", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
-    {"kind": "CLIENT_INTEGRATION", "requirementRef": "separateClient", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
-    {"kind": "EXTERNAL_INTEGRATION", "requirementRef": "externalIntegration", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
-    {"kind": "SECURITY", "requirementRef": "authorization", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
-    {"kind": "VERIFICATION", "requirementRef": "acceptanceCriteria", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false}
+    {"contractId": "http-api", "kind": "HTTP_API", "requirementRef": "httpApi", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
+    {"contractId": "persistence", "kind": "PERSISTENCE", "requirementRef": "persistentState", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
+    {"contractId": "messaging", "kind": "MESSAGING", "requirementRef": "messaging", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
+    {"contractId": "scheduled-job", "kind": "SCHEDULED_JOB", "requirementRef": "scheduledJob", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
+    {"contractId": "server-ui", "kind": "SERVER_UI", "requirementRef": "serverRenderedUi", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
+    {"contractId": "client-integration", "kind": "CLIENT_INTEGRATION", "requirementRef": "separateClient", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
+    {"contractId": "external-integration", "kind": "EXTERNAL_INTEGRATION", "requirementRef": "externalIntegration", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
+    {"contractId": "security", "kind": "SECURITY", "requirementRef": "authorization", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false},
+    {"contractId": "verification", "kind": "VERIFICATION", "requirementRef": "acceptanceCriteria", "disposition": "UNKNOWN", "target": {"projectId": "UNKNOWN", "modulePath": "UNKNOWN", "dataStoreIds": []}, "evidencePaths": [], "artifactPath": null, "reason": "UNKNOWN", "source": "UNKNOWN", "confirmedByUser": false}
   ],
   "approval": {"status": "DRAFT", "approvedBy": null, "approvedAt": null, "approvedContentSha256": null}
 }

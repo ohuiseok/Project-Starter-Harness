@@ -61,6 +61,9 @@ rollback하며, 성공 시 다음 비교를 위한 baseline manifest를 기록�
 | `scripts/check-spring-project` | 빌드 파일과 소스 레이아웃 확인 |
 | `scripts/run-verification` | target 테스트 실행 |
 | `spring-project-start/scripts/validate_feature_specs.py` | 프로젝트 개요·기능 계약과 진행 gate 검증 |
+| `spring-project-start/scripts/migrate_design_route_v2.py` | 단일 대상 v1 설계 경로를 안정적인 계약 ID가 있는 v2 사본으로 변환 |
+| `spring-project-start/scripts/validate_design_contract.py` | 상세 설계 메타데이터와 승인된 라우팅·대상·추적성의 일치 검증 |
+| `spring-project-start/scripts/render_design_contract.py` | 상세 설계 메타데이터의 사용자용 Markdown 보기 생성·검사 |
 | `spring-project-start/scripts/render_spec_markdown.py` | JSON에서 사용자용 Markdown 생성·동기화 확인 |
 | `spring-project-start/scripts/record_spec_approval.py` | 승인 상태 동기화와 JSON·Markdown 원자적 갱신 |
 | `spring-project-start/scripts/next_feature_id.py` | 프로젝트 개요와 기존 디렉터리에서 다음 기능 ID 확인 |

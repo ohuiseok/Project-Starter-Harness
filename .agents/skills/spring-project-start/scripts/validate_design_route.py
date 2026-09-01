@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import sys
+import re
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ ROUTE_REQUIREMENTS = {
 }
 DISPOSITIONS = {"CREATE", "EXTEND", "REUSE", "NOT_NEEDED", "DEFERRED", "UNKNOWN"}
 ACTIVE = {"CREATE", "EXTEND", "REUSE"}
+CONTRACT_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 def sha256(path: Path) -> str:
@@ -37,8 +39,9 @@ def string_list(value: Any, location: str) -> list[str]:
 
 
 def validate(route: dict[str, Any], feature: dict[str, Any], project: dict[str, Any], profile: dict[str, Any]) -> tuple[bool, list[str]]:
-    if route.get("routeVersion") != 1:
-        raise ValueError("routeVersion must be 1")
+    version = route.get("routeVersion")
+    if version not in {1, 2}:
+        raise ValueError("routeVersion must be 1 or 2")
     feature_approved, feature_blockers = validate_feature(feature, project)
     if not feature_approved or feature_blockers:
         raise ValueError("feature specification must be advancement-ready")
@@ -74,20 +77,32 @@ def validate(route: dict[str, Any], feature: dict[str, Any], project: dict[str, 
         if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
             raise ValueError(f"inputs.codeEvidence[{index}].sha256: lowercase SHA-256 required")
     routes = route.get("routes")
-    if not isinstance(routes, list) or len(routes) != len(ROUTE_REQUIREMENTS):
-        raise ValueError("routes must contain every routing kind exactly once")
+    if not isinstance(routes, list):
+        raise ValueError("routes must be an array")
     kinds = [item.get("kind") for item in routes if isinstance(item, dict)]
-    if set(kinds) != set(ROUTE_REQUIREMENTS) or len(kinds) != len(set(kinds)):
-        raise ValueError("routes must contain every routing kind exactly once")
+    if set(kinds) != set(ROUTE_REQUIREMENTS):
+        raise ValueError("routes must contain every routing kind")
+    if version == 1 and (len(routes) != len(ROUTE_REQUIREMENTS) or len(kinds) != len(set(kinds))):
+        raise ValueError("routeVersion 1 must contain every routing kind exactly once")
     project_ids = {item.get("id") for item in profile.get("projects", []) if isinstance(item, dict)}
     if not project_ids:
         project_ids = {profile.get("project", {}).get("artifactId")}
     store_ids = {item.get("id") for item in profile.get("dataStores", []) if isinstance(item, dict)}
     requirements = feature["designRequirements"]
     artifact_paths: set[str] = set()
+    contract_ids: set[str] = set()
+    grouped: dict[str, list[dict[str, Any]]] = {kind: [] for kind in ROUTE_REQUIREMENTS}
     for index, item in enumerate(routes):
         kind = item["kind"]
+        grouped[kind].append(item)
         location = f"routes[{index}]"
+        if version == 2:
+            contract_id = text(item.get("contractId"), f"{location}.contractId", False)
+            if not CONTRACT_ID.fullmatch(contract_id):
+                raise ValueError(f"{location}.contractId: lowercase kebab-case required")
+            if contract_id in contract_ids:
+                raise ValueError(f"routes: duplicate contractId {contract_id}")
+            contract_ids.add(contract_id)
         if item.get("requirementRef") != ROUTE_REQUIREMENTS[kind]:
             raise ValueError(f"{location}.requirementRef does not match {kind}")
         disposition = text(item.get("disposition"), f"{location}.disposition")
@@ -132,7 +147,7 @@ def validate(route: dict[str, Any], feature: dict[str, Any], project: dict[str, 
             expected = None
         else:
             expected = requirements[ROUTE_REQUIREMENTS[kind]]["status"]
-        if expected == "REQUIRED" and disposition not in ACTIVE | {"UNKNOWN"}:
+        if version == 1 and expected == "REQUIRED" and disposition not in ACTIVE | {"UNKNOWN"}:
             blockers.append(f"required design cannot be {disposition}: {kind}")
         if expected == "NOT_USED" and disposition != "NOT_NEEDED":
             blockers.append(f"unused design must be NOT_NEEDED: {kind}")
@@ -148,6 +163,17 @@ def validate(route: dict[str, Any], feature: dict[str, Any], project: dict[str, 
             blockers.append("verification route must be CREATE, EXTEND, or REUSE")
         if kind == "SECURITY" and feature["authorization"] and disposition not in ACTIVE | {"UNKNOWN"}:
             blockers.append("authorized feature requires an active security route")
+    if version == 2:
+        for kind, instances in grouped.items():
+            dispositions = {item["disposition"] for item in instances}
+            active_count = sum(item["disposition"] in ACTIVE for item in instances)
+            if active_count and dispositions - ACTIVE:
+                blockers.append(f"active and inactive contract instances cannot be mixed: {kind}")
+            if not active_count and len(instances) != 1:
+                blockers.append(f"inactive design kind must have exactly one contract instance: {kind}")
+            expected = None if kind in {"SECURITY", "VERIFICATION"} else requirements[ROUTE_REQUIREMENTS[kind]]["status"]
+            if expected == "REQUIRED" and not active_count and "UNKNOWN" not in dispositions:
+                blockers.append(f"required design needs an active contract instance: {kind}")
     approved = validate_approval(route.get("approval"), "approval", route)
     return approved, blockers
 
@@ -192,7 +218,8 @@ def verify_inputs(route: dict[str, Any], feature_path: Path, project_path: Path,
                 continue
             resolved = (root / value).resolve()
             if root not in (resolved, *resolved.parents):
-                blockers.append(f"route {label} escapes target: {item['kind']}")
+                identity = item.get("contractId", item["kind"])
+                blockers.append(f"route {label} escapes target: {identity}")
     return blockers
 
 

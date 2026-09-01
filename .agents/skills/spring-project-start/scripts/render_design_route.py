@@ -104,21 +104,25 @@ def render(
         "<!-- design-route.json에서 생성됨. 직접 수정하지 마세요. -->", "",
         "## 이번에 만들거나 활용할 설계", "",
     ]
+    kind_counts = {kind: sum(item["kind"] == kind for item in route["routes"]) for kind in KIND_LABELS}
+    def label(item: dict) -> str:
+        suffix = f" ({item['contractId']})" if kind_counts[item["kind"]] > 1 else ""
+        return KIND_LABELS[item["kind"]] + suffix
     lines.extend(
-        f"- {KIND_LABELS[item['kind']]} — {DISPOSITION_LABELS[item['disposition']]} · {item['reason']}"
+        f"- {label(item)} — {DISPOSITION_LABELS[item['disposition']]} · {item['reason']}"
         for item in active
     )
     if not active:
         lines.append("- 없음")
     lines.extend(["", "## 지금 확인해야 할 사항", ""])
     lines.extend(
-        [f"- {KIND_LABELS[item['kind']]} — {item['reason']}" for item in immediate]
+        [f"- {label(item)} — {item['reason']}" for item in immediate]
         + [f"- {item}" for item in gate_questions]
         or ["- 없음"]
     )
     lines.extend(["", "## 나중에 설계할 사항", ""])
     lines.extend(
-        [f"- {KIND_LABELS[item['kind']]} — {item['reason']}" for item in deferred]
+        [f"- {label(item)} — {item['reason']}" for item in deferred]
         or ["- 없음"]
     )
     lines.extend(["", "## 현재 상태", "", f"- {route_status(route, blockers)}"])
@@ -126,8 +130,9 @@ def render(
         lines.extend(["", "## 개발자 상세", ""])
         for item in route["routes"]:
             target = item["target"]
+            identity = item.get("contractId", item["kind"])
             lines.append(
-                f"- {item['kind']} · {item['disposition']} · project={target['projectId']} "
+                f"- {item['kind']} · contract={identity} · {item['disposition']} · project={target['projectId']} "
                 f"· module={target['modulePath']} · stores={','.join(target['dataStoreIds']) or '-'}"
             )
         for blocker in blockers:

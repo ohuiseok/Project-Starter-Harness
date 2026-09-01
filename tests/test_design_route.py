@@ -23,6 +23,7 @@ sys.path.insert(0, str(SCRIPTS))
 from render_design_route import render  # noqa: E402
 import record_design_route_approval  # noqa: E402
 from validate_design_route import validate, verify_inputs  # noqa: E402
+from migrate_design_route_v2 import migrate  # noqa: E402
 from validate_feature_specs import approval_content_hash  # noqa: E402
 from tests.test_feature_specs import feature_spec, project_brief  # noqa: E402
 
@@ -44,7 +45,7 @@ def route() -> dict:
         "VERIFICATION": ("acceptanceCriteria", "CREATE"),
     }
     document = {
-        "routeVersion": 1,
+        "routeVersion": 2,
         "featureId": "F001",
         "inputs": {
             "feature": {"path": "docs/features/F001/spec.json", "sha256": "a" * 64},
@@ -60,10 +61,11 @@ def route() -> dict:
     }
     for kind, (requirement, disposition) in dispositions.items():
         document["routes"].append({
+            "contractId": kind.lower().replace("_", "-"),
             "kind": kind, "requirementRef": requirement, "disposition": disposition,
             "target": {"projectId": "leave-service", "modulePath": ".", "dataStoreIds": []},
             "evidencePaths": [],
-            "artifactPath": f"docs/features/F001/contracts/{kind.lower()}.md" if disposition == "CREATE" else None,
+            "artifactPath": f"docs/features/F001/contracts/{kind.lower().replace('_', '-')}/metadata.json" if disposition == "CREATE" else None,
             "reason": "Matches the approved feature and current project.",
             "source": "USER_STATED", "confirmedByUser": True,
         })
@@ -84,7 +86,7 @@ class DesignRouteTests(unittest.TestCase):
         document["routes"][0]["disposition"] = "NOT_NEEDED"
         document["routes"][0]["artifactPath"] = None
         refresh(document)
-        self.assertIn("required design cannot be NOT_NEEDED: HTTP_API", validate(
+        self.assertIn("required design needs an active contract instance: HTTP_API", validate(
             document, feature_spec(), project_brief(), profile()
         )[1])
 
@@ -192,9 +194,42 @@ class DesignRouteTests(unittest.TestCase):
             document["inputs"]["projectBrief"] = {
                 "path": "project.json", "sha256": hashlib.sha256(b"project").hexdigest(),
             }
-            self.assertIn("route artifactPath escapes target: HTTP_API", verify_inputs(
+            self.assertIn("route artifactPath escapes target: http-api", verify_inputs(
                 document, feature_path, project_path, profile_path, target
             ))
+
+    def test_v2_supports_multiple_contracts_of_the_same_kind(self) -> None:
+        document = route()
+        second = copy.deepcopy(document["routes"][0])
+        second["contractId"] = "internal-http-api"
+        second["target"]["projectId"] = "internal-service"
+        second["artifactPath"] = "docs/features/F001/contracts/internal-http-api/metadata.json"
+        document["routes"].append(second)
+        technology = profile()
+        technology["projects"] = [{"id": "leave-service"}, {"id": "internal-service"}]
+        refresh(document)
+        self.assertEqual((True, []), validate(document, feature_spec(), project_brief(), technology))
+        markdown = render(document, feature_spec(), project_brief(), technology)
+        self.assertIn("웹 API (http-api)", markdown)
+        self.assertIn("웹 API (internal-http-api)", markdown)
+
+    def test_contract_ids_are_globally_unique(self) -> None:
+        document = route()
+        document["routes"][1]["contractId"] = document["routes"][0]["contractId"]
+        with self.assertRaisesRegex(ValueError, "duplicate contractId"):
+            validate(document, feature_spec(), project_brief(), profile())
+
+    def test_v1_migration_preserves_source_and_requires_review(self) -> None:
+        source = route()
+        source["routeVersion"] = 1
+        for item in source["routes"]:
+            item.pop("contractId")
+        original = copy.deepcopy(source)
+        migrated = migrate(source)
+        self.assertEqual(original, source)
+        self.assertEqual(2, migrated["routeVersion"])
+        self.assertTrue(all(item["contractId"] for item in migrated["routes"]))
+        self.assertEqual("REVIEW_REQUIRED", migrated["approval"]["status"])
 
     def test_route_approval_updates_json_and_markdown_together(self) -> None:
         document = route()
