@@ -174,6 +174,13 @@ If a `PREPARED` transaction remains after interruption, do not retry apply.
 Use `recover_relational_artifact_transaction.py`; recovery must verify exact
 before/after evidence and stop rather than overwrite any externally drifted file.
 
+After relational files are applied and baseline-owned, read
+`references/relational-migration-verification.md`. Prepare and render the
+verification plan, show all real Docker host effects, and obtain a separate
+exact-plan approval before `run_relational_migration_verification.py`. The runner
+may use only disposable internal-network containers and tmpfs, must clean up on
+every path, and must never use project credentials or contact a target database.
+
 ## Technology Selection
 
 For a new project, a missing profile, or a requested stack change, read

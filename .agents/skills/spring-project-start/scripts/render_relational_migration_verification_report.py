@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""Render an evidence-first view of isolated migration verification."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+from render_design_route import atomic_write
+from run_relational_migration_verification import sha
+from validate_feature_specs import load_object
+
+
+def validate(report: dict, report_path: Path, target: Path) -> None:
+    required = {"migrationVerificationReportVersion", "plan", "approval", "target", "executedAt", "result"}
+    if not isinstance(report, dict) or set(report) != required or report["migrationVerificationReportVersion"] != 1: raise ValueError("migration verification report is invalid")
+    if Path(str(report["target"])).resolve() != target.resolve(): raise ValueError("verification report target does not match")
+    result = report["result"]
+    if not isinstance(result, dict): raise ValueError("verification result must be an object")
+    result_keys = {"state", "events", "cleanup", "targetDatabaseAccessed", "targetSourceFilesChanged", "persistentVolumeCreated"}
+    if result.get("state") != "PASSED": result_keys.add("failure")
+    if set(result) != result_keys or result["state"] not in {"PASSED", "FAILED", "CLEANUP_FAILED"}: raise ValueError("verification result is invalid")
+    if result["targetDatabaseAccessed"] is not False or result["targetSourceFilesChanged"] is not False or result["persistentVolumeCreated"] is not False: raise ValueError("verification report violates isolation claims")
+    if not isinstance(result["events"], list) or not all(isinstance(item, dict) and set(item) == {"step", "exitCode", "output"} for item in result["events"]): raise ValueError("verification events are invalid")
+    if not isinstance(result["cleanup"], dict) or set(result["cleanup"]) != {"databaseContainerRemoved", "flywayContainersRemoved", "networkRemoved"}: raise ValueError("verification cleanup evidence is invalid")
+    plan_ref = report["plan"]
+    plan_path = Path(plan_ref.get("path", "")) if isinstance(plan_ref, dict) else Path("")
+    if not isinstance(plan_ref, dict) or set(plan_ref) != {"path", "sha256"} or target.resolve() not in (plan_path.resolve(), *plan_path.resolve().parents) or not plan_path.is_file() or sha(plan_path) != plan_ref["sha256"]: raise ValueError("verification plan evidence is stale")
+    approval_ref = report["approval"]; approval_path = Path(approval_ref.get("path", "")) if isinstance(approval_ref, dict) else Path("")
+    if not isinstance(approval_ref, dict) or set(approval_ref) != {"path", "sha256", "approvedBy", "approvedAt"} or target.resolve() not in (approval_path.resolve(), *approval_path.resolve().parents) or not approval_path.is_file() or sha(approval_path) != approval_ref["sha256"]: raise ValueError("verification approval evidence is stale")
+    if report_path.is_symlink(): raise ValueError("verification report must not be a symbolic link")
+
+
+def render(report: dict) -> str:
+    result = report["result"]; lines = ["# migration 격리 검증 결과", "", "## 결론", "", f"- 상태: {result['state']}", "- 실제 대상 DB 접속: 안 함", "- 대상 source 파일 변경: 없음", "- persistent volume 생성: 없음", "", "## 단계별 증거", ""]
+    for event in result["events"]: lines.extend([f"### {event['step']} · exit {event['exitCode']}", "", "```text", event["output"].rstrip(), "```", ""])
+    lines.extend(["## 정리 결과", ""]); lines.extend(f"- {name}: {'완료' if value else '실패'}" for name, value in result["cleanup"].items())
+    if "failure" in result: lines.extend(["", "## 실패 원인", "", f"- {result['failure']}"])
+    lines.extend(["", "## 해석", "", "- PASSED는 선택한 빈 격리 PostgreSQL에서 Flyway migrate/validate가 성공했다는 의미", "- production 데이터·권한·성능·lock·rollback 성공을 의미하지 않음", ""]); return "\n".join(lines)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(); parser.add_argument("--report", required=True, type=Path); parser.add_argument("--target", required=True, type=Path); parser.add_argument("--output", required=True, type=Path); parser.add_argument("--check", action="store_true"); parser.add_argument("--force", action="store_true"); args = parser.parse_args()
+    try:
+        if args.check and args.force: raise ValueError("--check and --force cannot be combined")
+        report = load_object(args.report); validate(report, args.report, args.target); expected = render(report)
+        if args.check:
+            if args.output.read_text(encoding="utf-8") != expected: raise ValueError("migration verification report Markdown is stale")
+        else: atomic_write(expected, args.output, args.force)
+    except (OSError, ValueError, KeyError) as error: print(f"RELATIONAL_MIGRATION_REPORT_MARKDOWN_VALID: no\nERROR: {error}"); return 1
+    print("RELATIONAL_MIGRATION_REPORT_MARKDOWN_VALID: yes"); return 0
+
+
+if __name__ == "__main__": sys.exit(main())
