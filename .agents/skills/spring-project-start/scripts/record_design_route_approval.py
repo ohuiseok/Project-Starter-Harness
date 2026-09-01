@@ -8,10 +8,9 @@ import datetime as dt
 import sys
 from pathlib import Path
 
-from evaluate_profile import evaluate
 from record_spec_approval import approved_copy, atomic_write_bytes, encoded_json, read_expected
 from render_design_route import render
-from validate_design_route import load_object, validate, verify_inputs
+from validate_design_route import assess, load_object, validate, verify_inputs
 from validate_feature_specs import approval_content_hash
 
 
@@ -41,11 +40,12 @@ def main() -> int:
         feature = load_object(args.feature)
         project = load_object(args.project_brief)
         profile = load_object(args.profile)
-        _, _, _, profile_ready, profile_blockers = evaluate(args.profile)
+        _, profile_ready, route_blockers = assess(
+            route_source, feature, project, profile,
+            args.feature, args.project_brief, args.profile, args.target,
+        )
         if not profile_ready:
-            raise ValueError("technology profile is not ready: " + "; ".join(profile_blockers))
-        _, route_blockers = validate(route_source, feature, project, profile)
-        route_blockers.extend(verify_inputs(route_source, args.feature, args.project_brief, args.profile, args.target))
+            raise ValueError("technology profile is not ready")
         if route_blockers:
             raise ValueError("design route is not approvable: " + "; ".join(route_blockers))
         markdown_path = args.route.with_suffix(".md")

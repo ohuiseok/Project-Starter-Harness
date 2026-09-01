@@ -409,7 +409,7 @@ expect_out "feature specification: all focused scenarios ran" \
 OUT="$(python3 "$HARNESS_ROOT/tests/test_design_route.py" 2>&1)"
 CODE=$?
 expect_code "design routing: focused regression suite passes" 0
-expect_out "design routing: all focused scenarios ran" "Ran 9 tests"
+expect_out "design routing: all focused scenarios ran" "Ran 11 tests"
 
 OUT="$(python3 "$SKILL_ROOT/scripts/validate_feature_specs.py" \
   --project-brief "$HARNESS_ROOT/templates/project-brief.json" 2>&1)"

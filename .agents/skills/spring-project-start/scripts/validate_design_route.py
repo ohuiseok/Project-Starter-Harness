@@ -196,6 +196,17 @@ def verify_inputs(route: dict[str, Any], feature_path: Path, project_path: Path,
     return blockers
 
 
+def assess(
+    route: dict[str, Any], feature: dict[str, Any], project: dict[str, Any], profile: dict[str, Any],
+    feature_path: Path, project_path: Path, profile_path: Path, target: Path,
+) -> tuple[bool, bool, list[str]]:
+    _, _, _, profile_ready, profile_blockers = evaluate(profile_path)
+    approved, blockers = validate(route, feature, project, profile)
+    blockers.extend(f"technology profile: {item}" for item in profile_blockers)
+    blockers.extend(verify_inputs(route, feature_path, project_path, profile_path, target))
+    return approved, profile_ready, blockers
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--route", required=True, type=Path)
@@ -210,10 +221,9 @@ def main() -> int:
         feature = load_object(args.feature)
         project = load_object(args.project_brief)
         profile = load_object(args.profile)
-        _, _, _, profile_ready, profile_blockers = evaluate(args.profile)
-        approved, blockers = validate(route, feature, project, profile)
-        blockers.extend(f"technology profile: {item}" for item in profile_blockers)
-        blockers.extend(verify_inputs(route, args.feature, args.project_brief, args.profile, args.target))
+        approved, profile_ready, blockers = assess(
+            route, feature, project, profile, args.feature, args.project_brief, args.profile, args.target
+        )
         ready = approved and profile_ready and not blockers
     except (OSError, ValueError) as error:
         print(f"DESIGN_ROUTE_VALID: no\nERROR: {error}")

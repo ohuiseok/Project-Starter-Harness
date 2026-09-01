@@ -101,6 +101,8 @@ user confirms the displayed summary, use `record_design_route_approval.py`; it
 rechecks the route, feature, profile, code evidence, and Markdown before safely
 updating the JSON and view. `DESIGN_READY: yes` permits contract design, not
 source-file application.
+Render the basic route view with the same target-aware assessment used by the
+validator. Never hide a readiness blocker only in detailed or command output.
 
 ## Technology Selection
 

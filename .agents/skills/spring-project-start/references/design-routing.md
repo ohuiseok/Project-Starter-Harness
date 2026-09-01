@@ -38,6 +38,12 @@ choice or target that evidence cannot resolve. Keep internal hashes hidden.
 One confirmation can approve the displayed route, but it does not approve code
 application.
 
+The basic Markdown view must use the same assessment as the readiness gate,
+including profile and target-evidence checks. Show every blocker in user
+language and distinguish `drafting`, `decision required`, `input changed`,
+`waiting for approval`, and `approved`. Internal IDs and raw blocker codes stay
+in the full developer view.
+
 ## Gates
 
 Validate current inputs and target evidence:

@@ -125,6 +125,25 @@ class DesignRouteTests(unittest.TestCase):
         self.assertIn("웹 API — 새로 설계", markdown)
         self.assertIn("메시징 — Event publication is undecided.", markdown)
 
+    def test_basic_markdown_shows_real_gate_blocker_and_drift_status(self) -> None:
+        document = route()
+        blockers = ["code evidence is stale: src/Existing.java"]
+        markdown = render(
+            document, feature_spec(), project_brief(), profile(), runtime_blockers=blockers
+        )
+        immediate = markdown.split("## 지금 확인해야 할 사항", 1)[1].split("## 나중에 설계할 사항", 1)[0]
+        self.assertIn("재사용 근거 파일이 변경되어 다시 확인해야 합니다.", immediate)
+        self.assertIn("입력 변경으로 재검토 필요", markdown)
+
+    def test_complete_unapproved_route_is_shown_as_waiting_for_approval(self) -> None:
+        document = route()
+        document["approval"] = {
+            "status": "REVIEW_REQUIRED", "approvedBy": None,
+            "approvedAt": None, "approvedContentSha256": None,
+        }
+        markdown = render(document, feature_spec(), project_brief(), profile())
+        self.assertIn("## 현재 상태\n\n- 승인 대기", markdown)
+
     def test_input_and_code_evidence_drift_is_detected(self) -> None:
         document = route()
         with tempfile.TemporaryDirectory() as directory:
@@ -210,7 +229,7 @@ class DesignRouteTests(unittest.TestCase):
                 "--approved-by", "test-user", "--approved-at", "2026-09-01T00:00:00Z",
             ]
             with mock.patch.object(sys, "argv", arguments), mock.patch.object(
-                record_design_route_approval, "evaluate", return_value=("SUPPORTED", [], 0, True, [])
+                record_design_route_approval, "assess", return_value=(False, True, [])
             ), mock.patch.object(
                 record_design_route_approval, "verify_inputs", return_value=[]
             ), contextlib.redirect_stdout(io.StringIO()):
