@@ -187,6 +187,19 @@ the exact approved physical contract/model used for catalog comparison. Migrate
 legacy plans to a separate v3 draft with
 `migrate_relational_migration_verification_plan_v3.py` and approve again.
 
+After the selected CREATE feature has approved HTTP API and PostgreSQL physical
+contracts plus a passing migration/schema-fingerprint report, read
+`references/spring-implementation-planning.md`. Create a source-free component
+graph with `create_spring_implementation_plan.py`, validate it, and render its
+user-first Markdown view. The first milestone supports one Java REST POST,
+Spring Data JPA, PostgreSQL, single-module layered slice. Occupied paths,
+unsupported stacks, missing traceability, dependency cycles, or entity/API
+boundary violations block advancement. After the user confirms the view,
+`record_spring_implementation_plan_approval.py` may approve only a future code
+dry run. Planning and approval must not create or modify source, build,
+configuration, migration, or test files, and do not authorize test execution,
+commit, or push in the target repository.
+
 ## Technology Selection
 
 For a new project, a missing profile, or a requested stack change, read

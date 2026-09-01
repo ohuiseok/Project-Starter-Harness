@@ -1,0 +1,13 @@
+{
+  "capabilityVersion": 1,
+  "firstMilestone": {
+    "languages": ["language.java"],
+    "builds": ["build.gradle-kotlin", "build.gradle-groovy", "build.maven"],
+    "applications": ["application.rest-api"],
+    "persistence": ["persistence.jpa"],
+    "databases": ["database.postgresql"],
+    "moduleTopology": "SINGLE",
+    "operation": "HTTP_POST_CREATE",
+    "dispositions": ["CREATE", "REUSE", "REUSE_CANDIDATE", "CONFLICT", "DEFER"]
+  }
+}
