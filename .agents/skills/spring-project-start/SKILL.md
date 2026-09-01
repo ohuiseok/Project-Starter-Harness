@@ -125,7 +125,10 @@ validate them with `validate_http_api_contract.py`, and render the basic view
 with `render_http_api_contract.py`. After the user approves that view, use
 `record_http_api_contract_approval.py`; it rechecks current route inputs and the
 exact OpenAPI without modifying the OpenAPI artifact. Do not use this CREATE
-workflow for `EXTEND` or `REUSE`.
+workflow for `EXTEND` or `REUSE`. For those dispositions follow the Existing
+APIs section of `references/http-api-contracts.md`; require baseline OpenAPI
+evidence, generate a deterministic compatibility report, and never apply the
+proposed extension during contract approval.
 
 ## Technology Selection
 

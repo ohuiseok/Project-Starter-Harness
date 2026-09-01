@@ -239,6 +239,11 @@ for required in \
   "$SKILL_ROOT/scripts/validate_http_api_contract.py" \
   "$SKILL_ROOT/scripts/render_http_api_contract.py" \
   "$SKILL_ROOT/scripts/record_http_api_contract_approval.py" \
+  "$SKILL_ROOT/scripts/existing_http_api_contract.py" \
+  "$SKILL_ROOT/scripts/create_existing_http_api_contract.py" \
+  "$SKILL_ROOT/scripts/validate_existing_http_api_contract.py" \
+  "$SKILL_ROOT/scripts/render_existing_http_api_contract.py" \
+  "$SKILL_ROOT/scripts/record_existing_http_api_contract_approval.py" \
   "$HARNESS_ROOT/templates/project-profile.md" \
   "$HARNESS_ROOT/templates/project-profile.json" \
   "$HARNESS_ROOT/templates/generation-plan.json" \
@@ -430,6 +435,11 @@ OUT="$(python3 "$HARNESS_ROOT/tests/test_http_api_contract.py" 2>&1)"
 CODE=$?
 expect_code "HTTP API contracts: focused regression suite passes" 0
 expect_out "HTTP API contracts: all focused scenarios ran" "Ran 10 tests"
+
+OUT="$(python3 "$HARNESS_ROOT/tests/test_existing_http_api_contract.py" 2>&1)"
+CODE=$?
+expect_code "existing HTTP API contracts: focused regression suite passes" 0
+expect_out "existing HTTP API contracts: all focused scenarios ran" "Ran 9 tests"
 
 OUT="$(python3 "$SKILL_ROOT/scripts/validate_feature_specs.py" \
   --project-brief "$HARNESS_ROOT/templates/project-brief.json" 2>&1)"

@@ -133,7 +133,7 @@ def validate(route: dict[str, Any], feature: dict[str, Any], project: dict[str, 
                 blockers.append(f"route target project is not in technology profile: {kind}")
             if disposition in {"EXTEND", "REUSE"} and not evidence_refs:
                 blockers.append(f"{disposition} requires code evidence: {kind}")
-            if disposition in {"CREATE", "EXTEND"} and artifact is None:
+            if ((version == 2 and disposition in ACTIVE) or disposition in {"CREATE", "EXTEND"}) and artifact is None:
                 blockers.append(f"{disposition} requires artifactPath: {kind}")
             if artifact is not None:
                 if artifact in artifact_paths:

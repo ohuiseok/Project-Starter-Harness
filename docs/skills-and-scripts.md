@@ -68,6 +68,10 @@ rollback하며, 성공 시 다음 비교를 위한 baseline manifest를 기록�
 | `spring-project-start/scripts/validate_http_api_contract.py` | OpenAPI·기능 추적성·인증 방식·응답 계약의 일관성 검증 |
 | `spring-project-start/scripts/render_http_api_contract.py` | 실제 OpenAPI에서 초보자용 API 계약 보기 생성·검사 |
 | `spring-project-start/scripts/record_http_api_contract_approval.py` | 적용 직전 재검증 후 API 메타데이터와 보기를 원자적으로 승인 |
+| `spring-project-start/scripts/create_existing_http_api_contract.py` | 기존 OpenAPI를 재사용하거나 별도 확장 제안과 호환성 보고서 생성 |
+| `spring-project-start/scripts/validate_existing_http_api_contract.py` | baseline drift·Controller 근거·파괴적 변경·검토 수용 상태 검증 |
+| `spring-project-start/scripts/render_existing_http_api_contract.py` | REUSE/EXTEND 영향과 확인 사항의 사용자용 보기 생성·검사 |
+| `spring-project-start/scripts/record_existing_http_api_contract_approval.py` | 기존 인터페이스를 수정하지 않고 현재 증거와 비교 결과만 원자적으로 승인 |
 | `spring-project-start/scripts/render_spec_markdown.py` | JSON에서 사용자용 Markdown 생성·동기화 확인 |
 | `spring-project-start/scripts/record_spec_approval.py` | 승인 상태 동기화와 JSON·Markdown 원자적 갱신 |
 | `spring-project-start/scripts/next_feature_id.py` | 프로젝트 개요와 기존 디렉터리에서 다음 기능 ID 확인 |

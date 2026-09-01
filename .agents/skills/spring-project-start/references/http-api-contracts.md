@@ -1,8 +1,7 @@
 # HTTP API Contracts
 
 Use this workflow only for an approved route v2 instance whose kind is
-`HTTP_API` and disposition is `CREATE`. `EXTEND` and `REUSE` require observed
-existing interface evidence and are separate milestones.
+`HTTP_API`. Every active v2 instance has an `artifactPath` for its metadata.
 
 ## Source Of Truth
 
@@ -37,3 +36,29 @@ Approval revalidates the approved route and its inputs, checks the exact OpenAPI
 and metadata shown to the user, keeps OpenAPI unchanged, and atomically updates
 metadata and its Markdown view. Contract approval permits implementation
 planning only; it does not authorize source changes.
+
+## Existing APIs
+
+`REUSE` and `EXTEND` require an existing OpenAPI JSON file recorded in route
+code evidence. `REUSE` points to that exact file and never copies or edits it.
+`EXTEND` writes a separate proposed OpenAPI and compares it with the baseline;
+approval still does not apply the proposal to the existing interface.
+
+The compatibility report treats removed operations or responses, changed path
+or method, newly required parameters or authentication, incompatible schema
+types, removed properties or enum values, and newly required request fields as
+breaking. Breaking changes cannot be approved as an in-place extension. Other
+schema differences are `REVIEW` and require their exact current review IDs in
+`acceptedCompatibilityReviews`; a general approval does not silently accept
+them.
+
+When route evidence includes files with kind `SPRING_CONTROLLER`, the harness
+checks literal Spring mapping annotations against baseline operations. A
+mapping expressed through constants or custom composed annotations that cannot
+be proved is a blocker, not an inferred match.
+
+Create the evidence assessment with `create_existing_http_api_contract.py`,
+validate it with `validate_existing_http_api_contract.py`, and render it with
+`render_existing_http_api_contract.py`. After explicit approval use
+`record_existing_http_api_contract_approval.py`, which rechecks the route,
+baseline, proposal, comparison report, and Markdown atomically.

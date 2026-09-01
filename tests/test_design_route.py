@@ -98,6 +98,9 @@ class DesignRouteTests(unittest.TestCase):
         self.assertIn("REUSE requires code evidence: HTTP_API", validate(
             document, feature_spec(), project_brief(), profile()
         )[1])
+        self.assertIn("REUSE requires artifactPath: HTTP_API", validate(
+            document, feature_spec(), project_brief(), profile()
+        )[1])
 
     def test_multiple_stores_require_explicit_persistence_targets(self) -> None:
         technology = profile()
