@@ -276,6 +276,11 @@ for required in \
   "$SKILL_ROOT/scripts/render_spring_code_dry_run_markdown.py" \
   "$SKILL_ROOT/scripts/run_spring_code_verification.py" \
   "$SKILL_ROOT/scripts/render_spring_code_verification_report.py" \
+  "$SKILL_ROOT/scripts/apply_approved_spring_code.py" \
+  "$SKILL_ROOT/scripts/recover_spring_code_transaction.py" \
+  "$SKILL_ROOT/scripts/render_spring_code_apply_review.py" \
+  "$SKILL_ROOT/scripts/record_spring_code_apply_approval.py" \
+  "$SKILL_ROOT/references/spring-code-apply.md" \
   "$HARNESS_ROOT/templates/project-profile.md" \
   "$HARNESS_ROOT/templates/project-profile.json" \
   "$HARNESS_ROOT/templates/generation-plan.json" \
@@ -298,7 +303,8 @@ for required in \
   "$HARNESS_ROOT/templates/relational-migration-verification-approval.json" \
   "$HARNESS_ROOT/templates/implementation-plan.json" \
   "$HARNESS_ROOT/templates/spring-code-dry-run.json" \
-  "$HARNESS_ROOT/templates/spring-code-verification-approval.json"; do
+  "$HARNESS_ROOT/templates/spring-code-verification-approval.json" \
+  "$HARNESS_ROOT/templates/spring-code-apply-approval.json"; do
   if [ -f "$required" ]; then
     pass "starter contract: $(basename "$required") exists"
   else
@@ -517,6 +523,11 @@ OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_code_dry_run.py" 2>&1)"
 CODE=$?
 expect_code "Spring code dry run: focused regression suite passes" 0
 expect_out "Spring code dry run: all focused scenarios ran" "Ran 11 tests"
+
+OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_code_apply.py" 2>&1)"
+CODE=$?
+expect_code "Spring code apply: focused regression suite passes" 0
+expect_out "Spring code apply: all focused scenarios ran" "Ran 8 tests"
 
 OUT="$(python3 "$SKILL_ROOT/scripts/validate_feature_specs.py" \
   --project-brief "$HARNESS_ROOT/templates/project-brief.json" 2>&1)"

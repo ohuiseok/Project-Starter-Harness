@@ -215,6 +215,19 @@ networkless bubblewrap filesystem with the target read-only and Docker socket
 hidden. Only a passing verification report may advance to later atomic apply
 review. Verification never applies files, commits, or pushes.
 
+After a passing code verification, read `references/spring-code-apply.md` and
+render `render_spring_code_apply_review.py`. Show scope, relevant Git overlap,
+unrelated warnings, backup/recovery effects, and exclusions before obtaining a
+separate exact apply approval with `record_spring_code_apply_approval.py`; keep
+hash handling internal and never ask the user to edit approval JSON.
+`apply_approved_spring_code.py` must revalidate
+the dry run, verification, target context, cumulative baseline, complete file
+set, and dirty overlap immediately before PREPARED/APPLYING journaled writes.
+It merges baseline ownership and rolls back exact partial writes. An interrupted
+transaction blocks apply until `recover_spring_code_transaction.py` safely
+recovers it. Apply does not run post-apply tests, commit, or push; record those
+as separate outcomes.
+
 ## Technology Selection
 
 For a new project, a missing profile, or a requested stack change, read
