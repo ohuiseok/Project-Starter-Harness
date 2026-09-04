@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from render_generation_dry_run import compare, write_report
-from spring_code_dry_run import canonical_baseline, load_approved_plan, sha, validate_candidate
+from spring_code_dry_run import canonical_baseline, contract_expectations, load_approved_plan, sha, validate_candidate
 
 
 def main() -> int:
@@ -26,7 +26,8 @@ def main() -> int:
         if not root.is_dir() or args.target.is_symlink() or root == harness or root not in output.parents or args.output.is_symlink():
             raise ValueError("target or output is unsafe")
         plan = load_approved_plan(args.plan.resolve(strict=True), root)
-        checks, candidate_conflicts = validate_candidate(plan, args.rendered_source)
+        expectations = contract_expectations(plan, root)
+        checks, candidate_conflicts = validate_candidate(plan, args.rendered_source, root)
         _, baseline_ref, baseline, modes = canonical_baseline(root)
         changes = compare(args.rendered_source, root, baseline, modes)
         changes["conflicts"].extend(candidate_conflicts)
@@ -44,6 +45,7 @@ def main() -> int:
             "target": str(root),
             "baseline": baseline_ref,
             "userFlow": plan["userFlow"],
+            "contractSummary": {"httpMethod": "POST", "httpPath": expectations["apiPath"], "table": expectations["table"], "requirements": [item["requirementRef"] for item in plan["coverage"]]},
             "qualityChecks": checks,
             "generatedFiles": generated,
             "plannedChanges": changes,

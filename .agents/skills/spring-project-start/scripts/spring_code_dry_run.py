@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import tempfile
 from pathlib import Path, PurePosixPath
 
 from render_generation_dry_run import files_under, load_baseline
@@ -17,6 +18,7 @@ MAX_FILE_BYTES = 1024 * 1024
 PACKAGE = re.compile(r"(?m)^package\s+([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*)\s*;")
 PUBLIC_TYPE = re.compile(r"(?m)^public\s+(?:final\s+)?(?:class|interface|record|enum)\s+([A-Z][A-Za-z0-9]*)\b")
 SECRET_LITERAL = re.compile(r'(?i)\b(password|secret|api[_-]?key|access[_-]?token)\b\s*=\s*"(?!\$\{)[^"\n]+"')
+ASSERTION = re.compile(r"\b(?:assertThat|assertEquals|assertTrue|assertFalse|andExpect|verify)\s*\(")
 REQUIRED_MARKERS = {
     "JPA_ENTITY": ("@Entity",),
     "REPOSITORY": ("JpaRepository",),
@@ -27,6 +29,46 @@ REQUIRED_MARKERS = {
     "REPOSITORY_INTEGRATION_TEST": ("@DataJpaTest", "@Test"),
     "API_INTEGRATION_TEST": ("@SpringBootTest", "@Test"),
 }
+
+
+def camel(value: str) -> str:
+    parts = re.split(r"[^A-Za-z0-9]+", value)
+    return parts[0].lower() + "".join(item[:1].upper() + item[1:] for item in parts[1:] if item)
+
+
+def contract_expectations(plan: dict, target: Path) -> dict:
+    openapi = load_object(target / plan["inputs"]["openApi"]["path"])
+    physical = load_object(target / plan["inputs"]["physicalModel"]["path"])
+    operations = [(path, operation) for path, item in openapi.get("paths", {}).items() for method, operation in item.items() if method.lower() == "post" and isinstance(operation, dict)]
+    if len(operations) != 1 or len(physical.get("tables", [])) != 1:
+        raise ValueError("first code dry-run needs one POST operation and one physical table")
+    api_path, operation = operations[0]
+    table = physical["tables"][0]
+    columns = table.get("columns", [])
+    if not columns:
+        raise ValueError("physical model has no columns")
+    primary_ids = set(table["primaryKey"]["columnIds"])
+    fields = [camel(item["fieldRef"]) for item in columns]
+    request_fields = [camel(item["fieldRef"]) for item in columns if item["columnId"] not in primary_ids]
+    return {"apiPath": api_path, "table": table["name"], "columns": [item["name"] for item in columns], "fields": fields, "requestFields": request_fields}
+
+
+def semantic_reasons(component: dict, content: str, expectations: dict, plan: dict) -> list[str]:
+    kind = component["kind"]
+    component_by_kind = {item["kind"]: item["target"]["typeName"] for item in plan["components"]}
+    required: list[str] = []
+    if kind == "REQUEST_DTO": required = expectations["requestFields"]
+    elif kind == "RESPONSE_DTO": required = expectations["fields"]
+    elif kind == "JPA_ENTITY": required = [f'@Table(name = "{expectations["table"]}")'] + [f'@Column(name = "{name}")' for name in expectations["columns"]] + ["@Id"]
+    elif kind == "REPOSITORY": required = [component_by_kind["JPA_ENTITY"], "JpaRepository<"]
+    elif kind == "APPLICATION_SERVICE": required = [component_by_kind["REPOSITORY"], component_by_kind["REQUEST_DTO"], component_by_kind["RESPONSE_DTO"], ".save("]
+    elif kind == "CONTROLLER": required = [f'"{expectations["apiPath"]}"', component_by_kind["REQUEST_DTO"], component_by_kind["RESPONSE_DTO"], "ResponseEntity"]
+    elif kind == "EXCEPTION_HANDLER": required = ["ResponseEntity"]
+    missing = [item for item in required if item not in content]
+    reasons = ["contract-semantics-missing:" + ",".join(missing)] if missing else []
+    if kind.endswith("TEST") and not ASSERTION.search(content):
+        reasons.append("test-has-no-executable-assertion")
+    return reasons
 
 
 def sha(path: Path) -> str:
@@ -43,7 +85,7 @@ def target_file(root: Path, relative: str) -> Path:
     return result
 
 
-def validate_candidate(plan: dict, rendered: Path) -> tuple[list[dict], list[dict]]:
+def validate_candidate(plan: dict, rendered: Path, target: Path | None = None) -> tuple[list[dict], list[dict]]:
     if rendered.is_symlink() or not rendered.is_dir():
         raise ValueError("rendered source must be a non-symlink directory")
     found = files_under(rendered)
@@ -56,6 +98,7 @@ def validate_candidate(plan: dict, rendered: Path) -> tuple[list[dict], list[dic
         conflicts.append({"path": path, "reason": "file-is-not-in-approved-plan"})
     entity_names = {item["target"]["typeName"] for item in plan["components"] if item["kind"] == "JPA_ENTITY"}
     coverage = {item["requirementRef"]: item for item in plan["coverage"]}
+    expectations = contract_expectations(plan, target) if target is not None else None
     for relative in sorted(set(found) & set(expected)):
         component = expected[relative]
         path = target_file(rendered, relative)
@@ -79,6 +122,10 @@ def validate_candidate(plan: dict, rendered: Path) -> tuple[list[dict], list[dic
             conflicts.append({"path": relative, "reason": "missing-required-marker:" + ",".join(missing_markers)})
         if SECRET_LITERAL.search(content):
             conflicts.append({"path": relative, "reason": "hardcoded-secret-like-literal"})
+        if expectations is not None:
+            semantic = semantic_reasons(component, content, expectations, plan)
+            checks.append({"check": "CONTRACT_SEMANTICS", "componentRef": component["componentId"], "state": "PASSED" if not semantic else "FAILED"})
+            conflicts.extend({"path": relative, "reason": reason} for reason in semantic)
         if component["kind"] in {"CONTROLLER", "REQUEST_DTO", "RESPONSE_DTO"} and any(re.search(rf"\b{re.escape(name)}\b", content) for name in entity_names):
             conflicts.append({"path": relative, "reason": "jpa-entity-crosses-api-boundary"})
         if component["kind"].endswith("TEST"):
@@ -114,7 +161,7 @@ def canonical_baseline(target: Path) -> tuple[Path, dict | None, dict, dict]:
 
 
 def validate_report(report: dict, target: Path) -> None:
-    required = {"springCodeDryRunVersion", "implementationPlan", "target", "baseline", "userFlow", "qualityChecks", "generatedFiles", "plannedChanges", "verification", "targetSourceChanged", "readyForApproval", "executionReady"}
+    required = {"springCodeDryRunVersion", "implementationPlan", "target", "baseline", "userFlow", "contractSummary", "qualityChecks", "generatedFiles", "plannedChanges", "verification", "targetSourceChanged", "readyForApproval", "executionReady"}
     if not isinstance(report, dict) or set(report) != required or report["springCodeDryRunVersion"] != 1:
         raise ValueError("Spring code dry-run report is invalid")
     if Path(report["target"]).resolve() != target.resolve() or report["targetSourceChanged"] is not False or report["executionReady"] is not False:
@@ -126,6 +173,10 @@ def validate_report(report: dict, target: Path) -> None:
     if not plan_path.is_file() or plan_path.is_symlink() or sha(plan_path) != plan_ref["sha256"]:
         raise ValueError("implementation plan evidence changed")
     plan = load_approved_plan(plan_path, target)
+    expectations = contract_expectations(plan, target)
+    expected_summary = {"httpMethod": "POST", "httpPath": expectations["apiPath"], "table": expectations["table"], "requirements": [item["requirementRef"] for item in plan["coverage"]]}
+    if report["contractSummary"] != expected_summary:
+        raise ValueError("contract summary changed")
     _, current_baseline, _, _ = canonical_baseline(target)
     if report["baseline"] != current_baseline:
         raise ValueError("implementation baseline evidence changed")
@@ -140,6 +191,13 @@ def validate_report(report: dict, target: Path) -> None:
         if hashlib.sha256(item["content"].encode()).hexdigest() != item["sha256"]:
             raise ValueError("generated file content hash changed")
         generated_paths.add(item["path"])
+    with tempfile.TemporaryDirectory(prefix="spring-code-report-recheck-") as temporary:
+        rendered = Path(temporary)
+        for item in report["generatedFiles"]:
+            destination = rendered / item["path"]
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(item["content"], encoding="utf-8")
+        recomputed_checks, recomputed_conflicts = validate_candidate(plan, rendered, target)
     changes = report["plannedChanges"]
     if not isinstance(changes, dict) or set(changes) != {"state", "creates", "updates", "conflicts", "unchanged", "desiredManifest"} or changes["state"] not in {"COMPUTED", "CONFLICT"}:
         raise ValueError("planned changes are invalid")
@@ -176,6 +234,10 @@ def validate_report(report: dict, target: Path) -> None:
     checks = report["qualityChecks"]
     if not isinstance(checks, list) or not all(isinstance(item, dict) and set(item) == {"check", "componentRef", "state"} and item["state"] in {"PASSED", "FAILED"} for item in checks):
         raise ValueError("quality check evidence is invalid")
+    if checks != recomputed_checks:
+        raise ValueError("quality checks do not match regenerated code")
+    if any(item not in changes["conflicts"] for item in recomputed_conflicts):
+        raise ValueError("candidate conflicts do not match regenerated code")
     computed_ready = changes["state"] == "COMPUTED" and not changes["conflicts"] and all(item["state"] == "PASSED" for item in checks)
     if computed_ready and (generated_paths != set(expected) or set(manifest["files"]) != set(expected)):
         raise ValueError("reviewable report does not exactly cover the approved component graph")

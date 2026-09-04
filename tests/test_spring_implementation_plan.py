@@ -22,6 +22,7 @@ import record_spring_implementation_plan_approval  # noqa: E402
 from render_spring_implementation_plan import render  # noqa: E402
 from spring_implementation_plan import build, ref, validate  # noqa: E402
 from tests.test_feature_specs import feature_spec  # noqa: E402
+import tests.test_relational_physical_contract as physical_tests  # noqa: E402
 from validate_feature_specs import approval_content_hash  # noqa: E402
 
 
@@ -61,7 +62,7 @@ class SpringImplementationPlanTests(unittest.TestCase):
             "httpApiContract": {"kind": "HTTP_API"},
             "openApi": api or openapi(),
             "physicalContract": {"kind": "PERSISTENCE"},
-            "physicalModel": {"database": "POSTGRESQL"},
+            "physicalModel": physical_tests.physical_model(),
             "migrationVerification": {"result": {"state": "PASSED"}},
         }
         evidence = root / "docs/evidence"

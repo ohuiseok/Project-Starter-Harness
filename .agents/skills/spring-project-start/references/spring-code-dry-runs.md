@@ -7,12 +7,15 @@ are blocking, even when they look useful.
 
 The first milestone accepts Java files only. It checks package and public type
 identity, required Spring stereotypes, the service-owned write transaction,
-API/entity separation, and requirement references in the planned automated
-tests. These lexical checks are safety gates, not proof that code compiles or
-behaves correctly. Compilation and tests remain `NOT_RUN` until a separately
-approved apply milestone.
+API/entity separation, API path, persistence names, component collaboration,
+executable assertions, and requirement references. These static checks are not
+proof that code compiles or behaves correctly.
 
 The user view begins with behavior, change counts, architecture checks, and
 unresolved conflicts. Exact source previews and SHA-256 values are details.
-A clear report is reviewable but never executable. Updates require the canonical
+A clear report is reviewable but never executable. Exact report approval permits
+only `run_spring_code_verification.py`, which copies the target, overlays the
+candidate, hides the Docker socket, disables networking with bubblewrap, and
+runs the wrapper tests offline. A passing verification permits review of a later
+apply approval; it does not apply files. Updates require the canonical
 implementation baseline; an unrelated existing file is always a conflict.

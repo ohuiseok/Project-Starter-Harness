@@ -18,7 +18,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(SCRIPTS))
 
 import render_spring_code_dry_run  # noqa: E402
+import run_spring_code_verification  # noqa: E402
 from render_spring_code_dry_run_markdown import render  # noqa: E402
+from render_spring_code_verification_report import render as render_verification  # noqa: E402
 from spring_code_dry_run import validate_candidate, validate_report  # noqa: E402
 import tests.test_spring_implementation_plan as implementation_tests  # noqa: E402
 from validate_feature_specs import approval_content_hash  # noqa: E402
@@ -57,8 +59,22 @@ class SpringCodeDryRunTests(unittest.TestCase):
                 "REPOSITORY_INTEGRATION_TEST": "@DataJpaTest\n@Test\n",
                 "API_INTEGRATION_TEST": "@SpringBootTest\n@Test\n// AC-F001-01 BR-F001-01\n",
             }.get(kind, "")
-            suffix = " extends JpaRepository<Object, Object>" if kind == "REPOSITORY" else ""
-            content = f"package {package};\n\n{markers}public {declaration} {name}{suffix} {{}}\n"
+            suffix = " extends JpaRepository<CreateLeaveRequestEntity, Object>" if kind == "REPOSITORY" else ""
+            body = {
+                "REQUEST_DTO": "(java.time.LocalDate leaveStartDate, java.time.LocalDate leaveEndDate)",
+                "RESPONSE_DTO": "(java.util.UUID leaveRequestId, java.time.LocalDate leaveStartDate, java.time.LocalDate leaveEndDate)",
+                "JPA_ENTITY": '{ @Id java.util.UUID id; @Column(name = "leave_request_id") java.util.UUID leaveRequestId; @Column(name = "start_date") java.time.LocalDate leaveStartDate; @Column(name = "end_date") java.time.LocalDate leaveEndDate; }',
+                "REPOSITORY": "",
+                "APPLICATION_SERVICE": "{ CreateLeaveRequestRepository repository; CreateLeaveRequestResponse create(CreateLeaveRequestRequest request) { repository.save(null); return null; } }",
+                "CONTROLLER": '{ ResponseEntity<CreateLeaveRequestResponse> create(CreateLeaveRequestRequest request) { String path = "/leave-requests"; return null; } }',
+                "EXCEPTION_HANDLER": "{ ResponseEntity<Object> handle() { return null; } }",
+                "UNIT_TEST": "{ void verifies() { assertTrue(true); } }",
+                "REPOSITORY_INTEGRATION_TEST": "{ void verifies() { assertThat(true); } }",
+                "API_INTEGRATION_TEST": "{ // AC-F001-01 BR-F001-01\n void verifies() { andExpect(null); } }",
+            }.get(kind, "{}")
+            if kind == "JPA_ENTITY":
+                markers += '@Table(name = "leave_requests")\n'
+            content = f"package {package};\n\n{markers}public {declaration} {name}{suffix} {body}\n" if kind not in {"REQUEST_DTO", "RESPONSE_DTO"} else f"package {package};\n\npublic record {name}{body} {{}}\n"
             path = rendered / component["target"]["plannedPath"]
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
@@ -142,8 +158,9 @@ class SpringCodeDryRunTests(unittest.TestCase):
             self.assertEqual(0, self.run_dry_run(target, rendered, plan, output)[0])
             markdown = render(json.loads(output.read_text(encoding="utf-8")))
             self.assertLess(markdown.index("## 사용자 기능 흐름"), markdown.index("## 생성될 코드"))
-            self.assertIn("컴파일·테스트: 실행하지 않음", markdown)
-            self.assertIn("다음 원자적 apply 준비만 허용", markdown)
+            self.assertIn("컴파일·테스트: 아직 실행하지 않음", markdown)
+            self.assertIn("다음 격리 컴파일·테스트 실행만 허용", markdown)
+            self.assertIn("<details>", markdown)
 
     def test_report_tampering_and_hardcoded_secret_are_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -161,6 +178,62 @@ class SpringCodeDryRunTests(unittest.TestCase):
             report["generatedFiles"][0]["content"] += "// changed"
             with self.assertRaisesRegex(ValueError, "content hash"):
                 validate_report(report, target)
+
+    def verification_fixture(self, parent: Path):
+        target, rendered, plan, _ = self.fixture(parent)
+        wrapper = target / "gradlew"
+        wrapper.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        wrapper.chmod(0o755)
+        dry_run = target / "docs/features/F001/code-dry-run.json"
+        self.assertEqual(0, self.run_dry_run(target, rendered, plan, dry_run)[0])
+        approval = target / "docs/features/F001/code-verification-approval.json"
+        approval.write_text(json.dumps({"springCodeVerificationApprovalVersion": 1, "approved": True, "dryRunReportSha256": run_spring_code_verification.sha(dry_run), "target": str(target), "approvedBy": "test-user", "approvedAt": "2026-09-04T00:00:00Z"}), encoding="utf-8")
+        output = target / "docs/features/F001/code-verification-report.json"
+        return target, dry_run, approval, output
+
+    def run_verification(self, target: Path, report: Path, approval: Path, output: Path, returncode: int):
+        argv = ["verify", "--report", str(report), "--approval", str(approval), "--target", str(target), "--output", str(output)]
+        completed = __import__("subprocess").CompletedProcess([], returncode, "verification output", "")
+        stream = io.StringIO()
+        with mock.patch.object(sys, "argv", argv), mock.patch.object(run_spring_code_verification, "isolation_preflight"), mock.patch.object(run_spring_code_verification.subprocess, "run", return_value=completed), mock.patch.object(run_spring_code_verification.shutil, "which", return_value="/usr/bin/bwrap"), contextlib.redirect_stdout(stream), contextlib.redirect_stderr(stream):
+            return run_spring_code_verification.main(), stream.getvalue()
+
+    def test_exact_approval_runs_isolated_verification_without_target_source_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target, report, approval, output = self.verification_fixture(Path(directory))
+            before = list(target.glob("src/**/*.java"))
+            code, _ = self.run_verification(target, report, approval, output, 0)
+            self.assertEqual(0, code)
+            result = json.loads(output.read_text(encoding="utf-8"))
+            run_spring_code_verification.validate_verification_report(result, output, target)
+            self.assertEqual("PASSED", result["result"]["state"])
+            self.assertEqual("DISABLED", result["isolation"]["network"])
+            self.assertTrue(result["readyForApplyApproval"])
+            self.assertEqual(before, list(target.glob("src/**/*.java")))
+            view = render_verification(result)
+            self.assertIn("네트워크: DISABLED", view)
+            self.assertIn("실제 target 적용이나 commit·push를 승인하지 않음", view)
+
+    def test_failed_tests_do_not_prepare_apply_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target, report, approval, output = self.verification_fixture(Path(directory))
+            self.assertEqual(0, self.run_verification(target, report, approval, output, 1)[0])
+            result = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual("FAILED", result["result"]["state"])
+            self.assertFalse(result["readyForApplyApproval"])
+
+    def test_changed_report_invalidates_verification_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target, report, approval, output = self.verification_fixture(Path(directory))
+            report.write_text(report.read_text(encoding="utf-8") + " ", encoding="utf-8")
+            code, message = self.run_verification(target, report, approval, output, 0)
+            self.assertEqual(1, code)
+            self.assertIn("does not match", message)
+            self.assertFalse(output.exists())
+
+    def test_offline_dependency_failure_is_unknown_not_code_failure(self) -> None:
+        self.assertEqual("UNKNOWN", run_spring_code_verification.result_state(1, "Could not resolve dependency while offline"))
+        self.assertEqual("FAILED", run_spring_code_verification.result_state(1, "There were failing tests"))
 
 
 if __name__ == "__main__":

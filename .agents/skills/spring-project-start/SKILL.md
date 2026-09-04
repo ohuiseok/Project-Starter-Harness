@@ -207,8 +207,13 @@ exactly match the approved component graph; missing or extra files, identity or
 Spring-role mismatches, API/entity leakage, missing requirement traceability,
 unowned target content, and stale inputs are blocking. Render the user-first
 Markdown view with `render_spring_code_dry_run_markdown.py`. A clear report is
-ready only for review of a later atomic apply. It must not change target source,
-compile code, run tests, access databases or containers, commit, or push.
+ready only for exact approval of isolated verification. It must not change
+target source, compile code, run tests, access databases or containers, commit,
+or push. After approval matching the exact report SHA-256, use
+`run_spring_code_verification.py`; it runs wrapper tests offline in a temporary,
+networkless bubblewrap filesystem with the target read-only and Docker socket
+hidden. Only a passing verification report may advance to later atomic apply
+review. Verification never applies files, commits, or pushes.
 
 ## Technology Selection
 

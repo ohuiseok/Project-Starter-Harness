@@ -4,6 +4,7 @@
   "target": "UNKNOWN",
   "baseline": null,
   "userFlow": {"name": "UNKNOWN", "trigger": "UNKNOWN", "steps": [], "outcome": "UNKNOWN"},
+  "contractSummary": {"httpMethod": "UNKNOWN", "httpPath": "UNKNOWN", "table": "UNKNOWN", "requirements": []},
   "qualityChecks": [],
   "generatedFiles": [],
   "plannedChanges": {"state": "NOT_COMPUTED", "creates": [], "updates": [], "conflicts": [], "unchanged": [], "desiredManifest": {"manifestVersion": 1, "files": {}, "modes": {}}},
