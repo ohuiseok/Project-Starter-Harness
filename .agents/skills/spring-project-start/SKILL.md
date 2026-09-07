@@ -239,7 +239,10 @@ regenerate `docs/progress.md`. Recommend only unfinished, non-deferred features
 whose dependencies are completed and blocking unknown links are empty. Always
 offer accepting the recommendation, selecting another candidate, entering a
 feature in natural language, or revising an existing feature. Completion does
-not run post-apply runtime checks or Git commit/push.
+not run post-apply runtime checks or Git commit/push. An interrupted completion
+transaction blocks another completion until
+`recover_spring_milestone_completion.py` verifies and rolls back only its exact
+artifacts.
 
 ## Technology Selection
 
