@@ -228,6 +228,19 @@ transaction blocks apply until `recover_spring_code_transaction.py` safely
 recovers it. Apply does not run post-apply tests, commit, or push; record those
 as separate outcomes.
 
+After a COMMITTED Spring code transaction, read
+`references/spring-milestone-completion.md` and use
+`complete_spring_milestone.py`. Completion must prove actual file hashes and
+modes against the cumulative baseline, bind the applied slice to its passing
+verification, and connect every requirement to applied implementation and test
+paths. Record execution state in the separate cumulative `docs/progress.json`
+ledger without rewriting approved project or feature contracts, and atomically
+regenerate `docs/progress.md`. Recommend only unfinished, non-deferred features
+whose dependencies are completed and blocking unknown links are empty. Always
+offer accepting the recommendation, selecting another candidate, entering a
+feature in natural language, or revising an existing feature. Completion does
+not run post-apply runtime checks or Git commit/push.
+
 ## Technology Selection
 
 For a new project, a missing profile, or a requested stack change, read

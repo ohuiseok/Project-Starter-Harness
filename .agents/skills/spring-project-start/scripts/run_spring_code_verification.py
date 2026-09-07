@@ -99,7 +99,7 @@ def result_state(returncode: int, output: str) -> str:
     return "UNKNOWN" if any(marker in output for marker in infrastructure) else "FAILED"
 
 
-def validate_verification_report(report: dict, report_path: Path, target: Path) -> None:
+def validate_verification_report(report: dict, report_path: Path, target: Path, allow_applied_baseline: bool = False) -> None:
     required = {"springCodeVerificationReportVersion", "dryRun", "approval", "target", "targetContextSha256", "isolation", "command", "result", "targetSourceChanged", "readyForApplyApproval"}
     if not isinstance(report, dict) or set(report) != required or report["springCodeVerificationReportVersion"] != 1:
         raise ValueError("Spring code verification report is invalid")
@@ -116,7 +116,7 @@ def validate_verification_report(report: dict, report_path: Path, target: Path) 
             raise ValueError(f"verification {name} evidence changed")
     dry_run_path = target / report["dryRun"]["path"]
     dry_run = load_object(dry_run_path)
-    validate_report(dry_run, target)
+    validate_report(dry_run, target, verify_current_baseline=not allow_applied_baseline)
     generated_paths = {item["path"] for item in dry_run["generatedFiles"]}
     if report["targetContextSha256"] != target_context_hash(target, generated_paths):
         raise ValueError("target build/source context changed after verification")

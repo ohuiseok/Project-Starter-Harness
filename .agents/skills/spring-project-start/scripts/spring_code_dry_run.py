@@ -160,7 +160,7 @@ def canonical_baseline(target: Path) -> tuple[Path, dict | None, dict, dict]:
     return path, {"path": BASELINE, "sha256": sha(path)}, files, modes
 
 
-def validate_report(report: dict, target: Path) -> None:
+def validate_report(report: dict, target: Path, verify_current_baseline: bool = True) -> None:
     required = {"springCodeDryRunVersion", "implementationPlan", "target", "baseline", "userFlow", "contractSummary", "qualityChecks", "generatedFiles", "plannedChanges", "verification", "targetSourceChanged", "readyForApproval", "executionReady"}
     if not isinstance(report, dict) or set(report) != required or report["springCodeDryRunVersion"] != 1:
         raise ValueError("Spring code dry-run report is invalid")
@@ -177,9 +177,10 @@ def validate_report(report: dict, target: Path) -> None:
     expected_summary = {"httpMethod": "POST", "httpPath": expectations["apiPath"], "table": expectations["table"], "requirements": [item["requirementRef"] for item in plan["coverage"]]}
     if report["contractSummary"] != expected_summary:
         raise ValueError("contract summary changed")
-    _, current_baseline, _, _ = canonical_baseline(target)
-    if report["baseline"] != current_baseline:
-        raise ValueError("implementation baseline evidence changed")
+    if verify_current_baseline:
+        _, current_baseline, _, _ = canonical_baseline(target)
+        if report["baseline"] != current_baseline:
+            raise ValueError("implementation baseline evidence changed")
     expected = {item["target"]["plannedPath"]: item for item in plan["components"]}
     generated_paths = set()
     for item in report["generatedFiles"]:
