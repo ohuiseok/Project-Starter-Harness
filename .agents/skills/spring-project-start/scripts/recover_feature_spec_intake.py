@@ -12,8 +12,8 @@ def main()->int:
   if root not in intake.parents or intake.is_symlink(): raise ValueError("intake path is unsafe")
   control=root/".starter-harness"; consumption=control/"continuation-consumptions"; receipt=consumption/f"{sha(intake)}.json"
   if control.is_symlink() or consumption.is_symlink() or not receipt.is_file() or receipt.is_symlink(): raise ValueError("consumption receipt not found or unsafe")
-  value=load_object(receipt); required={"continuationConsumptionVersion","intake","draft","view","featureId","state"}
-  if set(value)!=required or value["continuationConsumptionVersion"]!=1 or value["state"]!="AWAITING_USER_DECISIONS" or value["intake"]!={"path":intake.relative_to(root).as_posix(),"sha256":sha(intake)}: raise ValueError("consumption receipt is invalid")
+  value=load_object(receipt); required={"continuationConsumptionVersion","intake","draft","view","baseFeature","featureId","state"}
+  if set(value)!=required or value["continuationConsumptionVersion"]!=2 or value["state"]!="AWAITING_USER_DECISIONS" or value["intake"]!={"path":intake.relative_to(root).as_posix(),"sha256":sha(intake)}: raise ValueError("consumption receipt is invalid")
   paths=[]; missing=[]
   for key in ("draft","view"):
    path=target_path(root,value[key]["path"],key); paths.append((path,value[key]["sha256"])); missing.append(not path.exists())

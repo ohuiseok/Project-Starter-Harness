@@ -15,8 +15,11 @@ def load_context(root:Path,intake_path:Path)->tuple[dict,dict,Path]:
  receipt_path=consumption/f"{intake_hash}.json"
  if receipt_path.is_symlink(): raise ValueError("continuation consumption receipt is unsafe")
  receipt=load_object(receipt_path)
- required={"continuationConsumptionVersion","intake","draft","view","featureId","state"}
- if set(receipt)!=required or receipt["continuationConsumptionVersion"]!=1 or receipt["state"]!="AWAITING_USER_DECISIONS" or receipt["intake"]!={"path":intake_path.relative_to(root).as_posix(),"sha256":intake_hash}: raise ValueError("continuation consumption receipt is invalid")
+ required={"continuationConsumptionVersion","intake","draft","view","baseFeature","featureId","state"}
+ if set(receipt)!=required or receipt["continuationConsumptionVersion"]!=2 or receipt["state"]!="AWAITING_USER_DECISIONS" or receipt["intake"]!={"path":intake_path.relative_to(root).as_posix(),"sha256":intake_hash}: raise ValueError("continuation consumption receipt is invalid")
+ if receipt["baseFeature"] is not None:
+  base=receipt["baseFeature"]
+  if not isinstance(base,dict) or set(base)!={"path","sha256"}: raise ValueError("base feature reference is invalid")
  return intake,receipt,receipt_path
 def head(root:Path,receipt:dict)->tuple[Path,dict]:
  current=receipt["draft"]; intake_hash=receipt["intake"]["sha256"]; seen=set(); directory=root/".starter-harness/feature-draft-updates"

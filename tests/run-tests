@@ -303,6 +303,10 @@ for required in \
   "$SKILL_ROOT/scripts/validate_feature_spec_approval_readiness.py" \
   "$SKILL_ROOT/scripts/recover_feature_draft_update.py" \
   "$SKILL_ROOT/scripts/cancel_feature_spec_intake.py" \
+  "$SKILL_ROOT/scripts/feature_spec_promotion.py" \
+  "$SKILL_ROOT/scripts/prepare_feature_spec_promotion.py" \
+  "$SKILL_ROOT/scripts/apply_feature_spec_promotion.py" \
+  "$SKILL_ROOT/scripts/recover_feature_spec_promotion.py" \
   "$HARNESS_ROOT/templates/project-profile.md" \
   "$HARNESS_ROOT/templates/project-profile.json" \
   "$HARNESS_ROOT/templates/generation-plan.json" \
@@ -339,7 +343,10 @@ for required in \
   "$HARNESS_ROOT/templates/continuation-consumption.json" \
   "$HARNESS_ROOT/templates/feature-draft-update.json" \
   "$HARNESS_ROOT/templates/feature-spec-approval-readiness.json" \
-  "$HARNESS_ROOT/templates/feature-spec-intake-cancellation.json"; do
+  "$HARNESS_ROOT/templates/feature-spec-intake-cancellation.json" \
+  "$HARNESS_ROOT/templates/feature-spec-promotion.json" \
+  "$HARNESS_ROOT/templates/feature-spec-promotion-transaction.json" \
+  "$HARNESS_ROOT/templates/continuation-completion.json"; do
   if [ -f "$required" ]; then
     pass "starter contract: $(basename "$required") exists"
   else

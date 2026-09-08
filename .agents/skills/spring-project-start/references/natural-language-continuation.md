@@ -47,3 +47,10 @@ writing successor artifacts and become `COMMITTED` only after their exact
 draft and view exist; interrupted updates require exact recovery.
 Cancellation creates immutable evidence, deletes no draft history, and prevents
 the cancelled intake from advancing further.
+
+Promotion is a separate final boundary. Rebuild and review the exact project
+candidate delta and official feature destination, then bind explicit approval
+to that plan and view. Revalidate readiness and all upstream hashes immediately
+before a journaled atomic write of approved project/feature JSON and Markdown.
+Record a separate immutable `CONSUMED` receipt. Promotion never authorizes
+design artifacts, source generation, runtime effects, or Git operations.

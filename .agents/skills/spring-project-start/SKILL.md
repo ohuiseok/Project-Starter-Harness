@@ -296,6 +296,15 @@ recover only its exact unchanged artifacts with
 `recover_feature_draft_update.py`. If the user cancels, use
 `cancel_feature_spec_intake.py`; preserve prior evidence and block later draft
 updates or readiness checks for that intake.
+After exact readiness validation, use `prepare_feature_spec_promotion.py` to
+show the project-candidate delta, final feature summary, exact official files,
+and exclusions. Only explicit approval of that current view permits
+`apply_feature_spec_promotion.py`. Apply must rebuild the plan, approve and
+validate the project and feature together, back up existing artifacts, journal
+`PREPARED` and `APPLYING`, atomically write JSON/Markdown plus an immutable
+`CONSUMED` receipt, and finish `COMMITTED`. It does not design APIs/data, change
+source, run infrastructure, or authorize Git. A pending transaction blocks
+retry; use `recover_feature_spec_promotion.py` and refuse recovery on drift.
 A handoff never approves that
 workflow, changes source or approved contracts, executes runtime effects, or
 authorizes Git operations.
