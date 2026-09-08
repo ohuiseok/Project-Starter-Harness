@@ -551,7 +551,7 @@ expect_out "Spring milestone completion: all focused scenarios ran" "Ran 8 tests
 OUT="$(python3 "$HARNESS_ROOT/tests/test_post_apply_verification.py" 2>&1)"
 CODE=$?
 expect_code "post-apply verification: focused regression suite passes" 0
-expect_out "post-apply verification: all focused scenarios ran" "Ran 3 tests"
+expect_out "post-apply verification: all focused scenarios ran" "Ran 8 tests"
 
 OUT="$(python3 "$SKILL_ROOT/scripts/validate_feature_specs.py" \
   --project-brief "$HARNESS_ROOT/templates/project-brief.json" 2>&1)"

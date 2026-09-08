@@ -59,6 +59,14 @@ def validate_completion_report(report:dict,item:dict,root:Path)->None:
         evidence=report[name]
         if not isinstance(evidence,dict) or set(evidence)!={"path","sha256"}: raise ValueError(f"completion {name} evidence is invalid")
         target_path(root,evidence["path"],f"completion {name}")
+    runtime=report["postApplyRuntimeVerification"]
+    if report["state"]=="APPLIED_AND_VERIFIED":
+        if not isinstance(runtime,dict) or set(runtime)!={"path","sha256","verificationLevel"} or runtime["verificationLevel"]!="APPLIED_TEST_ISOLATED": raise ValueError("post-apply verification reference is invalid")
+        path=target_path(root,runtime["path"],"post-apply verification")
+        if not path.is_file() or sha(path)!=runtime["sha256"]: raise ValueError("post-apply verification evidence changed")
+        runtime_report=load_object(path)
+        if runtime_report.get("postApplyVerificationReportVersion")!=1 or runtime_report.get("verificationLevel")!=runtime["verificationLevel"] or runtime_report.get("result",{}).get("state")!="PASSED" or runtime_report.get("readyForFinalization") is not True: raise ValueError("post-apply verification evidence is not passing")
+    elif runtime!="NOT_RUN": raise ValueError("preverified completion has invalid runtime evidence")
 
 def validate_progress(value:dict,root:Path)->None:
     required={"progressVersion","target","project","completedMilestones","current","nextCandidates","blockedCandidates","unknowns","updatedAt"}
@@ -124,7 +132,7 @@ def build_progress(existing:dict|None,project:dict,completion:dict,completion_re
 def render_progress(value:dict)->str:
     lines=[f"# {value['project']['name']} 진행 상황","",f"> {value['project']['goal']}","","## 완료",""]
     for item in value["completedMilestones"]:
-        status="적용 후 실제 검증 완료" if item["state"]=="APPLIED_AND_VERIFIED" else "적용 및 격리 테스트 완료 (적용 후 런타임 검증 미실행)"
+        status="적용 상태 기반 격리 테스트 완료" if item["state"]=="APPLIED_AND_VERIFIED" else "적용 및 사전 격리 테스트 완료 (적용 상태 재검증 미실행)"
         lines.extend([f"- {item['featureId']} · {item['name']} · {status}",f"  - 사용자 가치: {item['userValue']}"])
     lines.extend(["","## 남은 UNKNOWN",""])
     if value["unknowns"]:

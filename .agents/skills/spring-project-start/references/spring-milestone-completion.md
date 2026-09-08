@@ -28,3 +28,14 @@ and all excluded effects before exact approval. A passing report may promote
 the milestone to `APPLIED_AND_VERIFIED`; a failed or stale report cannot. DB,
 Docker, ports, external integrations, and application startup remain separate
 capability-specific verification plans.
+
+The plan is not approval-ready without a local wrapper/dependency cache. The
+runner copies only Gradle cache/wrapper or Maven repository content into its
+temporary home; user settings and credentials are excluded. Its environment is
+cleared, host user homes and common secret-bearing directories are masked, and
+secret-like output is redacted and classified `UNKNOWN`. Approval binds both
+the structured plan and its exact rendered review. Each failed or unknown run
+is immutable evidence; retry with a new attempt output rather than overwriting
+it. This common runner records `APPLIED_TEST_ISOLATED`, while DB, application
+startup, HTTP smoke, messaging, and distributed integration checks require
+their own future verification levels.

@@ -252,7 +252,13 @@ publish ports. Show those effects and alternatives before approval. Only a
 passing current report may atomically promote the completion and progress
 ledger to `APPLIED_AND_VERIFIED`. Runtime checks that require Docker, a DB,
 ports, external services, or application startup need a later capability-specific
-plan and must never be silently folded into this approval.
+plan and must never be silently folded into this approval. Bind approval to the
+current rendered review as well as the plan. Clear the sandbox environment,
+hide host user homes and common secret-bearing directories, copy only local
+dependency caches (never credential settings), and classify secret-like output
+as redacted `UNKNOWN`. If the required offline cache is missing, show the
+blocker before approval. Record this common level as
+`APPLIED_TEST_ISOLATED`, not as application runtime verification.
 
 ## Technology Selection
 
