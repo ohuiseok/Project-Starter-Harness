@@ -260,6 +260,17 @@ as redacted `UNKNOWN`. If the required offline cache is missing, show the
 blocker before approval. Record this common level as
 `APPLIED_TEST_ISOLATED`, not as application runtime verification.
 
+After progress exists, read `references/natural-language-continuation.md` for
+requests such as “next”, a feature description, revision, bug fix, technology
+change, deferred resume, or verification retry. Use the continuation route and
+its user view to bind the original request to current project/progress evidence.
+Prefer explicit IDs and exact candidates, explain dependency and UNKNOWN
+blockers, and reserve—but do not insert—the next stable ID for a new feature.
+Obtain exact route/view confirmation when interpretation or impact requires it,
+then create a handoff to an existing workflow. A handoff never approves that
+workflow, changes source or approved contracts, executes runtime effects, or
+authorizes Git operations.
+
 ## Technology Selection
 
 For a new project, a missing profile, or a requested stack change, read
