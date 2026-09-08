@@ -271,6 +271,15 @@ Obtain exact route/view confirmation when interpretation or impact requires it,
 then create and consume a handoff into the named existing workflow's immutable
 intake. Store only a PII-minimized summary, reject secret-like input, escape
 user text in the review, and keep blockers, warnings, and decisions distinct.
+For a `FEATURE_SPECIFICATION` intake, use
+`create_feature_spec_from_intake.py` to create a non-authoritative draft and a
+change-focused review without changing approved project or feature contracts.
+Revision and targeted bug-fix requests require the current feature contract as
+explicit evidence. Keep the intake and consumption receipt immutable; if an
+interruption leaves an incomplete exact consumption, use
+`recover_feature_spec_intake.py` rather than retrying or deleting artifacts.
+After natural-language decisions resolve the draft, continue through the
+existing feature validation, rendering, and approval workflow.
 A handoff never approves that
 workflow, changes source or approved contracts, executes runtime effects, or
 authorizes Git operations.

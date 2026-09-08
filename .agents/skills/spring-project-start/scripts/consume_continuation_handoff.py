@@ -12,7 +12,8 @@ def main()->int:
   root=a.target.resolve(strict=True); handoff=a.handoff.resolve(strict=True); output=a.output.resolve(strict=False)
   if a.target.is_symlink() or root not in handoff.parents or root not in output.parents or handoff.is_symlink() or output.is_symlink() or output.exists(): raise ValueError("workflow intake paths are unsafe or already exist")
   value=load_object(handoff); validate_handoff(value,handoff,root)
-  intake={"continuationWorkflowIntakeVersion":1,"handoff":{"path":handoff.relative_to(root).as_posix(),"sha256":sha(handoff)},"target":str(root),"workflow":value["nextWorkflow"],"routeType":value["routeType"],"changeKind":value["changeKind"],"feature":value["feature"],"state":"READY_FOR_WORKFLOW"}
+  route_path=root/value["route"]["path"]; route=load_object(route_path)
+  intake={"continuationWorkflowIntakeVersion":2,"handoff":{"path":handoff.relative_to(root).as_posix(),"sha256":sha(handoff)},"projectBrief":route["projectBrief"],"progress":route["progress"],"requestSummary":route["request"]["summary"],"target":str(root),"workflow":value["nextWorkflow"],"routeType":value["routeType"],"changeKind":value["changeKind"],"feature":value["feature"],"state":"READY_FOR_WORKFLOW"}
   output.parent.mkdir(parents=True,exist_ok=True); atomic_write_bytes((json.dumps(intake,ensure_ascii=False,indent=2)+"\n").encode(),output)
  except (OSError,ValueError,KeyError,TypeError) as e: print(f"CONTINUATION_INTAKE_VALID: no\nERROR: {e}",file=sys.stderr); return 1
  print("CONTINUATION_INTAKE_VALID: yes"); print(f"NEXT_WORKFLOW: {value['nextWorkflow']}"); return 0
