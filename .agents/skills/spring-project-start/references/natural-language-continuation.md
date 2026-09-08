@@ -37,9 +37,13 @@ remaining artifacts still match their recorded hashes. Natural-language
 answers create immutable successor drafts instead of overwriting the initial
 draft. Each successor binds its previous hash, preserves source and decision
 IDs, and adds provenance for the new answer. Only the unbranched chain head may
-advance. A separate readiness report checks user value, actors, trigger, main
+advance. Compute all semantic changes, bind them to exactly one PII-minimized
+answer source, show before/after values, and reject implicit removal of
+confirmed content. A separate readiness report checks name, goal, user value, actors, trigger, main
 flow, acceptance criteria, blocking unknowns, design decisions, and
 unconfirmed AI proposals. Once ready, reuse the normal feature validator,
 renderer, and approval recorder. Draft updates use a `PREPARED` journal before
 writing successor artifacts and become `COMMITTED` only after their exact
 draft and view exist; interrupted updates require exact recovery.
+Cancellation creates immutable evidence, deletes no draft history, and prevents
+the cancelled intake from advancing further.

@@ -283,12 +283,19 @@ existing feature validation, rendering, and approval workflow. Treat each
 agent-prepared answer interpretation as a proposed full draft, then use
 `advance_feature_spec_draft.py` to append it to the immutable hash chain. It
 must preserve prior source and decision IDs, add provenance for the new answer,
-reject stale parents, and never approve itself. Use
+bind every detected semantic field change to that answer, reject PII-bearing
+provenance and implicit deletion of confirmed content, reject stale parents,
+and never approve itself. The review must show concise before/after values and
+one next material question, not only a generic “changed” label. Use
 `prepare_feature_spec_approval.py` only on the current chain head; a
 `READY_FOR_SPEC_APPROVAL` result permits final review, not contract replacement
-or approval. A `PREPARED` draft-update journal blocks further advancement;
+or approval. Recheck its exact report and user view with
+`validate_feature_spec_approval_readiness.py` before consumption. A `PREPARED`
+draft-update journal blocks further advancement;
 recover only its exact unchanged artifacts with
-`recover_feature_draft_update.py`.
+`recover_feature_draft_update.py`. If the user cancels, use
+`cancel_feature_spec_intake.py`; preserve prior evidence and block later draft
+updates or readiness checks for that intake.
 A handoff never approves that
 workflow, changes source or approved contracts, executes runtime effects, or
 authorizes Git operations.

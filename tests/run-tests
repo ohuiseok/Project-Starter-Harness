@@ -300,7 +300,9 @@ for required in \
   "$SKILL_ROOT/scripts/feature_draft_chain.py" \
   "$SKILL_ROOT/scripts/advance_feature_spec_draft.py" \
   "$SKILL_ROOT/scripts/prepare_feature_spec_approval.py" \
+  "$SKILL_ROOT/scripts/validate_feature_spec_approval_readiness.py" \
   "$SKILL_ROOT/scripts/recover_feature_draft_update.py" \
+  "$SKILL_ROOT/scripts/cancel_feature_spec_intake.py" \
   "$HARNESS_ROOT/templates/project-profile.md" \
   "$HARNESS_ROOT/templates/project-profile.json" \
   "$HARNESS_ROOT/templates/generation-plan.json" \
@@ -336,7 +338,8 @@ for required in \
   "$HARNESS_ROOT/templates/continuation-workflow-intake.json" \
   "$HARNESS_ROOT/templates/continuation-consumption.json" \
   "$HARNESS_ROOT/templates/feature-draft-update.json" \
-  "$HARNESS_ROOT/templates/feature-spec-approval-readiness.json"; do
+  "$HARNESS_ROOT/templates/feature-spec-approval-readiness.json" \
+  "$HARNESS_ROOT/templates/feature-spec-intake-cancellation.json"; do
   if [ -f "$required" ]; then
     pass "starter contract: $(basename "$required") exists"
   else

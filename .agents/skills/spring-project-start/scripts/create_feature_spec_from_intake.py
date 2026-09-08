@@ -34,7 +34,7 @@ def draft(value:dict,project:dict,intake_hash:str,existing:dict|None=None)->dict
  feature=value["feature"]; feature_id=feature["featureId"]; candidates={item["id"]:item for item in project["featureCandidates"]}; candidate=candidates.get(feature_id,{})
  evidence={"id":source_id(intake_hash,existing),"type":"USER_STATED","reference":value["requestSummary"]}
  if existing:
-  result=copy.deepcopy(existing); result["feature"]["status"]="REVIEW_REQUIRED"; result["feature"]["goal"]=value["requestSummary"]; result["approval"]={"status":"REVIEW_REQUIRED","approvedBy":None,"approvedAt":None,"approvedContentSha256":None}; result["sources"].append(evidence); return result
+  result=copy.deepcopy(existing); result["feature"]["status"]="REVIEW_REQUIRED"; result["approval"]={"status":"REVIEW_REQUIRED","approvedBy":None,"approvedAt":None,"approvedContentSha256":None}; result["sources"].append(evidence); return result
  proposed_name=feature.get("name")
  if value["routeType"] in {"NEW_FEATURE","BUG_FIX"} and proposed_name=="새 기능 초안": proposed_name=None
  name=proposed_name or candidate.get("name") or value["requestSummary"][:120]
@@ -52,7 +52,8 @@ def render(value:dict,spec:dict)->str:
  unknown_design=[key for key,item in spec["designRequirements"].items() if item["status"]=="UNKNOWN" or item["reason"]=="UNKNOWN" or item["source"]=="UNKNOWN"]
  if unknown_design: unresolved.append("- API·저장소·UI 등 필요한 설계")
  if f["userValue"]=="UNKNOWN": unresolved.insert(0,"- 이 기능이 제공할 사용자 가치")
- return "\n".join(["# 기능 명세 초안 준비","",f"- 요청 유형: {kind}",f"- 기능: {f['id']} · {markdown(f['name'])}","","## 확인된 내용","",*confirmed,"","## 지금 결정해야 할 내용","",*(unresolved or ["- 없음"]),"","## 기존 프로젝트에서 달라지는 점","",("- 새 기능 후보 및 명세를 제안함" if value["routeType"] in {"NEW_FEATURE","BUG_FIX"} else "- 기존 기능의 새 명세 초안을 제안함"),"- 승인된 프로젝트 개요와 공식 기능 계약은 아직 변경하지 않음","","## 선택","","- 자연어로 내용을 보완","- 이 요청을 취소","- 개발자 상세 보기",""])
+ next_item=unresolved[:1] or ["- 없음"]; remaining=max(0,len(unresolved)-1)
+ return "\n".join(["# 기능 명세 초안 준비","",f"- 요청 유형: {kind}",f"- 기능: {f['id']} · {markdown(f['name'])}","","## 확인된 내용","",*confirmed,"","## 지금 결정할 한 가지","",*next_item,f"- 이후 남은 결정: {remaining}개","","## 기존 프로젝트에서 달라지는 점","",("- 새 기능 후보 및 명세를 제안함" if value["routeType"] in {"NEW_FEATURE","BUG_FIX"} else "- 기존 기능의 새 명세 초안을 제안함"),"- 승인된 프로젝트 개요와 공식 기능 계약은 아직 변경하지 않음","","## 선택","","- 자연어로 답변","- 추천 요청","- 나중에 결정","- 이 요청을 취소","- 개발자 상세 보기",""])
 def main()->int:
  p=argparse.ArgumentParser(); p.add_argument("--intake",required=True,type=Path); p.add_argument("--target",required=True,type=Path); p.add_argument("--draft-output",required=True,type=Path); p.add_argument("--view-output",required=True,type=Path); p.add_argument("--existing-feature",type=Path); a=p.parse_args(); written=[]
  try:
@@ -75,7 +76,9 @@ def main()->int:
   written.append((receipt_path,receipt_bytes)); draft_path.parent.mkdir(parents=True,exist_ok=True); atomic_write_bytes(draft_bytes,draft_path); written.append((draft_path,draft_bytes)); atomic_write_bytes(view_bytes,view_path); written.append((view_path,view_bytes))
  except (OSError,ValueError,KeyError,TypeError) as e:
   for path,payload in reversed(written):
-   if path.exists() and path.read_bytes()==payload: path.unlink()
+   try:
+    if path.exists() and path.read_bytes()==payload: path.unlink()
+   except OSError: pass
   print(f"FEATURE_INTAKE_DRAFT_VALID: no\nERROR: {e}",file=sys.stderr); return 1
  print("FEATURE_INTAKE_DRAFT_VALID: yes"); print("STATE: AWAITING_USER_DECISIONS"); print("OFFICIAL_CONTRACT_CHANGED: no"); return 0
 if __name__=="__main__": sys.exit(main())

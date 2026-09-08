@@ -12,7 +12,7 @@ def main()->int:
   root=a.target.resolve(strict=True); intake=a.intake.resolve(strict=True); current=a.current.resolve(strict=True)
   if any(root not in path.parents or path.is_symlink() for path in (intake,current)): raise ValueError("recovery paths are unsafe")
   load_context(root,intake); digest=sha(current); edge=root/".starter-harness/feature-draft-updates"/f"{digest}.json"; value=load_object(edge)
-  if value.get("featureDraftUpdateVersion")!=1 or value.get("state")!="PREPARED" or value.get("previous")!={"path":current.relative_to(root).as_posix(),"sha256":digest} or value.get("intakeSha256")!=sha(intake): raise ValueError("no matching PREPARED update exists")
+  if value.get("featureDraftUpdateVersion")!=2 or value.get("state")!="PREPARED" or value.get("previous")!={"path":current.relative_to(root).as_posix(),"sha256":digest} or value.get("intakeSha256")!=sha(intake): raise ValueError("no matching PREPARED update exists")
   artifacts=[]
   for key in ("next","view"):
    item=value[key]
