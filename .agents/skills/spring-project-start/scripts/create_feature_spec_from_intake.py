@@ -26,18 +26,33 @@ def validate_intake(value:dict,path:Path,root:Path)->dict:
  if not isinstance(value["requestSummary"],str) or not value["requestSummary"].strip(): raise ValueError("intake request summary is invalid")
  if path.is_symlink() or root not in path.resolve().parents: raise ValueError("intake must be target-owned")
  return handoff
-def draft(value:dict,project:dict,existing:dict|None=None)->dict:
+def source_id(intake_hash:str,existing:dict|None)->str:
+ base=f"CONTINUATION-{intake_hash[:12].upper()}"; used={item["id"] for item in (existing or {}).get("sources",[])}; candidate=base; index=2
+ while candidate in used: candidate=f"{base}-{index}"; index+=1
+ return candidate
+def draft(value:dict,project:dict,intake_hash:str,existing:dict|None=None)->dict:
  feature=value["feature"]; feature_id=feature["featureId"]; candidates={item["id"]:item for item in project["featureCandidates"]}; candidate=candidates.get(feature_id,{})
+ evidence={"id":source_id(intake_hash,existing),"type":"USER_STATED","reference":value["requestSummary"]}
  if existing:
-  result=copy.deepcopy(existing); result["feature"]["status"]="REVIEW_REQUIRED"; result["feature"]["goal"]=value["requestSummary"]; result["approval"]={"status":"REVIEW_REQUIRED","approvedBy":None,"approvedAt":None,"approvedContentSha256":None}; result["sources"].append({"id":"CONTINUATION-INTAKE","type":"USER_STATED","reference":value["requestSummary"]}); return result
+  result=copy.deepcopy(existing); result["feature"]["status"]="REVIEW_REQUIRED"; result["feature"]["goal"]=value["requestSummary"]; result["approval"]={"status":"REVIEW_REQUIRED","approvedBy":None,"approvedAt":None,"approvedContentSha256":None}; result["sources"].append(evidence); return result
  proposed_name=feature.get("name")
  if value["routeType"] in {"NEW_FEATURE","BUG_FIX"} and proposed_name=="새 기능 초안": proposed_name=None
  name=proposed_name or candidate.get("name") or value["requestSummary"][:120]
- user_value=feature.get("userValue") or candidate.get("userValue") or value["requestSummary"]
- return {"schemaVersion":2,"feature":{"id":feature_id,"name":name,"goal":value["requestSummary"],"userValue":user_value,"status":"DRAFT"},"actors":[],"scenario":{"preconditions":[],"trigger":"UNKNOWN","mainFlow":[],"alternateFlows":[],"postconditions":[]},"businessRules":[],"authorization":[],"dataAndState":[],"failureCases":[],"acceptanceCriteria":[],"designRequirements":DESIGN,"dependencies":candidate.get("dependsOn",[]),"unknowns":[{"id":f"U-{feature_id}-01","question":"주요 사용자 흐름과 검증 가능한 완료 조건은 무엇인가요?","impact":"답변 전에는 설계와 구현으로 진행할 수 없습니다.","blocking":True,"status":"OPEN"}],"sources":[{"id":"CONTINUATION-INTAKE","type":"USER_STATED","reference":value["requestSummary"]}],"approval":{"status":"DRAFT","approvedBy":None,"approvedAt":None,"approvedContentSha256":None}}
+ proposed_value=feature.get("userValue"); user_value=(candidate.get("userValue") or proposed_value) if proposed_value!="기능 명세에서 확인 필요" else candidate.get("userValue"); user_value=user_value or "UNKNOWN"
+ return {"schemaVersion":2,"feature":{"id":feature_id,"name":name,"goal":value["requestSummary"],"userValue":user_value,"status":"DRAFT"},"actors":[],"scenario":{"preconditions":[],"trigger":"UNKNOWN","mainFlow":[],"alternateFlows":[],"postconditions":[]},"businessRules":[],"authorization":[],"dataAndState":[],"failureCases":[],"acceptanceCriteria":[],"designRequirements":DESIGN,"dependencies":candidate.get("dependsOn",[]),"unknowns":[{"id":f"U-{feature_id}-01","question":"주요 사용자 흐름과 검증 가능한 완료 조건은 무엇인가요?","impact":"답변 전에는 설계와 구현으로 진행할 수 없습니다.","blocking":True,"status":"OPEN"}],"sources":[evidence],"approval":{"status":"DRAFT","approvedBy":None,"approvedAt":None,"approvedContentSha256":None}}
 def render(value:dict,spec:dict)->str:
  kind={"NEW_FEATURE":"새 기능","NEXT_FEATURE":"다음 후보","REVISE_FEATURE":"기존 기능 수정","BUG_FIX":"버그 수정"}.get(value["routeType"],value["routeType"]); f=spec["feature"]
- return "\n".join(["# 기능 명세 초안 준비","",f"- 요청 유형: {kind}",f"- 기능: {f['id']} · {markdown(f['name'])}",f"- 요청 요약: {markdown(value['requestSummary'])}","","## 확정된 내용","",f"- 사용자 가치: {markdown(f['userValue'])}","","## 지금 결정해야 할 내용","","- 주요 사용자와 시작 조건","- 정상 흐름과 실패 흐름","- 검증 가능한 완료 조건","- API·저장소·UI 등 필요한 설계","","## 기존 프로젝트에서 달라지는 점","",("- 새 기능 후보 및 명세를 제안함" if value["routeType"] in {"NEW_FEATURE","BUG_FIX"} else "- 기존 기능의 새 명세 초안을 제안함"),"- 승인된 프로젝트 개요와 공식 기능 계약은 아직 변경하지 않음","","## 선택","","- 자연어로 내용을 보완","- 이 요청을 취소","- 개발자 상세 보기",""])
+ confirmed=[f"- 사용자가 요청한 변경: {markdown(value['requestSummary'])}"]
+ if f["userValue"]!="UNKNOWN": confirmed.append(f"- 기존에 확인된 사용자 가치: {markdown(f['userValue'])}")
+ unresolved=[]
+ if not spec["actors"] or "UNKNOWN" in spec["actors"]: unresolved.append("- 주요 사용자")
+ if spec["scenario"]["trigger"]=="UNKNOWN": unresolved.append("- 시작 조건")
+ if not spec["scenario"]["mainFlow"] or "UNKNOWN" in spec["scenario"]["mainFlow"]: unresolved.append("- 정상 흐름과 실패 흐름")
+ if not spec["acceptanceCriteria"]: unresolved.append("- 검증 가능한 완료 조건")
+ unknown_design=[key for key,item in spec["designRequirements"].items() if item["status"]=="UNKNOWN" or item["reason"]=="UNKNOWN" or item["source"]=="UNKNOWN"]
+ if unknown_design: unresolved.append("- API·저장소·UI 등 필요한 설계")
+ if f["userValue"]=="UNKNOWN": unresolved.insert(0,"- 이 기능이 제공할 사용자 가치")
+ return "\n".join(["# 기능 명세 초안 준비","",f"- 요청 유형: {kind}",f"- 기능: {f['id']} · {markdown(f['name'])}","","## 확인된 내용","",*confirmed,"","## 지금 결정해야 할 내용","",*(unresolved or ["- 없음"]),"","## 기존 프로젝트에서 달라지는 점","",("- 새 기능 후보 및 명세를 제안함" if value["routeType"] in {"NEW_FEATURE","BUG_FIX"} else "- 기존 기능의 새 명세 초안을 제안함"),"- 승인된 프로젝트 개요와 공식 기능 계약은 아직 변경하지 않음","","## 선택","","- 자연어로 내용을 보완","- 이 요청을 취소","- 개발자 상세 보기",""])
 def main()->int:
  p=argparse.ArgumentParser(); p.add_argument("--intake",required=True,type=Path); p.add_argument("--target",required=True,type=Path); p.add_argument("--draft-output",required=True,type=Path); p.add_argument("--view-output",required=True,type=Path); p.add_argument("--existing-feature",type=Path); a=p.parse_args(); written=[]
  try:
@@ -48,9 +63,10 @@ def main()->int:
    if not a.existing_feature: raise ValueError("existing-feature is required for revision or targeted bug fix")
    existing_path=a.existing_feature.resolve(strict=True)
    if root not in existing_path.parents or existing_path.is_symlink(): raise ValueError("existing feature path is unsafe")
-   existing=load_object(existing_path); validate_feature(existing,project)
+   existing=load_object(existing_path); existing_approved,existing_blockers=validate_feature(existing,project)
+   if not existing_approved or existing_blockers: raise ValueError("existing feature must be the current approved, advancement-ready contract")
    if existing["feature"]["id"]!=intake["feature"]["featureId"]: raise ValueError("existing feature ID does not match intake")
-  spec=draft(intake,project,existing); validate_feature(spec,None); draft_bytes=(json.dumps(spec,ensure_ascii=False,indent=2)+"\n").encode(); view_bytes=render(intake,spec).encode(); intake_hash=sha(intake_path); receipt_path=root/".starter-harness/continuation-consumptions"/f"{intake_hash}.json"
+  intake_hash=sha(intake_path); spec=draft(intake,project,intake_hash,existing); validate_feature(spec,None); draft_bytes=(json.dumps(spec,ensure_ascii=False,indent=2)+"\n").encode(); view_bytes=render(intake,spec).encode(); receipt_path=root/".starter-harness/continuation-consumptions"/f"{intake_hash}.json"
   receipt={"continuationConsumptionVersion":1,"intake":reference(intake_path,root),"draft":{"path":draft_path.relative_to(root).as_posix(),"sha256":hashlib.sha256(draft_bytes).hexdigest()},"view":{"path":view_path.relative_to(root).as_posix(),"sha256":hashlib.sha256(view_bytes).hexdigest()},"featureId":spec["feature"]["id"],"state":"AWAITING_USER_DECISIONS"}; receipt_bytes=(json.dumps(receipt,ensure_ascii=False,indent=2)+"\n").encode()
   control=root/".starter-harness"; consumption=control/"continuation-consumptions"
   if control.is_symlink() or consumption.is_symlink(): raise ValueError("consumption evidence directory is unsafe")
