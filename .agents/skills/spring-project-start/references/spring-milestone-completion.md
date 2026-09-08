@@ -19,3 +19,12 @@ when they are not completed or deferred, their dependencies are completed, and
 they have no blocking unknown links. Users may accept the recommendation, pick
 another candidate, describe the next feature in natural language, or revise an
 existing feature.
+
+## Post-apply verification
+
+The common safe plan reruns the wrapper test task from the exact applied source
+in a disposable, networkless bubblewrap copy. It exposes the command, timeout,
+and all excluded effects before exact approval. A passing report may promote
+the milestone to `APPLIED_AND_VERIFIED`; a failed or stale report cannot. DB,
+Docker, ports, external integrations, and application startup remain separate
+capability-specific verification plans.

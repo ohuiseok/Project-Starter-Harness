@@ -244,6 +244,16 @@ transaction blocks another completion until
 `recover_spring_milestone_completion.py` verifies and rolls back only its exact
 artifacts.
 
+For an `APPLIED_PREVERIFIED` milestone, use the post-apply verification plan,
+review, exact approval, runner, and finalizer scripts. The default common plan
+runs the target wrapper test task from the exact applied source in a temporary,
+networkless bubblewrap workspace with Docker hidden; it does not start a DB or
+publish ports. Show those effects and alternatives before approval. Only a
+passing current report may atomically promote the completion and progress
+ledger to `APPLIED_AND_VERIFIED`. Runtime checks that require Docker, a DB,
+ports, external services, or application startup need a later capability-specific
+plan and must never be silently folded into this approval.
+
 ## Technology Selection
 
 For a new project, a missing profile, or a requested stack change, read

@@ -124,7 +124,8 @@ def build_progress(existing:dict|None,project:dict,completion:dict,completion_re
 def render_progress(value:dict)->str:
     lines=[f"# {value['project']['name']} 진행 상황","",f"> {value['project']['goal']}","","## 완료",""]
     for item in value["completedMilestones"]:
-        lines.extend([f"- {item['featureId']} · {item['name']} · 적용 및 격리 테스트 완료 (적용 후 런타임 검증 미실행)",f"  - 사용자 가치: {item['userValue']}"])
+        status="적용 후 실제 검증 완료" if item["state"]=="APPLIED_AND_VERIFIED" else "적용 및 격리 테스트 완료 (적용 후 런타임 검증 미실행)"
+        lines.extend([f"- {item['featureId']} · {item['name']} · {status}",f"  - 사용자 가치: {item['userValue']}"])
     lines.extend(["","## 남은 UNKNOWN",""])
     if value["unknowns"]:
         for item in value["unknowns"]: lines.append(f"- {item['id']} · {item['question']} · {'차단' if item['blocking'] else '나중에 결정 가능'}")
