@@ -1,0 +1,1 @@
+{"continuationWorkflowIntakeVersion":1,"handoff":{"path":"docs/continuation-handoff.json","sha256":"SHA256"},"target":"/absolute/target","workflow":"FEATURE_SPECIFICATION","routeType":"NEXT_FEATURE","changeKind":"FEATURE","feature":{"featureId":"F002","name":"Example","userValue":"Example value"},"state":"READY_FOR_WORKFLOW"}

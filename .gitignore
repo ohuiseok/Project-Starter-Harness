@@ -3,3 +3,5 @@
 *.log
 config/target.local.yaml
 reports/auto-check/
+__pycache__/
+*.pyc

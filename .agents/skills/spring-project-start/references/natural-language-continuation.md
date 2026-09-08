@@ -2,20 +2,28 @@
 
 Continuation interprets one user request against the current project brief and
 progress evidence. It never authorizes code generation or reuses an approval.
-The route records the original request, selected or proposed feature, blockers,
-interpretation confidence, and the next existing workflow.
+The route stores only a PII-minimized request summary, selected or proposed
+feature, separately classified blockers, warnings, and required decisions,
+interpretation confidence, and the next existing workflow. Secret-like input is
+rejected and rendered user text is Markdown-escaped.
 
 Deterministic evidence wins over language inference. An explicit feature ID is
 preferred, then an exact candidate name, then the current recommendation for a
-generic next request. A new feature receives the next unused stable ID but is
-not added to the project brief until the Feature Specification workflow.
+generic next request. Unknown or multiple IDs require clarification. Technology
+terms come from the technology catalog rather than only a routing word list.
+
+A new feature atomically reserves the next unused stable ID in target-owned
+evidence, but is not added to the project brief until Feature Specification.
+Concurrent requests cannot silently claim the same ID.
 
 Completed features route to revision, deferred features route to resume, and
 blocked candidates show their dependency or UNKNOWN blockers. Technology
-changes go to Technology Selection. Bugs still go through Feature
-Specification with change kind `BUG_FIX`. Verification retries return to the
-latest incomplete verification workflow. Ambiguous or low-confidence routes
-require one confirmation; the user view always permits correction in natural
-language. Route approval binds the structured route and rendered view and
-creates a handoff only—it does not approve a feature, design, execution, apply,
-runtime effects, Git commit, or push.
+changes go to Technology Selection. Bugs still go through Feature Specification
+with change kind `BUG_FIX`. Verification retries return to the latest incomplete
+verification workflow.
+
+The user view always permits correction in natural language. Route approval
+binds the structured route and rendered view and creates a handoff only. Consume
+that validated handoff into one immutable `READY_FOR_WORKFLOW` intake before
+starting the named workflow. Neither handoff nor intake approves a feature,
+design, execution, apply, runtime effects, Git commit, or push.

@@ -265,9 +265,13 @@ requests such as “next”, a feature description, revision, bug fix, technolog
 change, deferred resume, or verification retry. Use the continuation route and
 its user view to bind the original request to current project/progress evidence.
 Prefer explicit IDs and exact candidates, explain dependency and UNKNOWN
-blockers, and reserve—but do not insert—the next stable ID for a new feature.
+blockers, and atomically reserve—but do not insert—the next stable ID for a new
+feature.
 Obtain exact route/view confirmation when interpretation or impact requires it,
-then create a handoff to an existing workflow. A handoff never approves that
+then create and consume a handoff into the named existing workflow's immutable
+intake. Store only a PII-minimized summary, reject secret-like input, escape
+user text in the review, and keep blockers, warnings, and decisions distinct.
+A handoff never approves that
 workflow, changes source or approved contracts, executes runtime effects, or
 authorizes Git operations.
 
