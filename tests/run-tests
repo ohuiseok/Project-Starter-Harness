@@ -311,6 +311,8 @@ for required in \
   "$SKILL_ROOT/scripts/apply_feature_spec_promotion.py" \
   "$SKILL_ROOT/scripts/recover_feature_spec_promotion.py" \
   "$SKILL_ROOT/scripts/prepare_design_route_from_completion.py" \
+  "$SKILL_ROOT/scripts/advance_design_route_draft.py" \
+  "$SKILL_ROOT/scripts/recover_design_route_draft_update.py" \
   "$HARNESS_ROOT/templates/project-profile.md" \
   "$HARNESS_ROOT/templates/project-profile.json" \
   "$HARNESS_ROOT/templates/generation-plan.json" \
@@ -322,6 +324,7 @@ for required in \
   "$HARNESS_ROOT/templates/feature-spec.json" \
   "$HARNESS_ROOT/templates/feature-spec.md" \
   "$HARNESS_ROOT/templates/design-route.json" \
+  "$HARNESS_ROOT/templates/design-route-draft-update.json" \
   "$HARNESS_ROOT/templates/design-contract.json" \
   "$HARNESS_ROOT/templates/http-api-openapi.json" \
   "$HARNESS_ROOT/templates/relational-physical-contract.json" \
@@ -524,7 +527,7 @@ expect_out "design routing: all focused scenarios ran" "Ran 14 tests"
 OUT="$(python3 "$HARNESS_ROOT/tests/test_design_route_preparation.py" 2>&1)"
 CODE=$?
 expect_code "design route preparation: focused regression suite passes" 0
-expect_out "design route preparation: all focused scenarios ran" "Ran 8 tests"
+expect_out "design route preparation: all focused scenarios ran" "Ran 10 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_design_contract.py" 2>&1)"
 CODE=$?

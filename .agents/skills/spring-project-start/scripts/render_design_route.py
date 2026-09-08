@@ -34,6 +34,8 @@ def user_blocker(blocker: str) -> str:
         "technology profile input hash is stale": "기술 구성이 변경되어 설계 경로를 다시 확인해야 합니다.",
         "continuation completion is stale": "기능 승격 완료 기록이 변경되어 설계 경로를 다시 준비해야 합니다.",
         "continuation completion path is unsafe": "기능 승격 완료 기록의 위치가 안전하지 않습니다.",
+        "previous route revision is stale": "이전 설계 경로 revision이 변경되어 현재 revision을 신뢰할 수 없습니다.",
+        "previous route revision path is unsafe": "이전 설계 경로 revision 위치가 안전하지 않습니다.",
     }
     if blocker in exact:
         return exact[blocker]
@@ -109,6 +111,11 @@ def render(
         "<!-- design-route.json에서 생성됨. 직접 수정하지 마세요. -->", "",
         "## 이번에 만들거나 활용할 설계", "",
     ]
+    revision = route.get("revision")
+    if revision:
+        lines.extend(["## 이번 답변으로 바뀐 내용", "", f"- 답변: {revision['answerSummary']}"])
+        lines.extend(f"- 변경된 설계: {contract_id}" for contract_id in revision["changedContractIds"])
+        lines.append("")
     kind_counts = {kind: sum(item["kind"] == kind for item in route["routes"]) for kind in KIND_LABELS}
     def label(item: dict) -> str:
         suffix = f" ({item['contractId']})" if kind_counts[item["kind"]] > 1 else ""

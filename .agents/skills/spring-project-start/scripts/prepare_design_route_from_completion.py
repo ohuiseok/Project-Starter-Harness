@@ -4,20 +4,32 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 from evaluate_profile import evaluate
-from record_spec_approval import atomic_write_bytes
 from render_design_route import render
 from spring_milestone_completion import sha, target_path
-from validate_design_route import ROUTE_REQUIREMENTS, assess
+from validate_design_route import ROUTE_REQUIREMENTS, assess, technology_mismatch
 from validate_feature_specs import load_object, validate_feature, validate_project
 
 
 def ref(path: Path, root: Path) -> dict:
     return {"path": path.relative_to(root).as_posix(), "sha256": sha(path)}
+
+
+def atomic_create_bytes(content: bytes, destination: Path) -> None:
+    temporary = destination.with_name(f".{destination.name}.{os.getpid()}.tmp")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(content); stream.flush(); os.fsync(stream.fileno())
+        os.link(temporary, destination)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
 
 
 def argument_path(root: Path, value: Path, label: str) -> Path:
@@ -50,36 +62,6 @@ def exact_single_target(profile: dict) -> tuple[str, str] | None:
         return (project_id, "UNKNOWN") if isinstance(project_id, str) and project_id else None
     project_id = profile.get("project", {}).get("artifactId")
     return (project_id, ".") if isinstance(project_id, str) and project_id not in {"", "UNKNOWN"} else None
-
-
-def selected(profile: dict, axis: str) -> str | None:
-    decision = profile.get("decisions", {}).get(axis, {})
-    return decision.get("option") if isinstance(decision, dict) else None
-
-
-def technology_mismatch(kind: str, profile: dict) -> str | None:
-    application = selected(profile, "application")
-    view = selected(profile, "view")
-    security = selected(profile, "security")
-    authorization = selected(profile, "authorization")
-    database = selected(profile, "database")
-    persistence = selected(profile, "persistence")
-    integration = selected(profile, "integration")
-    if kind == "HTTP_API" and application not in {"application.rest-api", "application.full-stack"}:
-        return "기능은 웹 API를 요구하지만 현재 애플리케이션 유형에서 이를 확인할 수 없습니다."
-    if kind == "PERSISTENCE" and (database == "database.none" or persistence == "persistence.none"):
-        return "기능은 상태 저장을 요구하지만 현재 기술 구성은 영속 저장을 사용하지 않습니다."
-    if kind == "MESSAGING" and integration != "integration.messaging":
-        return "기능은 메시징을 요구하지만 현재 통합 기술이 메시징으로 확정되지 않았습니다."
-    if kind == "SERVER_UI" and view in {"view.none", "view.separate-client"}:
-        return "기능은 서버 화면을 요구하지만 현재 화면 기술 구성과 맞지 않습니다."
-    if kind == "CLIENT_INTEGRATION" and view != "view.separate-client":
-        return "기능은 별도 클라이언트를 요구하지만 현재 화면 채널이 그렇게 구성되지 않았습니다."
-    if kind == "EXTERNAL_INTEGRATION" and integration in {None, "integration.none"}:
-        return "기능은 외부 연동을 요구하지만 현재 통합 기술이 확정되지 않았습니다."
-    if kind == "SECURITY" and (security == "security.none" or authorization == "authorization.none"):
-        return "기능은 사용자 권한을 요구하지만 현재 기술 구성은 인증 또는 인가를 사용하지 않습니다."
-    return None
 
 
 def load_inputs(root: Path, completion_path: Path, project_path: Path, profile_path: Path) -> tuple[dict, dict, dict, dict, Path]:
@@ -178,9 +160,9 @@ def main() -> int:
         view_bytes = render(route, feature, project_value, profile_value, runtime_blockers=blockers).encode()
         output.parent.mkdir(parents=True, exist_ok=True)
         view.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_bytes(route_bytes, output)
+        atomic_create_bytes(route_bytes, output)
         written = (output, route_bytes)
-        atomic_write_bytes(view_bytes, view)
+        atomic_create_bytes(view_bytes, view)
     except (OSError, ValueError, KeyError, TypeError) as error:
         if written and written[0].exists() and written[0].read_bytes() == written[1]:
             written[0].unlink()

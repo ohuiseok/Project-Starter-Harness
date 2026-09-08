@@ -120,6 +120,14 @@ visible `UNKNOWN` decision. Bind the completion receipt into the route and show
 relevant Git overlap plus `recommended / edit / natural-language other /
 cancel` choices. Never infer `EXTEND` or `REUSE` without actual hashed target
 evidence, and never overwrite an existing route, view, or CREATE artifact.
+Apply natural-language choices to a separate immutable revision with
+`advance_design_route_draft.py`; it records a PII-minimized answer summary,
+changed contract identities, the exact parent hash, and the current technology
+profile. Never edit or approve an older parent after a child revision exists.
+If a `PREPARED` update remains, use
+`recover_design_route_draft_update.py`; recovery removes only exact unchanged
+child artifacts and refuses external drift. The current revision's Markdown is
+the approval view consumed by `record_design_route_approval.py`.
 
 Create selected detailed contracts from `templates/design-contract.json`.
 The metadata owns target identity, route linkage, evidence, traceability, and

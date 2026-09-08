@@ -1,0 +1,9 @@
+{
+  "designRouteDraftUpdateVersion": 1,
+  "previous": {"path": "docs/features/F001/design-route.draft.v001.json", "sha256": "SHA256"},
+  "next": {"path": "docs/features/F001/design-route.draft.v002.json", "sha256": "SHA256"},
+  "view": {"path": "docs/features/F001/design-route.draft.v002.md", "sha256": "SHA256"},
+  "answerSummary": "추천 경로로 진행",
+  "changes": [{"contractId": "http-api", "beforeSha256": "SHA256", "afterSha256": "SHA256"}],
+  "state": "COMMITTED"
+}

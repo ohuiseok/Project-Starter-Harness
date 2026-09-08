@@ -29,7 +29,7 @@ from tests.test_feature_specs import feature_spec, project_brief  # noqa: E402
 
 
 def profile() -> dict:
-    return {"project": {"artifactId": "leave-service"}, "projects": [], "dataStores": []}
+    return {"project": {"artifactId": "leave-service"}, "projects": [], "dataStores": [], "decisions": {"application": {"option": "application.rest-api"}, "view": {"option": "view.separate-client"}, "security": {"option": "security.token"}, "authorization": {"option": "authorization.roles"}, "integration": {"option": "integration.http"}}}
 
 
 def route() -> dict:

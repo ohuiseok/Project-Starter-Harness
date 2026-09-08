@@ -18,6 +18,8 @@ sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(ROOT))
 
 import prepare_design_route_from_completion as prepare  # noqa: E402
+import advance_design_route_draft as advance_route  # noqa: E402
+import recover_design_route_draft_update as recover_route  # noqa: E402
 from tests.test_feature_specs import feature_spec, project_brief  # noqa: E402
 from spring_milestone_completion import sha  # noqa: E402
 from validate_design_route import validate, verify_inputs  # noqa: E402
@@ -181,6 +183,51 @@ class DesignRoutePreparationTests(unittest.TestCase):
             with mock.patch.object(prepare, "git_overlap", return_value=[]):
                 route, _, _, _, _ = prepare.build(root, completion, project, profile, output, output.with_suffix(".md"))
             self.assertEqual("docs/evidence/featureSpec.json", route["inputs"]["feature"]["path"])
+
+    def test_natural_language_answer_creates_an_immutable_route_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, completion, project, profile = self.fixture(Path(directory))
+            current = root / "docs/features/F001/design-route.draft.v001.json"
+            code, text = self.call(["prepare", "--completion", str(completion), "--project-brief", str(project), "--profile", str(profile), "--target", str(root), "--output", str(current), "--view", str(current.with_suffix('.md'))])
+            self.assertEqual(0, code, text)
+            proposal_value = json.loads(current.read_text())
+            http = next(item for item in proposal_value["routes"] if item["kind"] == "HTTP_API")
+            http.update({"source": "USER_STATED", "confirmedByUser": True, "reason": "사용자가 새 API 계약 생성을 승인함"})
+            proposal = root / "docs/route-proposal.json"; proposal.write_text(json.dumps(proposal_value))
+            output = root / "docs/features/F001/design-route.draft.v002.json"
+            arguments = ["advance", "--current", str(current), "--proposal", str(proposal), "--answer", "추천 API 설계로 진행", "--feature", str(root / "docs/features/F001/spec.json"), "--project-brief", str(project), "--profile", str(profile), "--target", str(root), "--output", str(output), "--view", str(output.with_suffix('.md'))]
+            stream = io.StringIO()
+            with mock.patch.object(sys, "argv", arguments), contextlib.redirect_stdout(stream), contextlib.redirect_stderr(stream):
+                self.assertEqual(0, advance_route.main(), stream.getvalue())
+            revision = json.loads(output.read_text())
+            self.assertEqual("추천 API 설계로 진행", revision["revision"]["answerSummary"])
+            self.assertEqual(["http-api"], revision["revision"]["changedContractIds"])
+            self.assertIn("이번 답변으로 바뀐 내용", output.with_suffix(".md").read_text())
+            with mock.patch.object(sys, "argv", arguments), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(1, advance_route.main())
+            previous_hash = sha(current)
+            journal = root / ".starter-harness/design-route-draft-updates" / f"{previous_hash}.json"
+            edge = json.loads(journal.read_text()); edge["state"] = "PREPARED"; journal.write_text(json.dumps(edge))
+            recovery_args = ["recover", "--previous-hash", previous_hash, "--target", str(root)]
+            with mock.patch.object(sys, "argv", recovery_args), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(0, recover_route.main())
+            self.assertFalse(output.exists()); self.assertFalse(output.with_suffix(".md").exists()); self.assertFalse(journal.exists())
+
+    def test_file_appearing_during_prepare_is_never_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, completion, project, profile = self.fixture(Path(directory))
+            output = root / "docs/features/F001/design-route.json"; view = output.with_suffix(".md")
+            original_create = prepare.atomic_create_bytes
+            def collide(content: bytes, destination: Path) -> None:
+                if destination == view:
+                    destination.write_text("external")
+                original_create(content, destination)
+            arguments = ["prepare", "--completion", str(completion), "--project-brief", str(project), "--profile", str(profile), "--target", str(root), "--output", str(output), "--view", str(view)]
+            with mock.patch.object(prepare, "atomic_create_bytes", side_effect=collide):
+                code, text = self.call(arguments)
+            self.assertEqual(1, code, text)
+            self.assertFalse(output.exists())
+            self.assertEqual("external", view.read_text())
 
 
 if __name__ == "__main__":

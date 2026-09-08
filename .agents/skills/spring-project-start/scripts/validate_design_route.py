@@ -45,6 +45,31 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def technology_mismatch(kind: str, profile: dict[str, Any]) -> str | None:
+    decisions = profile.get("decisions", {})
+    def selected(axis: str) -> str | None:
+        decision = decisions.get(axis, {}) if isinstance(decisions, dict) else {}
+        return decision.get("option") if isinstance(decision, dict) else None
+    application, view = selected("application"), selected("view")
+    security, authorization = selected("security"), selected("authorization")
+    database, persistence, integration = selected("database"), selected("persistence"), selected("integration")
+    if kind == "HTTP_API" and application not in {"application.rest-api", "application.full-stack"}:
+        return "기능은 웹 API를 요구하지만 현재 애플리케이션 유형에서 이를 확인할 수 없습니다."
+    if kind == "PERSISTENCE" and (database == "database.none" or persistence == "persistence.none"):
+        return "기능은 상태 저장을 요구하지만 현재 기술 구성은 영속 저장을 사용하지 않습니다."
+    if kind == "MESSAGING" and integration != "integration.messaging":
+        return "기능은 메시징을 요구하지만 현재 통합 기술이 메시징으로 확정되지 않았습니다."
+    if kind == "SERVER_UI" and view in {"view.none", "view.separate-client"}:
+        return "기능은 서버 화면을 요구하지만 현재 화면 기술 구성과 맞지 않습니다."
+    if kind == "CLIENT_INTEGRATION" and view != "view.separate-client":
+        return "기능은 별도 클라이언트를 요구하지만 현재 화면 채널이 그렇게 구성되지 않았습니다."
+    if kind == "EXTERNAL_INTEGRATION" and integration in {None, "integration.none"}:
+        return "기능은 외부 연동을 요구하지만 현재 통합 기술이 확정되지 않았습니다."
+    if kind == "SECURITY" and (security == "security.none" or authorization == "authorization.none"):
+        return "기능은 사용자 권한을 요구하지만 현재 기술 구성은 인증 또는 인가를 사용하지 않습니다."
+    return None
+
+
 def string_list(value: Any, location: str) -> list[str]:
     if not isinstance(value, list) or not all(isinstance(item, str) and item.strip() for item in value):
         raise ValueError(f"{location}: string array required")
@@ -75,6 +100,19 @@ def validate(route: dict[str, Any], feature: dict[str, Any], project: dict[str, 
         if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
             raise ValueError("preparation.completion.sha256: lowercase SHA-256 required")
         string_list(preparation["gitOverlap"], "preparation.gitOverlap")
+    revision = route.get("revision")
+    if revision is not None:
+        if not isinstance(revision, dict) or set(revision) != {"previous", "answerSummary", "changedContractIds"}:
+            raise ValueError("revision must contain previous, answerSummary, and changedContractIds")
+        previous = revision["previous"]
+        if not isinstance(previous, dict) or set(previous) != {"path", "sha256"}:
+            raise ValueError("revision.previous: path and sha256 required")
+        text(previous["path"], "revision.previous.path", False)
+        digest = text(previous["sha256"], "revision.previous.sha256", False)
+        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+            raise ValueError("revision.previous.sha256: lowercase SHA-256 required")
+        text(revision["answerSummary"], "revision.answerSummary", False)
+        string_list(revision["changedContractIds"], "revision.changedContractIds")
     inputs = route.get("inputs")
     if not isinstance(inputs, dict) or set(inputs) != {"feature", "projectBrief", "technologyProfile", "codeEvidence"}:
         raise ValueError("inputs must contain feature, projectBrief, technologyProfile, and codeEvidence")
@@ -119,8 +157,6 @@ def validate(route: dict[str, Any], feature: dict[str, Any], project: dict[str, 
     artifact_paths: set[str] = set()
     contract_ids: set[str] = set()
     grouped: dict[str, list[dict[str, Any]]] = {kind: [] for kind in ROUTE_REQUIREMENTS}
-    decisions = profile.get("decisions", {})
-    selected = {axis: value.get("option") for axis, value in decisions.items() if isinstance(value, dict)} if isinstance(decisions, dict) else {}
     for index, item in enumerate(routes):
         kind = item["kind"]
         grouped[kind].append(item)
@@ -193,14 +229,9 @@ def validate(route: dict[str, Any], feature: dict[str, Any], project: dict[str, 
         if kind == "SECURITY" and feature["authorization"] and disposition not in ACTIVE | {"UNKNOWN"}:
             blockers.append("authorized feature requires an active security route")
         if disposition in ACTIVE:
-            if kind == "SECURITY" and feature["authorization"] and (selected.get("security") == "security.none" or selected.get("authorization") == "authorization.none"):
-                blockers.append("technology profile conflicts with required design: SECURITY")
-            if kind == "PERSISTENCE" and (selected.get("database") == "database.none" or selected.get("persistence") == "persistence.none"):
-                blockers.append("technology profile conflicts with required design: PERSISTENCE")
-            if kind == "SERVER_UI" and selected.get("view") in {"view.none", "view.separate-client"}:
-                blockers.append("technology profile conflicts with required design: SERVER_UI")
-            if kind == "MESSAGING" and selected.get("integration") == "integration.none":
-                blockers.append("technology profile conflicts with required design: MESSAGING")
+            required_here = kind == "VERIFICATION" or (kind == "SECURITY" and bool(feature["authorization"])) or (kind not in {"SECURITY", "VERIFICATION"} and requirements[ROUTE_REQUIREMENTS[kind]]["status"] == "REQUIRED")
+            if required_here and technology_mismatch(kind, profile):
+                blockers.append(f"technology profile conflicts with required design: {kind}")
     if version == 2:
         for kind, instances in grouped.items():
             dispositions = {item["disposition"] for item in instances}
@@ -227,6 +258,14 @@ def verify_inputs(route: dict[str, Any], feature_path: Path, project_path: Path,
                 blockers.append("continuation completion is stale")
         except ValueError:
             blockers.append("continuation completion path is unsafe")
+    revision = route.get("revision")
+    if revision:
+        try:
+            previous_path = target_path(root, revision["previous"]["path"], "previous route revision")
+            if not previous_path.is_file() or sha256(previous_path) != revision["previous"]["sha256"]:
+                blockers.append("previous route revision is stale")
+        except ValueError:
+            blockers.append("previous route revision path is unsafe")
     for name, actual in (("feature", feature_path), ("projectBrief", project_path), ("technologyProfile", profile_path)):
         try:
             resolved = actual.resolve(strict=True)

@@ -65,6 +65,15 @@ conventions. Those decisions require hashed code or contract evidence. An
 occupied `CREATE` artifact path blocks approval. Relevant dirty Git overlap is
 shown in the review; unrelated dirty files are not a routing blocker.
 
+Interpret a natural-language choice into a complete proposed route, then append
+it with `advance_design_route_draft.py`. Each revision preserves feature and
+completion identity, may refresh the exact technology-profile hash, records the
+changed contract IDs and PII-minimized answer summary, and cannot approve
+itself. A parent may have only one committed child. Recover an interrupted
+`PREPARED` update with `recover_design_route_draft_update.py`; never delete or
+overwrite a drifted child. Approve only the current revision and its generated
+Markdown view.
+
 The basic Markdown view must use the same assessment as the readiness gate,
 including profile and target-evidence checks. Show every blocker in user
 language and distinguish `drafting`, `decision required`, `input changed`,

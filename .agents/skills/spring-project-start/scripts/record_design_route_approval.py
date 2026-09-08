@@ -10,7 +10,7 @@ from pathlib import Path
 
 from record_spec_approval import approved_copy, atomic_write_bytes, encoded_json, read_expected
 from render_design_route import render
-from validate_design_route import assess, load_object, validate, verify_inputs
+from validate_design_route import assess, load_object, sha256, target_path, validate, verify_inputs
 from validate_feature_specs import approval_content_hash
 
 
@@ -26,14 +26,34 @@ def main() -> int:
     parser.add_argument("--approved-at", required=True)
     args = parser.parse_args()
     try:
+        root = args.target.resolve(strict=True)
+        if args.target.is_symlink():
+            raise ValueError("target is a symbolic link")
+        def safe_argument(value: Path, label: str) -> Path:
+            try:
+                relative = value.absolute().relative_to(root).as_posix()
+            except ValueError as error:
+                raise ValueError(f"{label} must be inside the target") from error
+            return target_path(root, relative, label)
+        args.route = safe_argument(args.route, "design route")
+        args.feature = safe_argument(args.feature, "feature")
+        args.project_brief = safe_argument(args.project_brief, "project brief")
+        args.profile = safe_argument(args.profile, "technology profile")
+        if any(not path.is_file() for path in (args.route, args.feature, args.project_brief, args.profile)):
+            raise ValueError("design route approval inputs must be regular files")
         if not args.approved_by.strip() or args.approved_by == "UNKNOWN":
             raise ValueError("approved-by must identify the approving user")
         try:
-            dt.datetime.fromisoformat(args.approved_at.replace("Z", "+00:00"))
+            timestamp = dt.datetime.fromisoformat(args.approved_at.replace("Z", "+00:00"))
+            if timestamp.utcoffset() is None:
+                raise ValueError("approved-at must include a timezone")
         except ValueError as error:
             raise ValueError("approved-at must be an ISO-8601 timestamp") from error
         route_original = args.route.read_bytes()
         route_source = load_object(args.route)
+        child_edge = target_path(root, f".starter-harness/design-route-draft-updates/{sha256(args.route)}.json", "route child journal")
+        if child_edge.exists():
+            raise ValueError("design route has a newer or interrupted child revision")
         read_expected(args.route, route_original, "design route")
         if approval_content_hash(route_source) != args.expected_route_hash:
             raise ValueError("design route changed after it was shown to the user")
@@ -48,7 +68,7 @@ def main() -> int:
             raise ValueError("technology profile is not ready")
         if route_blockers:
             raise ValueError("design route is not approvable: " + "; ".join(route_blockers))
-        markdown_path = args.route.with_suffix(".md")
+        markdown_path = target_path(root, args.route.with_suffix(".md").relative_to(root).as_posix(), "design route Markdown")
         markdown_original = render(route_source, feature, project, profile).encode()
         read_expected(markdown_path, markdown_original, "design route Markdown")
         approved = approved_copy(route_source, args.approved_by, args.approved_at)
