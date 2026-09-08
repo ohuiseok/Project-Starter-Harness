@@ -8,7 +8,7 @@ import hashlib
 import json
 import sys
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from evaluate_profile import evaluate
@@ -24,6 +24,21 @@ ROUTE_REQUIREMENTS = {
 DISPOSITIONS = {"CREATE", "EXTEND", "REUSE", "NOT_NEEDED", "DEFERRED", "UNKNOWN"}
 ACTIVE = {"CREATE", "EXTEND", "REUSE"}
 CONTRACT_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+def target_path(root: Path, value: str, description: str) -> Path:
+    relative = PurePosixPath(value)
+    if not isinstance(value, str) or not value or relative.is_absolute() or ".." in relative.parts:
+        raise ValueError(f"{description} path is unsafe")
+    path = root / relative
+    parent = path.parent
+    while parent != root:
+        if parent.is_symlink():
+            raise ValueError(f"{description} parent is a symbolic link")
+        parent = parent.parent
+    if path.is_symlink():
+        raise ValueError(f"{description} is a symbolic link")
+    return path
 
 
 def sha256(path: Path) -> str:
@@ -48,6 +63,18 @@ def validate(route: dict[str, Any], feature: dict[str, Any], project: dict[str, 
     if route.get("featureId") != feature["feature"]["id"]:
         raise ValueError("featureId does not match the feature specification")
     blockers: list[str] = []
+    preparation = route.get("preparation")
+    if preparation is not None:
+        if not isinstance(preparation, dict) or set(preparation) != {"completion", "gitOverlap"}:
+            raise ValueError("preparation must contain completion and gitOverlap")
+        completion = preparation["completion"]
+        if not isinstance(completion, dict) or set(completion) != {"path", "sha256"}:
+            raise ValueError("preparation.completion: path and sha256 required")
+        text(completion["path"], "preparation.completion.path", False)
+        digest = text(completion["sha256"], "preparation.completion.sha256", False)
+        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+            raise ValueError("preparation.completion.sha256: lowercase SHA-256 required")
+        string_list(preparation["gitOverlap"], "preparation.gitOverlap")
     inputs = route.get("inputs")
     if not isinstance(inputs, dict) or set(inputs) != {"feature", "projectBrief", "technologyProfile", "codeEvidence"}:
         raise ValueError("inputs must contain feature, projectBrief, technologyProfile, and codeEvidence")
@@ -92,6 +119,8 @@ def validate(route: dict[str, Any], feature: dict[str, Any], project: dict[str, 
     artifact_paths: set[str] = set()
     contract_ids: set[str] = set()
     grouped: dict[str, list[dict[str, Any]]] = {kind: [] for kind in ROUTE_REQUIREMENTS}
+    decisions = profile.get("decisions", {})
+    selected = {axis: value.get("option") for axis, value in decisions.items() if isinstance(value, dict)} if isinstance(decisions, dict) else {}
     for index, item in enumerate(routes):
         kind = item["kind"]
         grouped[kind].append(item)
@@ -163,6 +192,15 @@ def validate(route: dict[str, Any], feature: dict[str, Any], project: dict[str, 
             blockers.append("verification route must be CREATE, EXTEND, or REUSE")
         if kind == "SECURITY" and feature["authorization"] and disposition not in ACTIVE | {"UNKNOWN"}:
             blockers.append("authorized feature requires an active security route")
+        if disposition in ACTIVE:
+            if kind == "SECURITY" and feature["authorization"] and (selected.get("security") == "security.none" or selected.get("authorization") == "authorization.none"):
+                blockers.append("technology profile conflicts with required design: SECURITY")
+            if kind == "PERSISTENCE" and (selected.get("database") == "database.none" or selected.get("persistence") == "persistence.none"):
+                blockers.append("technology profile conflicts with required design: PERSISTENCE")
+            if kind == "SERVER_UI" and selected.get("view") in {"view.none", "view.separate-client"}:
+                blockers.append("technology profile conflicts with required design: SERVER_UI")
+            if kind == "MESSAGING" and selected.get("integration") == "integration.none":
+                blockers.append("technology profile conflicts with required design: MESSAGING")
     if version == 2:
         for kind, instances in grouped.items():
             dispositions = {item["disposition"] for item in instances}
@@ -181,6 +219,14 @@ def validate(route: dict[str, Any], feature: dict[str, Any], project: dict[str, 
 def verify_inputs(route: dict[str, Any], feature_path: Path, project_path: Path, profile_path: Path, target: Path) -> list[str]:
     blockers: list[str] = []
     root = target.resolve()
+    preparation = route.get("preparation")
+    if preparation:
+        try:
+            completion_path = target_path(root, preparation["completion"]["path"], "continuation completion")
+            if not completion_path.is_file() or sha256(completion_path) != preparation["completion"]["sha256"]:
+                blockers.append("continuation completion is stale")
+        except ValueError:
+            blockers.append("continuation completion path is unsafe")
     for name, actual in (("feature", feature_path), ("projectBrief", project_path), ("technologyProfile", profile_path)):
         try:
             resolved = actual.resolve(strict=True)
@@ -220,6 +266,13 @@ def verify_inputs(route: dict[str, Any], feature_path: Path, project_path: Path,
             if root not in (resolved, *resolved.parents):
                 identity = item.get("contractId", item["kind"])
                 blockers.append(f"route {label} escapes target: {identity}")
+        if item["disposition"] == "CREATE" and item.get("artifactPath"):
+            try:
+                artifact = target_path(root, item["artifactPath"], "route artifact")
+                if artifact.exists():
+                    blockers.append(f"CREATE artifact path is occupied: {item.get('contractId', item['kind'])}")
+            except ValueError:
+                blockers.append(f"route artifactPath is unsafe: {item.get('contractId', item['kind'])}")
     return blockers
 
 

@@ -110,6 +110,17 @@ Do not add detailed interface fields to the route. Migrate a v1 route to a
 separate v2 file with `migrate_design_route_v2.py`; the migrated copy requires
 review and approval.
 
+When the feature came from a committed continuation promotion, use
+`prepare_design_route_from_completion.py`. It rechecks the exact completion,
+promotion plan, approved feature and project, and current technology profile.
+Map explicit `NOT_USED` and `DEFERRED` decisions deterministically, but keep
+`CREATE` as an unconfirmed recommendation. A multi-project/module target,
+multiple applicable stores, or a feature/technology mismatch remains one
+visible `UNKNOWN` decision. Bind the completion receipt into the route and show
+relevant Git overlap plus `recommended / edit / natural-language other /
+cancel` choices. Never infer `EXTEND` or `REUSE` without actual hashed target
+evidence, and never overwrite an existing route, view, or CREATE artifact.
+
 Create selected detailed contracts from `templates/design-contract.json`.
 The metadata owns target identity, route linkage, evidence, traceability, and
 approval only. A standard artifact such as OpenAPI owns its interface details;

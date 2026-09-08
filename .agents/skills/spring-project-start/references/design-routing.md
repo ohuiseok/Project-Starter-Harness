@@ -50,6 +50,21 @@ choice or target that evidence cannot resolve. Keep internal hashes hidden.
 One confirmation can approve the displayed route, but it does not approve code
 application.
 
+For a feature produced by continuation promotion, prepare the first route with
+`prepare_design_route_from_completion.py`. The completion receipt is a current,
+hashed route input rather than a loose signal. Recheck the promotion plan,
+official project and feature approvals, and technology profile. Explicitly
+unused and deferred requirements map without another question. Required work
+may be recommended as `CREATE`, but remains unconfirmed until the user accepts
+the displayed route. If a single project/module or applicable store cannot be
+determined, or the feature contradicts the technology profile, keep that route
+`UNKNOWN` and ask only that material question.
+
+Do not guess `EXTEND` or `REUSE` from filenames, README text, or framework
+conventions. Those decisions require hashed code or contract evidence. An
+occupied `CREATE` artifact path blocks approval. Relevant dirty Git overlap is
+shown in the review; unrelated dirty files are not a routing blocker.
+
 The basic Markdown view must use the same assessment as the readiness gate,
 including profile and target-evidence checks. Show every blocker in user
 language and distinguish `drafting`, `decision required`, `input changed`,

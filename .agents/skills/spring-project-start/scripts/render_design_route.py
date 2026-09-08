@@ -32,6 +32,8 @@ def user_blocker(blocker: str) -> str:
         "feature input hash is stale": "기능 명세가 변경되어 설계 경로를 다시 확인해야 합니다.",
         "project brief input hash is stale": "프로젝트 개요가 변경되어 설계 경로를 다시 확인해야 합니다.",
         "technology profile input hash is stale": "기술 구성이 변경되어 설계 경로를 다시 확인해야 합니다.",
+        "continuation completion is stale": "기능 승격 완료 기록이 변경되어 설계 경로를 다시 준비해야 합니다.",
+        "continuation completion path is unsafe": "기능 승격 완료 기록의 위치가 안전하지 않습니다.",
     }
     if blocker in exact:
         return exact[blocker]
@@ -50,6 +52,9 @@ def user_blocker(blocker: str) -> str:
         ("unused design must be NOT_NEEDED:", "사용하지 않는 설계는 필요 없음으로 정리해야 합니다."),
         ("deferred design must remain DEFERRED:", "보류한 설계는 이번 단계에서 진행할 수 없습니다."),
         ("active routes share artifactPath:", "여러 설계가 같은 문서 위치를 사용하고 있습니다."),
+        ("CREATE artifact path is occupied:", "새로 만들 설계 문서 위치에 기존 파일이 있습니다."),
+        ("route artifactPath is unsafe:", "설계 문서 위치가 안전하지 않습니다."),
+        ("technology profile conflicts with required design:", "기능 요구와 기술 구성이 충돌하므로 기술 선택을 먼저 조정해야 합니다."),
         ("input path does not match the manifest", "입력 문서 위치가 기록된 경로와 다릅니다."),
         ("input escapes target", "입력 문서가 대상 프로젝트 밖을 가리킵니다."),
         ("route modulePath escapes target:", "대상 모듈이 프로젝트 밖을 가리킵니다."),
@@ -126,6 +131,18 @@ def render(
         or ["- 없음"]
     )
     lines.extend(["", "## 현재 상태", "", f"- {route_status(route, blockers)}"])
+    preparation = route.get("preparation")
+    if preparation is not None:
+        lines.extend(["", "## Git 작업 상태", ""])
+        lines.extend(
+            [f"- 설계 문서 대상과 겹치는 미커밋 변경: {path}" for path in preparation["gitOverlap"]]
+            or ["- 설계 문서 대상과 겹치는 미커밋 변경 없음"]
+        )
+        lines.extend([
+            "", "## 선택", "",
+            "- 추천 경로로 진행", "- 항목별 수정", "- 기타 내용을 자연어로 입력", "- 취소", "",
+            "설계 경로 승인은 API·ERD·화면·소스 생성이나 실행을 승인하지 않습니다.",
+        ])
     if detail == "full":
         lines.extend(["", "## 개발자 상세", ""])
         for item in route["routes"]:
