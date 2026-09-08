@@ -58,6 +58,21 @@ new output path. It maps `true` to an unconfirmed `REQUIRED` inference and
 changes the source file. Resolve and confirm the migrated decisions before
 approval.
 
+Continuation consumption receipts use schema v2 and bind the approved base
+feature for revisions. A v1 receipt must not be edited in place. Create a
+separate v2 proposal and user view with
+`migrate_continuation_consumption_v2.py`; revisions require the exact current
+approved base feature. After explicit approval, apply only the unchanged
+proposal with `apply_continuation_consumption_v2.py` and retain the exact v1
+receipt under `.starter-harness/continuation-consumption-migrations/`.
+
+When a ready continuation draft becomes official, the final promotion view
+shows the actual project-roadmap delta, the complete functional contract,
+relevant dirty Git overlap, exact files, and excluded effects. Promotion uses
+an exact-plan transaction with backups, per-file immediate hash checks, and an
+immutable completion receipt. Interrupted or incomplete rollback states block
+another apply until exact, drift-safe recovery succeeds.
+
 ## Gates
 
 Allow incomplete documents to remain valid `DRAFT` or `REVIEW_REQUIRED`

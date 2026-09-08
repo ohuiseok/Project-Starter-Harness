@@ -275,7 +275,12 @@ For a `FEATURE_SPECIFICATION` intake, use
 `create_feature_spec_from_intake.py` to create a non-authoritative draft and a
 change-focused review without changing approved project or feature contracts.
 Revision and targeted bug-fix requests require the current feature contract as
-explicit evidence. Keep the intake and consumption receipt immutable; if an
+explicit evidence. Consumption receipt v2 binds that base contract explicitly.
+For a legacy v1 receipt, use `migrate_continuation_consumption_v2.py` to create
+a separate reviewed proposal, then use
+`apply_continuation_consumption_v2.py` only after exact-view approval; preserve
+the v1 receipt as immutable backup evidence. Keep the intake and consumption
+receipt immutable; if an
 interruption leaves an incomplete exact consumption, use
 `recover_feature_spec_intake.py` rather than retrying or deleting artifacts.
 After natural-language decisions resolve the draft, continue through the
@@ -298,11 +303,13 @@ recover only its exact unchanged artifacts with
 updates or readiness checks for that intake.
 After exact readiness validation, use `prepare_feature_spec_promotion.py` to
 show the project-candidate delta, final feature summary, exact official files,
-and exclusions. Only explicit approval of that current view permits
+relevant Git overlap, and exclusions. Only explicit approval of that current view permits
 `apply_feature_spec_promotion.py`. Apply must rebuild the plan, approve and
 validate the project and feature together, back up existing artifacts, journal
 `PREPARED` and `APPLYING`, atomically write JSON/Markdown plus an immutable
-`CONSUMED` receipt, and finish `COMMITTED`. It does not design APIs/data, change
+`CONSUMED` receipt, recheck each target immediately before its write, and finish
+`COMMITTED`. A failed rollback remains explicitly `ROLLBACK_INCOMPLETE`; never
+claim full recovery when target drift prevents restoration. It does not design APIs/data, change
 source, run infrastructure, or authorize Git. A pending transaction blocks
 retry; use `recover_feature_spec_promotion.py` and refuse recovery on drift.
 A handoff never approves that
