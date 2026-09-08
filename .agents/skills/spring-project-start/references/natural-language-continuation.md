@@ -33,5 +33,13 @@ review first. The draft may contain blocking `UNKNOWN` decisions and does not
 replace an approved project brief or feature contract. A revision must bind the
 current feature contract explicitly. One immutable receipt claims each intake;
 recover only a receipt whose referenced output set is incomplete and whose
-remaining artifacts still match their recorded hashes. Once decisions are
-resolved, reuse the normal feature validator, renderer, and approval recorder.
+remaining artifacts still match their recorded hashes. Natural-language
+answers create immutable successor drafts instead of overwriting the initial
+draft. Each successor binds its previous hash, preserves source and decision
+IDs, and adds provenance for the new answer. Only the unbranched chain head may
+advance. A separate readiness report checks user value, actors, trigger, main
+flow, acceptance criteria, blocking unknowns, design decisions, and
+unconfirmed AI proposals. Once ready, reuse the normal feature validator,
+renderer, and approval recorder. Draft updates use a `PREPARED` journal before
+writing successor artifacts and become `COMMITTED` only after their exact
+draft and view exist; interrupted updates require exact recovery.

@@ -57,7 +57,7 @@ def main()->int:
  p=argparse.ArgumentParser(); p.add_argument("--intake",required=True,type=Path); p.add_argument("--target",required=True,type=Path); p.add_argument("--draft-output",required=True,type=Path); p.add_argument("--view-output",required=True,type=Path); p.add_argument("--existing-feature",type=Path); a=p.parse_args(); written=[]
  try:
   root=a.target.resolve(strict=True); intake_path=a.intake.resolve(strict=True); draft_path=a.draft_output.resolve(strict=False); view_path=a.view_output.resolve(strict=False)
-  if a.target.is_symlink() or any(root not in x.parents or x.is_symlink() for x in (intake_path,draft_path,view_path)) or draft_path.exists() or view_path.exists(): raise ValueError("feature draft paths are unsafe or already exist")
+  if a.target.is_symlink() or draft_path==view_path or any(root not in x.parents or x.is_symlink() for x in (intake_path,draft_path,view_path)) or draft_path.exists() or view_path.exists(): raise ValueError("feature draft paths are unsafe, duplicated, or already exist")
   intake=load_object(intake_path); validate_intake(intake,intake_path,root); project_path=target_path(root,intake["projectBrief"]["path"],"project brief"); project=load_object(project_path); validate_project(project); existing=None
   if intake["routeType"]=="REVISE_FEATURE" or (intake["routeType"]=="BUG_FIX" and intake["feature"].get("name")):
    if not a.existing_feature: raise ValueError("existing-feature is required for revision or targeted bug fix")

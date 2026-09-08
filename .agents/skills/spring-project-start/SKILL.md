@@ -279,7 +279,16 @@ explicit evidence. Keep the intake and consumption receipt immutable; if an
 interruption leaves an incomplete exact consumption, use
 `recover_feature_spec_intake.py` rather than retrying or deleting artifacts.
 After natural-language decisions resolve the draft, continue through the
-existing feature validation, rendering, and approval workflow.
+existing feature validation, rendering, and approval workflow. Treat each
+agent-prepared answer interpretation as a proposed full draft, then use
+`advance_feature_spec_draft.py` to append it to the immutable hash chain. It
+must preserve prior source and decision IDs, add provenance for the new answer,
+reject stale parents, and never approve itself. Use
+`prepare_feature_spec_approval.py` only on the current chain head; a
+`READY_FOR_SPEC_APPROVAL` result permits final review, not contract replacement
+or approval. A `PREPARED` draft-update journal blocks further advancement;
+recover only its exact unchanged artifacts with
+`recover_feature_draft_update.py`.
 A handoff never approves that
 workflow, changes source or approved contracts, executes runtime effects, or
 authorizes Git operations.

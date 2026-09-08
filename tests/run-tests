@@ -297,6 +297,10 @@ for required in \
   "$SKILL_ROOT/scripts/consume_continuation_handoff.py" \
   "$SKILL_ROOT/scripts/create_feature_spec_from_intake.py" \
   "$SKILL_ROOT/scripts/recover_feature_spec_intake.py" \
+  "$SKILL_ROOT/scripts/feature_draft_chain.py" \
+  "$SKILL_ROOT/scripts/advance_feature_spec_draft.py" \
+  "$SKILL_ROOT/scripts/prepare_feature_spec_approval.py" \
+  "$SKILL_ROOT/scripts/recover_feature_draft_update.py" \
   "$HARNESS_ROOT/templates/project-profile.md" \
   "$HARNESS_ROOT/templates/project-profile.json" \
   "$HARNESS_ROOT/templates/generation-plan.json" \
@@ -330,7 +334,9 @@ for required in \
   "$HARNESS_ROOT/templates/continuation-route-approval.json" \
   "$HARNESS_ROOT/templates/continuation-handoff.json" \
   "$HARNESS_ROOT/templates/continuation-workflow-intake.json" \
-  "$HARNESS_ROOT/templates/continuation-consumption.json"; do
+  "$HARNESS_ROOT/templates/continuation-consumption.json" \
+  "$HARNESS_ROOT/templates/feature-draft-update.json" \
+  "$HARNESS_ROOT/templates/feature-spec-approval-readiness.json"; do
   if [ -f "$required" ]; then
     pass "starter contract: $(basename "$required") exists"
   else
@@ -568,7 +574,7 @@ expect_out "post-apply verification: all focused scenarios ran" "Ran 8 tests"
 OUT="$(python3 "$HARNESS_ROOT/tests/test_continuation_route.py" 2>&1)"
 CODE=$?
 expect_code "natural-language continuation: focused regression suite passes" 0
-expect_out "natural-language continuation: all focused scenarios ran" "Ran 14 tests"
+expect_out "natural-language continuation: all focused scenarios ran" "Ran 15 tests"
 
 OUT="$(python3 "$SKILL_ROOT/scripts/validate_feature_specs.py" \
   --project-brief "$HARNESS_ROOT/templates/project-brief.json" 2>&1)"
