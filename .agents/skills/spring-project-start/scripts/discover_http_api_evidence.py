@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -40,6 +41,36 @@ def atomic_create(content: bytes, destination: Path) -> None:
 
 def words(value: str) -> set[str]:
     return {item.lower() for item in WORD.findall(value) if len(item) > 1}
+
+
+def snapshot(path: Path) -> tuple[bytes, bool]:
+    """Read once and report whether the path stayed identical during the read."""
+    with path.open("rb") as stream:
+        before = os.fstat(stream.fileno())
+        content = stream.read()
+        after = os.fstat(stream.fileno())
+    current = path.stat()
+    identity = lambda value: (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns)
+    return content, identity(before) == identity(after) == identity(current)
+
+
+def evidence_for(relative: str, content: bytes, stable: bool) -> dict:
+    return {
+        "path": relative,
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "sizeBytes": len(content),
+        "stability": "STABLE" if stable else "UNSTABLE",
+    }
+
+
+def candidate_id(kind: str, relative: str, digest: str) -> str:
+    value = f"{kind}\0{relative}\0{digest}".encode()
+    return "api-" + hashlib.sha256(value).hexdigest()[:16]
+
+
+def with_id(candidate: dict) -> dict:
+    evidence = candidate["evidence"]
+    return {"candidateId": candidate_id(candidate["kind"], evidence["path"], evidence["sha256"]), **candidate}
 
 
 def feature_words(feature: dict) -> set[str]:
@@ -94,19 +125,33 @@ def discover(root: Path, feature_path: Path, profile_path: Path, modules: list[s
                 if relative in seen: continue
                 seen.add(relative); inspected += 1
                 if inspected > max_files: truncated = True; break
-                try: size = path.stat().st_size
-                except OSError: continue
-                if size > max_file_bytes: continue
                 suffix = path.suffix.lower()
                 if suffix not in OPENAPI_SUFFIXES | SOURCE_SUFFIXES: continue
+                try: size = path.stat().st_size
+                except OSError:
+                    size = 0
+                if size > max_file_bytes: continue
                 if content_bytes + size > max_total_bytes: truncated = True; break
-                content_bytes += size
-                stability = "UNSTABLE" if relative in dirty else "STABLE"
-                evidence = {"path": relative, "sha256": sha(path), "sizeBytes": size, "stability": stability}
+                try:
+                    content, unchanged = snapshot(path)
+                except OSError as error:
+                    placeholder = hashlib.sha256(f"unreadable:{relative}".encode()).hexdigest()
+                    candidates.append(with_id({"kind": "UNREADABLE_SOURCE" if suffix in SOURCE_SUFFIXES else "UNREADABLE_API", "evidence": {"path": relative, "sha256": placeholder, "sizeBytes": size, "stability": "UNSTABLE"}, "discovery": {"parseState": "UNREADABLE"}, "requirementMatches": [], "requirementCoverage": {"required": [], "covered": [], "missing": []}, "recommendedDisposition": "UNKNOWN", "confidence": "LOW", "decisionReasons": ["The file could not be read safely"], "ambiguities": [f"Evidence read failed: {error.strerror or type(error).__name__}"]}))
+                    continue
+                if content_bytes + len(content) > max_total_bytes:
+                    truncated = True
+                    break
+                content_bytes += len(content)
+                evidence = evidence_for(relative, content, unchanged and relative not in dirty)
                 if suffix == ".json":
-                    try: document = load_object(path)
-                    except ValueError: continue
-                    if not isinstance(document.get("openapi"), str) or not isinstance(document.get("paths"), dict): continue
+                    try: document = json.loads(content.decode("utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                        if "openapi" not in name.lower() and "swagger" not in name.lower(): continue
+                        candidates.append(with_id({"kind": "OPENAPI_JSON", "evidence": evidence, "discovery": {"operations": [], "parseState": "MALFORMED"}, "requirementMatches": [], "requirementCoverage": {"required": [], "covered": [], "missing": []}, "recommendedDisposition": "UNKNOWN", "confidence": "LOW", "decisionReasons": ["The possible OpenAPI document is malformed"], "ambiguities": [f"JSON could not be parsed at line {getattr(error, 'lineno', '?')}"]})); continue
+                    if not isinstance(document, dict): continue
+                    if not isinstance(document.get("openapi"), str) or not isinstance(document.get("paths"), dict):
+                        if "openapi" not in document and "paths" not in document and "openapi" not in name.lower() and "swagger" not in name.lower(): continue
+                        candidates.append(with_id({"kind": "OPENAPI_JSON", "evidence": evidence, "discovery": {"operations": [], "parseState": "MALFORMED"}, "requirementMatches": [], "requirementCoverage": {"required": [], "covered": [], "missing": []}, "recommendedDisposition": "UNKNOWN", "confidence": "LOW", "decisionReasons": ["The possible OpenAPI document is structurally incomplete"], "ambiguities": ["OpenAPI version and paths must have supported JSON types"]})); continue
                     found_ops = []
                     try:
                         for api_path, method, operation in operations(document):
@@ -114,38 +159,40 @@ def discover(root: Path, feature_path: Path, profile_path: Path, modules: list[s
                             refs = operation.get("x-harness-requirement-refs", [])
                             found_ops.append({"method": method.upper(), "path": api_path, "operationId": operation.get("operationId"), "requirementRefs": refs if isinstance(refs, list) else [], "matchTerms": sorted(wanted & words(description))})
                     except (TypeError, ValueError):
-                        candidates.append({"kind": "OPENAPI_JSON", "evidence": evidence, "discovery": {"operations": [], "parseState": "UNKNOWN"}, "requirementMatches": [], "recommendedDisposition": "UNKNOWN", "confidence": "LOW", "ambiguities": ["OpenAPI operations could not be parsed safely"]}); continue
+                        candidates.append(with_id({"kind": "OPENAPI_JSON", "evidence": evidence, "discovery": {"operations": [], "parseState": "UNKNOWN"}, "requirementMatches": [], "requirementCoverage": {"required": [], "covered": [], "missing": []}, "recommendedDisposition": "UNKNOWN", "confidence": "LOW", "decisionReasons": ["Operations could not be interpreted"], "ambiguities": ["OpenAPI operations could not be parsed safely"]})); continue
                     matched = [item for item in found_ops if item["matchTerms"]]
                     required_refs = {item["id"] for item in feature["acceptanceCriteria"]} | {item["id"] for item in feature["businessRules"]}
                     covered = {ref for item in matched for ref in item["requirementRefs"]}
+                    coverage = {"required": sorted(required_refs), "covered": sorted(required_refs & covered), "missing": sorted(required_refs - covered)}
                     selected_ids = {item["operationId"] for item in matched if isinstance(item["operationId"], str)}
                     try:
                         semantic_blockers = validate_openapi(document, feature, profile, {"traceability": derived_traceability(document)}, selected_ids or None)
                     except (TypeError, ValueError) as error:
-                        candidates.append({"kind": "OPENAPI_JSON", "evidence": evidence, "discovery": {"operations": found_ops, "parseState": "UNKNOWN"}, "requirementMatches": matched, "recommendedDisposition": "UNKNOWN", "confidence": "LOW", "ambiguities": [f"OpenAPI semantic validation failed: {error}"]}); continue
+                        candidates.append(with_id({"kind": "OPENAPI_JSON", "evidence": evidence, "discovery": {"operations": found_ops, "parseState": "UNKNOWN"}, "requirementMatches": matched, "requirementCoverage": coverage, "recommendedDisposition": "UNKNOWN", "confidence": "LOW", "decisionReasons": ["Semantic validation could not complete"], "ambiguities": [f"OpenAPI semantic validation failed: {error}"]})); continue
                     if matched and required_refs and required_refs <= covered and not semantic_blockers:
-                        disposition, confidence, ambiguities = "REUSE", "HIGH", []
+                        disposition, confidence, reasons, ambiguities = "REUSE", "HIGH", ["Matched operations cover every feature requirement and pass semantic validation"], []
                     elif matched:
-                        disposition, confidence, ambiguities = "EXTEND", "MEDIUM", ["Existing operations are related but do not prove complete requirement coverage", *semantic_blockers]
+                        disposition, confidence, reasons, ambiguities = "EXTEND", "MEDIUM", ["Related operations exist but the contract needs changes or more evidence"], ["Existing operations are related but do not prove complete requirement coverage", *semantic_blockers]
                     else:
-                        disposition, confidence, ambiguities = "UNKNOWN", "LOW", ["No operation has a deterministic feature-term match"]
-                    candidates.append({"kind": "OPENAPI_JSON", "evidence": evidence, "discovery": {"operations": found_ops, "parseState": "PARSED"}, "requirementMatches": matched, "recommendedDisposition": disposition, "confidence": confidence, "ambiguities": ambiguities})
+                        disposition, confidence, reasons, ambiguities = "UNKNOWN", "LOW", ["No operation could be tied deterministically to the feature"], ["No operation has a deterministic feature-term match"]
+                    candidates.append(with_id({"kind": "OPENAPI_JSON", "evidence": evidence, "discovery": {"operations": found_ops, "parseState": "PARSED"}, "requirementMatches": matched, "requirementCoverage": coverage, "recommendedDisposition": disposition, "confidence": confidence, "decisionReasons": reasons, "ambiguities": ambiguities}))
                 elif suffix in {".yaml", ".yml"}:
-                    head = path.read_text(encoding="utf-8", errors="replace")[:4096]
+                    head = content.decode("utf-8", errors="replace")[:4096]
                     if re.search(r"(?m)^\s*openapi\s*:", head):
-                        candidates.append({"kind": "OPENAPI_YAML", "evidence": evidence, "discovery": {"operations": [], "parseState": "UNSUPPORTED"}, "requirementMatches": [], "recommendedDisposition": "UNKNOWN", "confidence": "LOW", "ambiguities": ["YAML OpenAPI validation is not supported by the current adapter"]})
+                        candidates.append(with_id({"kind": "OPENAPI_YAML", "evidence": evidence, "discovery": {"operations": [], "parseState": "UNSUPPORTED"}, "requirementMatches": [], "requirementCoverage": {"required": [], "covered": [], "missing": []}, "recommendedDisposition": "UNKNOWN", "confidence": "LOW", "decisionReasons": ["A possible contract exists but this adapter cannot validate YAML"], "ambiguities": ["YAML OpenAPI validation is not supported by the current adapter"]}))
                 else:
-                    text = path.read_text(encoding="utf-8", errors="replace")
+                    text = content.decode("utf-8", errors="replace")
                     if "@RestController" not in text and "@Controller" not in text: continue
-                    parsed = controller_mappings(path)
+                    parsed = controller_mappings(path, text)
                     mappings = [{"method": method.upper(), "path": api_path} for method, api_path in sorted(parsed.mappings)]
                     matches = [item for item in mappings if wanted & words(item["path"])]
                     ambiguities = list(parsed.unknowns) + ["Controller evidence alone cannot prove the complete public API contract"]
-                    candidates.append({"kind": "SPRING_CONTROLLER", "evidence": evidence, "discovery": {"mappings": mappings, "parseState": "PARSED" if not parsed.unknowns else "PARTIAL"}, "requirementMatches": matches, "recommendedDisposition": "UNKNOWN", "confidence": "LOW", "ambiguities": ambiguities})
+                    candidates.append(with_id({"kind": "SPRING_CONTROLLER", "evidence": evidence, "discovery": {"mappings": mappings, "parseState": "PARSED" if not parsed.unknowns else "PARTIAL"}, "requirementMatches": matches, "requirementCoverage": {"required": [], "covered": [], "missing": []}, "recommendedDisposition": "UNKNOWN", "confidence": "LOW", "decisionReasons": ["Controller mappings are implementation evidence, not a complete public contract"], "ambiguities": ambiguities}))
             if truncated: break
         if truncated: break
-    stable_openapi = [item for item in candidates if item["kind"] == "OPENAPI_JSON" and item["evidence"]["stability"] == "STABLE"]
-    overall = "CREATE" if not candidates else (stable_openapi[0]["recommendedDisposition"] if len(stable_openapi) == 1 else "UNKNOWN")
+    api_candidates = [item for item in candidates if item["kind"] in {"OPENAPI_JSON", "OPENAPI_YAML", "UNREADABLE_API"}]
+    stable_openapi = [item for item in api_candidates if item["kind"] == "OPENAPI_JSON" and item["evidence"]["stability"] == "STABLE" and item["discovery"]["parseState"] == "PARSED"]
+    overall = "CREATE" if not candidates else (stable_openapi[0]["recommendedDisposition"] if len(api_candidates) == 1 and len(stable_openapi) == 1 else "UNKNOWN")
     if truncated: overall = "UNKNOWN"
     return {"httpApiEvidenceDiscoveryVersion": VERSION, "target": str(root), "git": {"root": str(root), "branch": branch}, "inputs": {"feature": {"path": feature_path.relative_to(root).as_posix(), "sha256": sha(feature_path)}, "technologyProfile": {"path": profile_path.relative_to(root).as_posix(), "sha256": sha(profile_path)}}, "scope": {"modules": modules, "excludedDirectories": sorted(EXCLUDED), "excludedPaths": excluded_paths, "maxFiles": max_files, "maxFileBytes": max_file_bytes, "maxTotalBytes": max_total_bytes}, "summary": {"filesInspected": min(inspected, max_files), "contentBytesRead": content_bytes, "candidateCount": len(candidates), "truncated": truncated, "recommendedDisposition": overall}, "candidates": candidates, "effects": {"routeChanged": False, "sourceChanged": False, "runtimeExecuted": False, "gitCommitOrPush": "NOT_RUN"}}
 
@@ -153,8 +200,21 @@ def discover(root: Path, feature_path: Path, profile_path: Path, modules: list[s
 def render(report: dict) -> str:
     lines = ["# 기존 HTTP API 근거 탐색", "", f"- 전체 추천: {report['summary']['recommendedDisposition']}", f"- 조사 파일: {report['summary']['filesInspected']}개 · 후보: {report['summary']['candidateCount']}개", f"- 범위 제한 도달: {'예' if report['summary']['truncated'] else '아니오'}", "", "## 발견한 기존 설계", ""]
     for item in report["candidates"]:
-        lines.append(f"- {item['kind']} · {item['recommendedDisposition']} · 신뢰도 {item['confidence']} · 상태 {item['evidence']['stability']}")
+        lines.append(f"### {item['candidateId']}")
+        lines.extend(["", f"- 파일: `{markdown(item['evidence']['path'])}`", f"- 판정: {item['kind']} · {item['recommendedDisposition']} · 신뢰도 {item['confidence']} · 상태 {item['evidence']['stability']}"])
+        for reason in item.get("decisionReasons", []): lines.append(f"- 판단 이유: {markdown(reason)}")
+        matches = item.get("requirementMatches", [])
+        if matches:
+            lines.append("- 기능과 연결된 API:")
+            for match in matches:
+                operation = match.get("operationId") or "operationId 없음"
+                lines.append(f"  - {markdown(match['method'])} `{markdown(match['path'])}` · {markdown(operation)}")
+        coverage = item.get("requirementCoverage", {})
+        if coverage.get("required"):
+            lines.append(f"- 요구사항: 충족 {len(coverage['covered'])}/{len(coverage['required'])}")
+            if coverage["missing"]: lines.append(f"  - 미충족: {', '.join(markdown(value) for value in coverage['missing'])}")
         for ambiguity in item["ambiguities"]: lines.append(f"  - 확인 필요: {markdown(ambiguity)}")
+        lines.append("")
     if not report["candidates"]: lines.append("- 기존 HTTP API 근거 없음 · 새 계약 생성 추천")
     lines.extend(["", "## 다음 선택", "", "- 추천 적용", "- 다른 후보 선택", "- 새로 생성", "- 기타 내용을 자연어로 입력", "- 취소", "", "이 보고서는 라우트·소스·런타임·Git 상태를 변경하지 않습니다.", ""])
     return "\n".join(lines)

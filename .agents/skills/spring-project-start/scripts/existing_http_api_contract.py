@@ -402,8 +402,8 @@ def recovery_assessment(error: Exception) -> dict[str, Any]:
     }
 
 
-def controller_mappings(path: Path) -> ControllerMappings:
-    source = path.read_text(encoding="utf-8")
+def controller_mappings(path: Path, source: str | None = None) -> ControllerMappings:
+    source = path.read_text(encoding="utf-8") if source is None else source
     class_matches = list(CLASS_DECLARATION.finditer(source))
     class_match = class_matches[0] if class_matches else None
     class_position = class_match.start() if class_match else len(source)

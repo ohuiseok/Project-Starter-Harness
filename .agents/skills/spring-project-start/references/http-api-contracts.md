@@ -47,7 +47,12 @@ requires matching-operation traceability plus no semantic blockers before
 recommending `REUSE`. Related incomplete contracts may be `EXTEND` candidates.
 Controllers are supporting evidence only, dirty files are `UNSTABLE`, YAML is
 `UNSUPPORTED`, and a truncated scan is `UNKNOWN`. Discovery itself never edits
-the design route.
+the design route. Hash and parse the same single-read byte snapshot; a file that
+changes during that read is unstable. Preserve malformed or unreadable possible
+contract evidence as `UNKNOWN` instead of treating it as absent. More than one
+contract candidate also requires an explicit choice. The user view identifies
+each candidate and shows its path, matched operations, requirement coverage,
+decision reasons, and remaining ambiguity.
 
 `REUSE` and `EXTEND` require an existing OpenAPI JSON file recorded in route
 code evidence. `REUSE` points to that exact file and never copies or edits it.

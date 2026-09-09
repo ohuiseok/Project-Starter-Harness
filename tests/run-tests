@@ -535,7 +535,7 @@ expect_out "design route preparation: all focused scenarios ran" "Ran 10 tests"
 OUT="$(python3 "$HARNESS_ROOT/tests/test_http_api_evidence_discovery.py" 2>&1)"
 CODE=$?
 expect_code "HTTP API evidence discovery: focused regression suite passes" 0
-expect_out "HTTP API evidence discovery: all focused scenarios ran" "Ran 8 tests"
+expect_out "HTTP API evidence discovery: all focused scenarios ran" "Ran 13 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_design_contract.py" 2>&1)"
 CODE=$?

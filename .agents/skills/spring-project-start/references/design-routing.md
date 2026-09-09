@@ -82,8 +82,10 @@ and complete requirement traceability may support `REUSE`; a related but
 incomplete contract may support `EXTEND`. Controller mappings cannot prove
 reuse alone. YAML is reported as unsupported until a validating adapter exists.
 Dirty evidence is unstable and scan truncation makes the overall answer
-`UNKNOWN`. Revalidate the exact report and user view immediately before using
-its selected evidence in a route revision.
+`UNKNOWN`. Malformed, unreadable, concurrently changing, or competing contract
+evidence also prevents automatic selection. Revalidate the exact report and
+user view immediately before using its selected candidate ID and evidence hash
+in a route revision.
 
 The basic Markdown view must use the same assessment as the readiness gate,
 including profile and target-evidence checks. Show every blocker in user

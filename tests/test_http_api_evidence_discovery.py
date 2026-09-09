@@ -45,5 +45,28 @@ class HttpApiEvidenceDiscoveryTests(unittest.TestCase):
  def test_unrelated_operation_cannot_claim_reuse_from_traceability_alone(self):
   with tempfile.TemporaryDirectory() as d:
    root,feature,profile=self.fixture(Path(d)); document=openapi(); operation=document["paths"].pop("/api/leave-requests")["post"]; operation["operationId"]="adminSystemStatus"; operation["summary"]="Administrative system status"; operation["description"]="Infrastructure status"; document["paths"]["/admin/system"]={"get":operation}; api=root/"openapi.json"; api.write_bytes(encoded(document)); code,text,output=self.invoke(root,feature,profile); self.assertEqual(0,code,text); candidate=json.loads(output.read_text())["candidates"][0]; self.assertEqual("UNKNOWN",candidate["recommendedDisposition"])
+ def test_competing_contract_candidate_blocks_automatic_reuse(self):
+  with tempfile.TemporaryDirectory() as d:
+   root,feature,profile=self.fixture(Path(d)); (root/"openapi.json").write_bytes(encoded(openapi())); (root/"legacy.yaml").write_text("openapi: 3.0.3\npaths: {}\n"); code,text,output=self.invoke(root,feature,profile); self.assertEqual(0,code,text); report=json.loads(output.read_text()); self.assertEqual(2,len(report["candidates"])); self.assertEqual("UNKNOWN",report["summary"]["recommendedDisposition"])
+ def test_malformed_possible_openapi_is_visible_and_blocks_create(self):
+  with tempfile.TemporaryDirectory() as d:
+   root,feature,profile=self.fixture(Path(d)); (root/"openapi.json").write_text('{"openapi":'); code,text,output=self.invoke(root,feature,profile); self.assertEqual(0,code,text); report=json.loads(output.read_text()); self.assertEqual("MALFORMED",report["candidates"][0]["discovery"]["parseState"]); self.assertEqual("UNKNOWN",report["summary"]["recommendedDisposition"])
+ def test_file_changed_during_snapshot_is_unstable_and_not_selected(self):
+  with tempfile.TemporaryDirectory() as d:
+   root,feature,profile=self.fixture(Path(d)); api=root/"openapi.json"; api.write_bytes(encoded(openapi())); original=discovery.snapshot
+   def changing(path):
+    content,unchanged=original(path); return (content,False) if path==api else (content,unchanged)
+   with mock.patch.object(discovery,"snapshot",side_effect=changing): code,text,output=self.invoke(root,feature,profile)
+   self.assertEqual(0,code,text); report=json.loads(output.read_text()); self.assertEqual("UNSTABLE",report["candidates"][0]["evidence"]["stability"]); self.assertEqual("UNKNOWN",report["summary"]["recommendedDisposition"])
+ def test_user_view_identifies_candidate_path_matches_coverage_and_reason(self):
+  with tempfile.TemporaryDirectory() as d:
+   root,feature,profile=self.fixture(Path(d)); api=root/"api/openapi.json"; api.parent.mkdir(); api.write_bytes(encoded(openapi())); code,text,output=self.invoke(root,feature,profile); self.assertEqual(0,code,text); report=json.loads(output.read_text()); view=output.with_suffix('.md').read_text(); self.assertIn(report["candidates"][0]["candidateId"],view); self.assertIn("api/openapi.json",view); self.assertIn("기능과 연결된 API",view); self.assertIn("요구사항: 충족",view); self.assertIn("판단 이유",view)
+ def test_controller_parser_consumes_the_same_snapshot_text(self):
+  with tempfile.TemporaryDirectory() as d:
+   root,feature,profile=self.fixture(Path(d)); source=root/"Controller.java"; source.write_text('@RestController class Controller { @GetMapping("/leave") Object get(){return null;} }'); original=discovery.controller_mappings; observed=[]
+   def parse(path,text=None):
+    observed.append(text); return original(path,text)
+   with mock.patch.object(discovery,"controller_mappings",side_effect=parse): code,message,_=self.invoke(root,feature,profile)
+   self.assertEqual(0,code,message); self.assertEqual([source.read_text()],observed)
 
 if __name__=="__main__": unittest.main()
