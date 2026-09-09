@@ -135,6 +135,14 @@ OpenAPI JSON; Controller mappings are supporting evidence only. Mark dirty
 evidence `UNSTABLE`, YAML `UNSUPPORTED`, and exhausted scan limits `UNKNOWN`.
 Discovery never changes the route; only a later natural-language route revision
 may adopt selected, revalidated evidence hashes.
+Use `http_api_route_decision.py prepare` to separate the system recommendation
+from the user's selected disposition and create a source-free decision preview.
+Record explicit approval with its `approve` command, then use `apply`; apply
+revalidates the discovery, candidate, feature, profile, branch, decision,
+proposal, and approval before delegating to the immutable journaled route
+revision writer. A recommendation of `UNKNOWN` cannot be accepted implicitly.
+`CREATE` records why no existing candidate was used. Selection and approval do
+not modify an existing route, OpenAPI document, or application source.
 
 Create selected detailed contracts from `templates/design-contract.json`.
 The metadata owns target identity, route linkage, evidence, traceability, and

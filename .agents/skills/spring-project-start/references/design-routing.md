@@ -87,6 +87,17 @@ evidence also prevents automatic selection. Revalidate the exact report and
 user view immediately before using its selected candidate ID and evidence hash
 in a route revision.
 
+Keep HTTP API recommendation, selection, and apply approval separate. The
+decision preview records `recommendedDisposition`, `selectedDisposition`,
+`selectionSource`, a reason code, and the selected candidate identity. An
+ambiguous recommendation cannot be accepted implicitly. `CREATE` distinguishes
+no evidence, rejected candidates, and a direct request for a new contract.
+Approval binds the exact decision report and view but changes no route. Apply
+revalidates every bound input immediately before appending an immutable route
+revision through the existing `PREPARED`/`COMMITTED` journal. The discovery
+report and selected contract hashes remain route evidence; existing routes,
+OpenAPI files, and source files are never overwritten.
+
 The basic Markdown view must use the same assessment as the readiness gate,
 including profile and target-evidence checks. Show every blocker in user
 language and distinguish `drafting`, `decision required`, `input changed`,

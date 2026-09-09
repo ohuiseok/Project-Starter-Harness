@@ -315,6 +315,7 @@ for required in \
   "$SKILL_ROOT/scripts/recover_design_route_draft_update.py" \
   "$SKILL_ROOT/scripts/discover_http_api_evidence.py" \
   "$SKILL_ROOT/scripts/validate_http_api_evidence_discovery.py" \
+  "$SKILL_ROOT/scripts/http_api_route_decision.py" \
   "$HARNESS_ROOT/templates/project-profile.md" \
   "$HARNESS_ROOT/templates/project-profile.json" \
   "$HARNESS_ROOT/templates/generation-plan.json" \
@@ -328,6 +329,8 @@ for required in \
   "$HARNESS_ROOT/templates/design-route.json" \
   "$HARNESS_ROOT/templates/design-route-draft-update.json" \
   "$HARNESS_ROOT/templates/http-api-evidence-discovery.json" \
+  "$HARNESS_ROOT/templates/http-api-route-decision.json" \
+  "$HARNESS_ROOT/templates/http-api-route-decision-approval.json" \
   "$HARNESS_ROOT/templates/design-contract.json" \
   "$HARNESS_ROOT/templates/http-api-openapi.json" \
   "$HARNESS_ROOT/templates/relational-physical-contract.json" \
@@ -536,6 +539,11 @@ OUT="$(python3 "$HARNESS_ROOT/tests/test_http_api_evidence_discovery.py" 2>&1)"
 CODE=$?
 expect_code "HTTP API evidence discovery: focused regression suite passes" 0
 expect_out "HTTP API evidence discovery: all focused scenarios ran" "Ran 13 tests"
+
+OUT="$(python3 "$HARNESS_ROOT/tests/test_http_api_route_decision.py" 2>&1)"
+CODE=$?
+expect_code "HTTP API route decision: focused regression suite passes" 0
+expect_out "HTTP API route decision: all focused scenarios ran" "Ran 6 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_design_contract.py" 2>&1)"
 CODE=$?
