@@ -12,6 +12,16 @@ be reused. Ambiguous annotations, inherited mappings, generated sources, and
 unproven project-evidence decisions remain `UNKNOWN`; duplicate endpoint owners
 are conflicts.
 
+Mapping schema v2 is reconstructed rather than merely shape-validated. It
+limits source count and bytes, snapshots only relevant symbols, distinguishes
+unrelated changes, and treats dirty reuse as blocking. Controller, DTO, and
+service paths reflect the selected architecture. OpenAPI body and response
+shapes decide whether DTOs exist, while security schemes, scopes, CSRF, status
+codes, and validation cases determine tests. The implementation-plan creator
+must consume a current approval receipt; no legacy direct path may bypass it.
+Revisions form an immutable previous-hash chain and only its latest uncancelled
+head can be approved. Legacy v1 artifacts are rebuilt as separate v2 reviews.
+
 The user view uses progressive disclosure: summary and recommended structure,
 API-by-API responsibilities and tests, conflicts/UNKNOWN, then choices to accept,
 edit one item, enter another approach in natural language, or cancel. An API

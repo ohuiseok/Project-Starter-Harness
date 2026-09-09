@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse,datetime,sys
 from pathlib import Path
 from discover_http_api_evidence import atomic_create,encoded
-from http_api_spring_mapping import reference,validate
+from http_api_spring_mapping import reference,validate,child_mappings,validate_contract_current,mapping_cancellations
 from render_http_api_spring_mapping import render
 from validate_feature_specs import load_object
 def main()->int:
@@ -13,6 +13,9 @@ def main()->int:
   root=a.target.resolve(strict=True);mapping=a.mapping.resolve(strict=True);view=a.view.resolve(strict=True);output=a.output.resolve()
   if any(path.is_symlink() for path in (a.mapping,a.view,a.output)) or any(root not in path.parents for path in (mapping,view,output)) or output.exists():raise ValueError("mapping approval paths are unsafe or occupied")
   value=load_object(mapping);blockers=validate(value,root)
+  validate_contract_current(value,root)
+  if child_mappings(root,mapping):raise ValueError("only the latest mapping revision can be approved")
+  if mapping_cancellations(root,mapping):raise ValueError("cancelled mapping cannot be approved")
   if value["status"]!="REVIEW_READY" or blockers:raise ValueError("only a current REVIEW_READY mapping can be approved")
   if view!=mapping.with_suffix(".md") or view.read_text()!=render(value,blockers):raise ValueError("mapping view is stale")
   if not a.approved_by.strip():raise ValueError("approved-by is required")

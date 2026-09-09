@@ -263,10 +263,24 @@ natural-language other, and cancel. This mapping never infers persistence from
 an API: API DTO/entity separation, data-contract ownership, service transaction
 ownership, and MSA repository boundaries remain explicit. Validate the exact
 JSON and Markdown with `validate_http_api_spring_mapping.py`, then record
-explicit approval with `record_http_api_spring_mapping_approval.py`. Its
-immutable receipt authorizes only preparation of the detailed implementation
-plan. Mapping review does not authorize a code dry run or any source/test/Git
-effect.
+explicit approval with `record_http_api_spring_mapping_approval.py`, and verify
+that receipt at the implementation-plan boundary with
+`validate_http_api_spring_mapping_approval.py`. Its immutable receipt authorizes
+only preparation of the detailed implementation plan, which must retain the
+receipt as hashed input. A v2 mapping is deterministically rebuilt from current
+contract, OpenAPI, decisions, scoped symbols, and scan limits before approval.
+Only relevant source symbols become evidence; scan exhaustion, generated or
+ambiguous mapping, dirty reuse, misplaced symbols, and unproven build choices
+remain visible blockers. Request/response DTOs follow actual OpenAPI shapes;
+security schemes/scopes/CSRF and response/validation/security test cases are
+operation-specific. Architecture choices change actual package paths and MSA
+requires an explicit route-matching service module. Use `--previous` to create
+an immutable revision; only the latest uncancelled revision may be approved.
+Use `cancel_http_api_spring_mapping.py` to preserve but cancel a current mapping,
+and `migrate_http_api_spring_mapping_v2.py` to rebuild a legacy v1 mapping as a
+separate unapproved v2 review. Custom details reject secret-like values and PII
+and are escaped in Markdown. Mapping review does not authorize a code dry run
+or any source/test/Git effect.
 
 After the selected CREATE feature has approved HTTP API and PostgreSQL physical
 contracts plus a passing migration/schema-fingerprint report, read

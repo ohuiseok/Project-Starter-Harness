@@ -8,13 +8,14 @@ from record_spec_approval import atomic_write_bytes
 from validate_feature_specs import load_object
 
 def render(value:dict,blockers:list[str])->str:
- s=value["summary"];d=value["decisions"]; lines=[f"# {value['featureId']} Spring 구현 매핑","",f"- 상태: {value['status']}",f"- API {s['operations']}개 · 생성 {s['create']} · 재사용 {s['reuse']} · 충돌 {s['conflict']} · 확인 필요 {s['unknown']}",f"- 계획된 테스트: {s['tests']}개","","## 추천 구현 구조","",f"- 구조: {d['architecture']['value']} · 웹: {d['webStack']['value']}",f"- DTO: {d['dtoStyle']['value']} · 변환: {d['mappingStyle']['value']} · 테스트: {d['testClient']['value']}",f"- 선택 근거: {d['architecture']['source']}"]
+ def esc(text):return str(text).replace("\\","\\\\").replace("`","\\`").replace("<","&lt;").replace(">","&gt;")
+ s=value["summary"];d=value["decisions"]; lines=[f"# {esc(value['featureId'])} Spring 구현 매핑","",f"- 계약: `{esc(value['contractId'])}`",f"- 상태: {value['status']}",f"- API {s['operations']}개 · 생성 {s['create']} · 재사용/확장 {s['reuse']} · 충돌 {s['conflict']} · 확인 필요 {s['unknown']}",f"- 계획된 테스트: {s['tests']}개",f"- 소스 탐색: {value['scan']['scannedFiles']}파일 · {value['scan']['scannedBytes']}바이트","","## 추천 구현 구조","",f"- 구조: {d['architecture']['value']} · 웹: {d['webStack']['value']}",f"- DTO: {d['dtoStyle']['value']} · 변환: {d['mappingStyle']['value']} · 테스트: {d['testClient']['value']}",f"- 선택 근거: {d['architecture']['source']}"]
  for name,item in d.items():
-  if item["detail"]:lines.append(f"- {name} 직접 구성: {item['detail']}")
+  if item["detail"]:lines.append(f"- {name} 직접 구성: {esc(item['detail'])}")
  lines.extend(["","## 보호되는 경계","","- API DTO와 영속 Entity는 분리","- 데이터 계약 없이는 Entity·Repository를 추론하지 않음","- 쓰기 트랜잭션은 Application Service만 소유","- MSA 경계를 넘는 Repository 직접 접근 금지","","## API별 구현과 검증",""])
  for op in value["operationMappings"]:
   states=", ".join(f"{c['role']} {c['disposition']}" for c in op["components"]); tests=", ".join(t["kind"] for t in op["tests"])
-  lines.extend([f"- **{op['method']} `{op['path']}`** · `{op['operationId']}`",f"  - 구현: {states}",f"  - 보안: {'필요' if op['security']['required'] else '없음'} ({op['security']['profileOption']})",f"  - 테스트: {tests}"])
+  lines.extend([f"- **{esc(op['method'])} `{esc(op['path'])}`** · `{esc(op['operationId'])}`",f"  - 구현: {esc(states)}",f"  - 보안: {'필요' if op['security']['required'] else '없음'} ({esc(op['security']['profileOption'])})",f"  - 테스트: {esc(tests)}"])
  lines.extend(["","## 충돌과 확인 필요",""])
  if not value["conflicts"] and not value["unknowns"] and not blockers:lines.append("- 없음")
  for item in value["conflicts"]:lines.append(f"- 충돌 · {item['message']} (`{item['subject']}`)")

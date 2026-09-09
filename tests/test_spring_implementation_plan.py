@@ -61,6 +61,7 @@ class SpringImplementationPlanTests(unittest.TestCase):
             "designRoute": route(),
             "httpApiContract": {"kind": "HTTP_API"},
             "openApi": api or openapi(),
+            "httpApiSpringMappingApproval": {"state": "APPROVED"},
             "physicalContract": {"kind": "PERSISTENCE"},
             "physicalModel": physical_tests.physical_model(),
             "migrationVerification": {"result": {"state": "PASSED"}},

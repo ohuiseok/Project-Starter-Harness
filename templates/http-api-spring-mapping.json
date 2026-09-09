@@ -1,9 +1,11 @@
 {
-  "httpApiSpringMappingVersion": 1,
+  "httpApiSpringMappingVersion": 2,
   "status": "BLOCKED",
+  "contractId": "UNKNOWN",
   "featureId": "F001",
-  "target": {"root": "UNKNOWN", "modulePath": ".", "packageName": "UNKNOWN", "language": "JAVA"},
+  "target": {"root": "UNKNOWN", "projectId": "UNKNOWN", "modulePath": ".", "packageName": "UNKNOWN", "language": "JAVA"},
   "inputs": {},
+  "scan": {"maxFiles": 2000, "maxBytes": 20000000, "scannedFiles": 0, "scannedBytes": 0},
   "decisions": {
     "architecture": {"value": "LAYERED", "detail": null, "source": "RECOMMENDATION_ACCEPTED", "confirmedByUser": true},
     "webStack": {"value": "SPRING_MVC", "detail": null, "source": "RECOMMENDATION_ACCEPTED", "confirmedByUser": true},
@@ -11,9 +13,12 @@
     "mappingStyle": {"value": "MANUAL", "detail": null, "source": "RECOMMENDATION_ACCEPTED", "confirmedByUser": true},
     "testClient": {"value": "MOCKMVC", "detail": null, "source": "RECOMMENDATION_ACCEPTED", "confirmedByUser": true}
   },
+  "customLayout": null,
+  "decisionEvidence": [],
   "boundaries": {"apiDtoEntitySeparated": true, "persistence": "NOT_INFERRED_WITHOUT_DATA_CONTRACT", "transactionOwner": "APPLICATION_SERVICE_IF_WRITE_CONTRACT", "crossServiceRepositoryAccess": false},
   "operationMappings": [],
   "sourceEvidence": [],
+  "revision": {"previous": null, "changeSummary": "INITIAL"},
   "conflicts": [],
   "unknowns": [],
   "summary": {"operations": 0, "create": 0, "reuse": 0, "conflict": 0, "unknown": 0, "tests": 0},

@@ -3,7 +3,7 @@
   "planId": "unknown",
   "featureId": "F001",
   "target": {"path": "UNKNOWN", "projectId": "UNKNOWN", "modulePath": ".", "packageName": "UNKNOWN", "language": "JAVA", "architecture": "LAYERED"},
-  "inputs": {"featureSpec": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "technologyProfile": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "designRoute": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "httpApiContract": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "openApi": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "physicalContract": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "physicalModel": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "migrationVerification": {"path": "UNKNOWN", "sha256": "UNKNOWN"}},
+  "inputs": {"featureSpec": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "technologyProfile": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "designRoute": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "httpApiContract": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "openApi": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "httpApiSpringMappingApproval": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "physicalContract": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "physicalModel": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "migrationVerification": {"path": "UNKNOWN", "sha256": "UNKNOWN"}},
   "capability": {"status": "UNKNOWN", "reasons": []},
   "userFlow": {"name": "UNKNOWN", "trigger": "UNKNOWN", "steps": [], "outcome": "UNKNOWN"},
   "components": [],

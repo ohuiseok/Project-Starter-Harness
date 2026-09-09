@@ -1,0 +1,7 @@
+{
+  "httpApiSpringMappingCancellationVersion": 1,
+  "state": "CANCELLED",
+  "mapping": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "reason": "UNKNOWN",
+  "effects": {"mappingDeleted": false, "implementationPlanAuthorized": false, "sourceChanged": false, "gitCommitOrPush": "NOT_RUN"}
+}

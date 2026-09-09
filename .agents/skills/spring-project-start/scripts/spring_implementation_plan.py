@@ -99,7 +99,7 @@ def validate(plan: dict, root: Path, verify_evidence: bool = True) -> list[str]:
     if not ID.fullmatch(plan["planId"]): raise ValueError("planId must be kebab-case")
     if Path(plan["target"]["path"]).resolve() != root.resolve() or plan["target"]["language"] != "JAVA" or plan["target"]["architecture"] != "LAYERED" or not PACKAGE.fullmatch(plan["target"]["packageName"]): raise ValueError("implementation target is invalid")
     inputs = plan["inputs"]
-    if set(inputs) != {"featureSpec", "technologyProfile", "designRoute", "httpApiContract", "openApi", "physicalContract", "physicalModel", "migrationVerification"}: raise ValueError("implementation inputs are invalid")
+    if set(inputs) != {"featureSpec", "technologyProfile", "designRoute", "httpApiContract", "openApi", "httpApiSpringMappingApproval", "physicalContract", "physicalModel", "migrationVerification"}: raise ValueError("implementation inputs are invalid")
     if verify_evidence:
         for name, item in inputs.items():
             if not isinstance(item, dict) or set(item) != {"path", "sha256"}: raise ValueError(f"implementation input reference is invalid: {name}")

@@ -15,6 +15,7 @@ from validate_feature_specs import load_object
 from http_api_contract import validate_http_contract
 from relational_physical_contract import validate_physical_contract
 from render_relational_migration_verification_report import validate as validate_migration_report
+from validate_http_api_spring_mapping_approval import validate_approval as validate_mapping_approval
 
 
 def atomic(document: dict, output: Path) -> None:
@@ -28,14 +29,16 @@ def atomic(document: dict, output: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    for name in ("feature", "profile", "route", "http-api-contract", "openapi", "physical-contract", "physical-model", "migration-verification", "target", "output"): parser.add_argument("--" + name, required=True, type=Path)
+    for name in ("feature", "profile", "route", "http-api-contract", "openapi", "http-api-spring-mapping-approval", "physical-contract", "physical-model", "migration-verification", "target", "output"): parser.add_argument("--" + name, required=True, type=Path)
     parser.add_argument("--package-name", required=True); args = parser.parse_args()
     try:
         root = args.target.resolve(strict=True)
         output = args.output.resolve(strict=False)
         if not root.is_dir() or args.target.is_symlink() or root not in output.parents or args.output.exists() or args.output.is_symlink(): raise ValueError("target or output is unsafe")
-        paths = {"featureSpec": args.feature, "technologyProfile": args.profile, "designRoute": args.route, "httpApiContract": args.http_api_contract, "openApi": args.openapi, "physicalContract": args.physical_contract, "physicalModel": args.physical_model, "migrationVerification": args.migration_verification}
-        refs = {name: ref(path, root) for name, path in paths.items()}; feature, profile, route, http_contract, openapi, physical_contract, physical, migration = (load_object(path) for path in paths.values())
+        paths = {"featureSpec": args.feature, "technologyProfile": args.profile, "designRoute": args.route, "httpApiContract": args.http_api_contract, "openApi": args.openapi, "httpApiSpringMappingApproval": args.http_api_spring_mapping_approval, "physicalContract": args.physical_contract, "physicalModel": args.physical_model, "migrationVerification": args.migration_verification}
+        refs = {name: ref(path, root) for name, path in paths.items()}; feature=load_object(args.feature);profile=load_object(args.profile);route=load_object(args.route);http_contract=load_object(args.http_api_contract);openapi=load_object(args.openapi);physical_contract=load_object(args.physical_contract);physical=load_object(args.physical_model);migration=load_object(args.migration_verification)
+        mapping_receipt=validate_mapping_approval(root,args.http_api_spring_mapping_approval.resolve(strict=True));mapping=load_object(root/mapping_receipt["mapping"]["path"])
+        if mapping["featureId"]!=feature["feature"]["id"] or mapping["contractId"]!=http_contract["contractId"] or mapping["inputs"]["openApi"]!=refs["openApi"]: raise ValueError("approved HTTP API Spring mapping does not match implementation inputs")
         api_approved, api_blockers, validated_api = validate_http_contract(http_contract, route, args.route, root, args.http_api_contract, feature, profile)
         logical_contract = root / physical_contract["logicalContract"]["path"]
         physical_approved, physical_blockers, validated_physical, _ = validate_physical_contract(physical_contract, args.physical_model, logical_contract, route, args.route, root, feature, profile)
