@@ -1,0 +1,9 @@
+{
+  "httpApiSpringMappingApprovalVersion": 1,
+  "state": "APPROVED",
+  "mapping": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "view": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "approvedBy": "UNKNOWN",
+  "approvedAt": "UNKNOWN",
+  "effects": {"implementationPlanAuthorized": true, "codeDryRunAuthorized": false, "sourceChanged": false, "testsExecuted": false, "gitCommitOrPush": "NOT_RUN"}
+}

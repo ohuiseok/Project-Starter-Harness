@@ -323,6 +323,11 @@ for required in \
   "$SKILL_ROOT/scripts/record_http_api_contract_dry_run_approval.py" \
   "$SKILL_ROOT/scripts/apply_approved_http_api_contract.py" \
   "$SKILL_ROOT/scripts/recover_http_api_contract_apply.py" \
+  "$SKILL_ROOT/scripts/http_api_spring_mapping.py" \
+  "$SKILL_ROOT/scripts/prepare_http_api_spring_mapping.py" \
+  "$SKILL_ROOT/scripts/render_http_api_spring_mapping.py" \
+  "$SKILL_ROOT/scripts/validate_http_api_spring_mapping.py" \
+  "$SKILL_ROOT/scripts/record_http_api_spring_mapping_approval.py" \
   "$HARNESS_ROOT/templates/project-profile.md" \
   "$HARNESS_ROOT/templates/project-profile.json" \
   "$HARNESS_ROOT/templates/generation-plan.json" \
@@ -340,6 +345,8 @@ for required in \
   "$HARNESS_ROOT/templates/http-api-route-decision-approval.json" \
   "$HARNESS_ROOT/templates/http-api-route-decision-application.json" \
   "$HARNESS_ROOT/templates/http-api-contract-handoff.json" \
+  "$HARNESS_ROOT/templates/http-api-spring-mapping.json" \
+  "$HARNESS_ROOT/templates/http-api-spring-mapping-approval.json" \
   "$HARNESS_ROOT/templates/design-contract.json" \
   "$HARNESS_ROOT/templates/http-api-openapi.json" \
   "$HARNESS_ROOT/templates/relational-physical-contract.json" \
@@ -558,6 +565,11 @@ OUT="$(python3 "$HARNESS_ROOT/tests/test_http_api_contract_handoff.py" 2>&1)"
 CODE=$?
 expect_code "HTTP API contract handoff: focused regression suite passes" 0
 expect_out "HTTP API contract handoff: all focused scenarios ran" "Ran 9 tests"
+
+OUT="$(python3 "$HARNESS_ROOT/tests/test_http_api_spring_mapping.py" 2>&1)"
+CODE=$?
+expect_code "HTTP API Spring mapping: focused regression suite passes" 0
+expect_out "HTTP API Spring mapping: all focused scenarios ran" "Ran 8 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_design_contract.py" 2>&1)"
 CODE=$?

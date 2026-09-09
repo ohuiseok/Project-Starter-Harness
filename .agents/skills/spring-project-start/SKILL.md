@@ -250,6 +250,24 @@ the exact approved physical contract/model used for catalog comparison. Migrate
 legacy plans to a separate v3 draft with
 `migrate_relational_migration_verification_plan_v3.py` and approve again.
 
+After semantic HTTP API approval, use `prepare_http_api_spring_mapping.py`
+before the detailed implementation component plan. It maps every selected
+operation to Spring controller, DTO, application-service, security, and test
+responsibilities while scanning current Java/Kotlin source as immutable
+evidence. Require an explicit architecture, web stack, DTO, mapper, and test
+choice source; a complete recommendation may be explicitly accepted. Exact
+Controller mappings may be `REUSE`, occupied planned symbols are `CONFLICT`,
+and custom/non-literal mappings remain `UNKNOWN`. The user view must show the
+recommended structure before file detail and offer approval, item-by-item edit,
+natural-language other, and cancel. This mapping never infers persistence from
+an API: API DTO/entity separation, data-contract ownership, service transaction
+ownership, and MSA repository boundaries remain explicit. Validate the exact
+JSON and Markdown with `validate_http_api_spring_mapping.py`, then record
+explicit approval with `record_http_api_spring_mapping_approval.py`. Its
+immutable receipt authorizes only preparation of the detailed implementation
+plan. Mapping review does not authorize a code dry run or any source/test/Git
+effect.
+
 After the selected CREATE feature has approved HTTP API and PostgreSQL physical
 contracts plus a passing migration/schema-fingerprint report, read
 `references/spring-implementation-planning.md`. Create a source-free component

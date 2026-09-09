@@ -1,0 +1,21 @@
+{
+  "httpApiSpringMappingVersion": 1,
+  "status": "BLOCKED",
+  "featureId": "F001",
+  "target": {"root": "UNKNOWN", "modulePath": ".", "packageName": "UNKNOWN", "language": "JAVA"},
+  "inputs": {},
+  "decisions": {
+    "architecture": {"value": "LAYERED", "detail": null, "source": "RECOMMENDATION_ACCEPTED", "confirmedByUser": true},
+    "webStack": {"value": "SPRING_MVC", "detail": null, "source": "RECOMMENDATION_ACCEPTED", "confirmedByUser": true},
+    "dtoStyle": {"value": "RECORD", "detail": null, "source": "RECOMMENDATION_ACCEPTED", "confirmedByUser": true},
+    "mappingStyle": {"value": "MANUAL", "detail": null, "source": "RECOMMENDATION_ACCEPTED", "confirmedByUser": true},
+    "testClient": {"value": "MOCKMVC", "detail": null, "source": "RECOMMENDATION_ACCEPTED", "confirmedByUser": true}
+  },
+  "boundaries": {"apiDtoEntitySeparated": true, "persistence": "NOT_INFERRED_WITHOUT_DATA_CONTRACT", "transactionOwner": "APPLICATION_SERVICE_IF_WRITE_CONTRACT", "crossServiceRepositoryAccess": false},
+  "operationMappings": [],
+  "sourceEvidence": [],
+  "conflicts": [],
+  "unknowns": [],
+  "summary": {"operations": 0, "create": 0, "reuse": 0, "conflict": 0, "unknown": 0, "tests": 0},
+  "effects": {"sourceChanged": false, "testsExecuted": false, "codeDryRunAuthorized": false, "gitCommitOrPush": "NOT_RUN"}
+}
