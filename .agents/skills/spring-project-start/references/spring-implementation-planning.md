@@ -40,3 +40,13 @@ behavior, tests, and actionable conflicts. File paths and hashes are details.
 Every acceptance criterion and business rule needs implementation and automated
 test coverage. API DTOs and JPA entities are separate components. A write service
 owns the transaction boundary. Approval authorizes only a later code dry run.
+
+Implementation plan core v2 consumes only a current mapping approval as its
+authoritative API interpretation. The core owns operation links, component and
+symbol ownership, shared-component deduplication, dependency cycles, requirement
+coverage, and capability truth. Technology adapters own paths and framework
+semantics. The first v2 adapter is `JAVA_MVC_API_ONLY_V1`: it supports multiple
+HTTP operations without persistence, external clients, or build changes. Its
+code renderer is intentionally `NOT_IMPLEMENTED`, so a reviewable plan cannot
+claim code-dry-run readiness. Plan v1 remains available only for its existing
+narrow Java/JPA POST workflow.

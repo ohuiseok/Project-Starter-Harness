@@ -282,6 +282,19 @@ separate unapproved v2 review. Custom details reject secret-like values and PII
 and are escaped in Markdown. Mapping review does not authorize a code dry run
 or any source/test/Git effect.
 
+For API-only Java MVC work, `prepare_spring_implementation_plan_v2.py` consumes
+the current mapping approval and creates the source-free common plan v2. The
+core uses `spring-implementation-capabilities-v2.json` and never reinterprets
+OpenAPI independently. It owns operation-to-symbol links, shared component
+deduplication, method-level CREATE/ADD/REUSE actions, dependency cycles, contract
+ownership, and implementation/test coverage. The first adapter is explicitly
+`JAVA_MVC_API_ONLY_V1`; persistence, external clients, and build changes are
+`NOT_USED`. Validate the exact plan and view with
+`validate_spring_implementation_plan_v2.py`. Until a matching v2 code renderer
+exists, `codeDryRunRenderer: NOT_IMPLEMENTED` and `codeDryRun: false` are
+mandatory even for a `REVIEW_READY` plan. Do not route v2 into the legacy v1
+code dry-run.
+
 After the selected CREATE feature has approved HTTP API and PostgreSQL physical
 contracts plus a passing migration/schema-fingerprint report, read
 `references/spring-implementation-planning.md`. Create a source-free component

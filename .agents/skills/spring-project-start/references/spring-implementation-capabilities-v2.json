@@ -1,0 +1,14 @@
+{
+  "capabilityCatalogVersion": 2,
+  "adapters": [
+    {
+      "id": "JAVA_MVC_API_ONLY_V1",
+      "language": "JAVA",
+      "webStack": "SPRING_MVC",
+      "architectures": ["LAYERED", "HEXAGONAL", "CLEAN", "MODULAR", "MICROSERVICE", "CUSTOM"],
+      "persistence": "NOT_USED",
+      "planning": "SUPPORTED",
+      "codeDryRunRenderer": "NOT_IMPLEMENTED"
+    }
+  ]
+}

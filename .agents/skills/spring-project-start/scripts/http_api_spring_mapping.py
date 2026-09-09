@@ -104,6 +104,9 @@ def build(feature:dict,profile:dict,openapi:dict,root:Path,module_path:str,packa
   components=[]
   for role,suffix,_ in role_defs:
    name=type_name(oid,suffix); component_path=f"{module_path.rstrip('/')+'/' if module_path!='.' else ''}{source_root}/{package_path(package_name)}/{arch_dirs[role]}/{name}.{extension}"; candidates=[item for item in observed if name in item["types"]]
+   if role=="CONTROLLER" and len(exact)==1:
+    component_path=exact[0]["path"]
+    if len(exact[0]["types"])==1:name=exact[0]["types"][0]
    for item in candidates:relevant_paths.add(item["path"])
    exact_symbol=[item for item in candidates if item["path"]==component_path]
    state=disposition if role=="CONTROLLER" else "CONFLICT" if len(candidates)>1 else "EXTEND" if len(exact_symbol)==1 else "UNKNOWN" if candidates else "CONFLICT" if (root/component_path).exists() else "CREATE"
