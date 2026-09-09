@@ -5,6 +5,7 @@
   "featureId": "F001",
   "target": {"root": "UNKNOWN", "projectId": "UNKNOWN", "modulePath": ".", "packageName": "UNKNOWN", "language": "JAVA"},
   "inputs": {},
+  "schemaCatalog": {},
   "scan": {"maxFiles": 2000, "maxBytes": 20000000, "scannedFiles": 0, "scannedBytes": 0},
   "decisions": {
     "architecture": {"value": "LAYERED", "detail": null, "source": "RECOMMENDATION_ACCEPTED", "confirmedByUser": true},

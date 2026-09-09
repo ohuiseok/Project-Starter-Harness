@@ -306,6 +306,16 @@ authorize code dry-run until a matching renderer exists. Cancel with
 `cancel_spring_implementation_plan_v2.py`; preserve all plan evidence. Plan
 changes are made through a new Spring-mapping revision and a new deterministic
 plan, rather than by adding a second conflicting edit surface to the plan.
+Mapping v2 also carries a minimized implementation semantic snapshot: parameter
+location and validation schema, request media/schema, response status/media/
+schema, and referenced component schemas. Descriptions, examples, and defaults
+are not copied. Plan v2 preserves that snapshot without independently
+reinterpreting OpenAPI. Component IDs include a stable digest, test packages
+follow the mapped Controller package, and occupied test paths block planning.
+Validate the capability catalog with
+`validate_spring_implementation_capabilities_v2.py` before adding or changing
+an adapter; duplicate IDs, overlapping selectors, and unregistered renderer
+claims are invalid.
 
 After the selected CREATE feature has approved HTTP API and PostgreSQL physical
 contracts plus a passing migration/schema-fingerprint report, read

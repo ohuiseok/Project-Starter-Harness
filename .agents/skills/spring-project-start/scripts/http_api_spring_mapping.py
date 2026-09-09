@@ -10,6 +10,7 @@ from http_api_contract import operations,security_option
 LANGUAGES={"JAVA","KOTLIN"}; WEB_STACKS={"SPRING_MVC","WEBFLUX"}; ARCHITECTURES={"LAYERED","HEXAGONAL","CLEAN","MODULAR","MICROSERVICE","CUSTOM"}; DTO_STYLES={"CLASS","RECORD","KOTLIN_DATA_CLASS","CUSTOM"}; MAPPING_STYLES={"MANUAL","MAPSTRUCT","CUSTOM"}; TEST_CLIENTS={"MOCKMVC","WEBTESTCLIENT","CUSTOM"}; SOURCES={"USER_CONFIRMED","PROJECT_EVIDENCE","RECOMMENDATION_ACCEPTED"}
 TYPE=re.compile(r"\b(?:class|interface|record|object|data\s+class)\s+(\w+)")
 PACKAGE=re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$"); SECRET=re.compile(r"(?i)(password|secret|token|api[_-]?key|private[_-]?key)"); PII=re.compile(r"(?:[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\b01[016789][- ]?\d{3,4}[- ]?\d{4}\b)")
+SCHEMA_KEYS={"$ref","type","format","nullable","readOnly","writeOnly","required","properties","items","additionalProperties","enum","oneOf","anyOf","allOf","minimum","maximum","exclusiveMinimum","exclusiveMaximum","minLength","maxLength","pattern","minItems","maxItems","uniqueItems"}
 
 def sha(path:Path)->str:return hashlib.sha256(path.read_bytes()).hexdigest()
 def reference(path:Path,root:Path)->dict:
@@ -31,6 +32,51 @@ def type_name(operation_id:str,suffix:str)->str:
  base="".join(part[:1].upper()+part[1:] for part in re.split(r"[^A-Za-z0-9]+",re.sub(r"([a-z0-9])([A-Z])",r"\1 \2",operation_id)) if part)
  return base+suffix
 def package_path(package:str)->str:return package.replace(".","/")
+def structural_schema(value):
+ if isinstance(value,dict):
+  result={}
+  for key in sorted(set(value)&SCHEMA_KEYS):
+   item=value[key]
+   if key=="properties" and isinstance(item,dict):result[key]={name:structural_schema(schema) for name,schema in sorted(item.items())}
+   elif key in {"items","additionalProperties"}:result[key]=structural_schema(item)
+   elif key in {"oneOf","anyOf","allOf"} and isinstance(item,list):result[key]=[structural_schema(i) for i in item]
+   elif key in {"required","enum"} and isinstance(item,list):result[key]=item
+   elif isinstance(item,(str,int,float,bool)) or item is None:result[key]=item
+  return result
+ return value if isinstance(value,(str,int,float,bool)) or value is None else {}
+def resolved_component(openapi:dict,item,section:str):
+ if not isinstance(item,dict) or not isinstance(item.get("$ref"),str):return item
+ prefix=f"#/components/{section}/";ref=item["$ref"]
+ if not ref.startswith(prefix):return item
+ target=openapi.get("components",{}).get(section,{}).get(ref[len(prefix):])
+ return {**target,**{k:v for k,v in item.items() if k!="$ref"}} if isinstance(target,dict) else item
+def schema_refs(value)->set[str]:
+ if isinstance(value,dict):
+  own={value["$ref"].removeprefix("#/components/schemas/")} if isinstance(value.get("$ref"),str) and value["$ref"].startswith("#/components/schemas/") else set()
+  return own|set().union(*(schema_refs(i) for i in value.values()),set())
+ if isinstance(value,list):return set().union(*(schema_refs(i) for i in value),set())
+ return set()
+def referenced_schema_catalog(openapi:dict,operations:list[dict])->dict:
+ available=openapi.get("components",{}).get("schemas",{});pending=schema_refs([i["implementationSemantics"] for i in operations]);result={}
+ while pending:
+  name=min(pending);pending.remove(name)
+  if name in result or not isinstance(available.get(name),dict):continue
+  schema=structural_schema(available[name]);result[name]=schema;pending.update(schema_refs(schema)-set(result))
+ return result
+def implementation_semantics(openapi:dict,path:str,operation:dict)->dict:
+ path_item=openapi.get("paths",{}).get(path,{})
+ parameter_map={}
+ for raw in [*path_item.get("parameters",[]),*operation.get("parameters",[])]:
+  item=resolved_component(openapi,raw,"parameters")
+  if not isinstance(item,dict):continue
+  value={"name":item.get("name","UNKNOWN"),"in":item.get("in","UNKNOWN"),"required":bool(item.get("required")),"style":item.get("style"),"explode":item.get("explode"),"schema":structural_schema(item.get("schema",{}))};parameter_map[(value["name"],value["in"])]=value
+ parameters=list(parameter_map.values());body=resolved_component(openapi,operation.get("requestBody"),"requestBodies");body=body if isinstance(body,dict) else None
+ request={"required":bool(body.get("required")),"content":{media:structural_schema(item.get("schema",{})) for media,item in sorted(body.get("content",{}).items()) if isinstance(item,dict)}} if body else None
+ responses={}
+ for code,raw in sorted(operation.get("responses",{}).items(),key=lambda i:str(i[0])):
+  response=resolved_component(openapi,raw,"responses")
+  if isinstance(response,dict):responses[str(code)]={"content":{media:structural_schema(item.get("schema",{})) for media,item in sorted(response.get("content",{}).items()) if isinstance(item,dict)}}
+ return {"parameters":parameters,"requestBody":request,"responses":responses}
 def child_mappings(root:Path,mapping_path:Path)->list[Path]:
  expected=reference(mapping_path,root);found=[]
  for path in (root/"docs").glob("**/*.json") if (root/"docs").is_dir() else []:
@@ -119,7 +165,7 @@ def build(feature:dict,profile:dict,openapi:dict,root:Path,module_path:str,packa
     schemes.extend(requirement);scopes.extend(scope for values in requirement.values() if isinstance(values,list) for scope in values)
   response_codes=sorted(str(i) for i in operation.get("responses",{})); tests=[{"kind":"CONTRACT","client":resolved["testClient"],"covers":[oid,*refs],"cases":response_codes},{"kind":"VALIDATION","client":resolved["testClient"],"covers":[oid],"cases":["request-validation"] if request_needed else ["path-query-validation"]}]
   if secured:tests.append({"kind":"SECURITY","client":resolved["testClient"],"covers":[oid],"cases":["unauthenticated-401","forbidden-403",*sorted(set(scopes))]})
-  operations_out.append({"operationId":oid,"method":method.upper(),"path":path,"requirementRefs":refs,"security":{"required":secured,"profileOption":security_option(profile),"schemes":sorted(set(schemes)),"scopes":sorted(set(scopes)),"csrf":"REQUIRED" if security_option(profile)=="security.session" and method.lower() not in {"get","head","options"} else "NOT_REQUIRED","methodSecurity":bool(scopes)},"components":components,"tests":tests})
+  operations_out.append({"operationId":oid,"method":method.upper(),"path":path,"requirementRefs":refs,"implementationSemantics":implementation_semantics(openapi,path,operation),"security":{"required":secured,"profileOption":security_option(profile),"schemes":sorted(set(schemes)),"scopes":sorted(set(scopes)),"csrf":"REQUIRED" if security_option(profile)=="security.session" and method.lower() not in {"get","head","options"} else "NOT_REQUIRED","methodSecurity":bool(scopes)},"components":components,"tests":tests})
  for ref in sorted(required-covered):conflicts.append({"code":"TRACEABILITY_GAP","subject":ref,"message":"어떤 API operation도 이 요구사항을 추적하지 않습니다."})
  evidence_candidates=[root/module_path/name for name in ("build.gradle","build.gradle.kts","pom.xml","settings.gradle","settings.gradle.kts")]+list((root/module_path/"src/main/resources").glob("application*")) if (root/module_path/"src/main/resources").is_dir() else [root/module_path/name for name in ("build.gradle","build.gradle.kts","pom.xml","settings.gradle","settings.gradle.kts")]
  decision_evidence=[reference(path,root) for path in evidence_candidates if path.is_file() and not path.is_symlink()]
@@ -131,10 +177,10 @@ def build(feature:dict,profile:dict,openapi:dict,root:Path,module_path:str,packa
  if resolved["architecture"]=="MICROSERVICE" and module_path==".":conflicts.append({"code":"SERVICE_BOUNDARY_MISSING","subject":"modulePath","message":"MSA 매핑에는 명시적인 서비스 모듈이 필요합니다."})
  if resolved["architecture"]=="CUSTOM" and not custom_layout:unknowns.append({"code":"CUSTOM_ARCHITECTURE_PATHS_REQUIRED","subject":"architecture","message":"사용자 구조의 역할별 package 경로를 확정해야 합니다.","evidencePaths":[]})
  status="BLOCKED" if conflicts or unknowns else "REVIEW_READY"
- return {"httpApiSpringMappingVersion":2,"status":status,"contractId":metadata.get("contractId","UNKNOWN"),"featureId":feature["feature"]["id"],"target":{"root":str(root),"projectId":metadata.get("target",{}).get("projectId","UNKNOWN"),"modulePath":module_path,"packageName":package_name,"language":language},"inputs":input_refs,"scan":{"maxFiles":max_files,"maxBytes":max_bytes,"scannedFiles":min(len(files),max_files),"scannedBytes":scanned_bytes},"decisions":{k:decision(v,decision_source,(custom_details or {}).get(k)) for k,v in resolved.items()},"customLayout":custom_layout,"decisionEvidence":decision_evidence,"boundaries":{"apiDtoEntitySeparated":True,"persistence":"NOT_INFERRED_WITHOUT_DATA_CONTRACT","transactionOwner":"APPLICATION_SERVICE_IF_WRITE_CONTRACT","crossServiceRepositoryAccess":False},"operationMappings":operations_out,"sourceEvidence":[i for i in observed if i["path"] in relevant_paths],"revision":revision or {"previous":None,"changeSummary":"INITIAL"},"conflicts":conflicts,"unknowns":unknowns,"summary":{"operations":len(operations_out),"create":sum(c["disposition"]=="CREATE" for o in operations_out for c in o["components"]),"reuse":sum(c["disposition"] in {"REUSE","EXTEND"} for o in operations_out for c in o["components"]),"conflict":len(conflicts),"unknown":len(unknowns),"tests":sum(len(o["tests"]) for o in operations_out)},"effects":{"sourceChanged":False,"testsExecuted":False,"codeDryRunAuthorized":False,"gitCommitOrPush":"NOT_RUN"}}
+ return {"httpApiSpringMappingVersion":2,"status":status,"contractId":metadata.get("contractId","UNKNOWN"),"featureId":feature["feature"]["id"],"target":{"root":str(root),"projectId":metadata.get("target",{}).get("projectId","UNKNOWN"),"modulePath":module_path,"packageName":package_name,"language":language},"inputs":input_refs,"schemaCatalog":referenced_schema_catalog(openapi,operations_out),"scan":{"maxFiles":max_files,"maxBytes":max_bytes,"scannedFiles":min(len(files),max_files),"scannedBytes":scanned_bytes},"decisions":{k:decision(v,decision_source,(custom_details or {}).get(k)) for k,v in resolved.items()},"customLayout":custom_layout,"decisionEvidence":decision_evidence,"boundaries":{"apiDtoEntitySeparated":True,"persistence":"NOT_INFERRED_WITHOUT_DATA_CONTRACT","transactionOwner":"APPLICATION_SERVICE_IF_WRITE_CONTRACT","crossServiceRepositoryAccess":False},"operationMappings":operations_out,"sourceEvidence":[i for i in observed if i["path"] in relevant_paths],"revision":revision or {"previous":None,"changeSummary":"INITIAL"},"conflicts":conflicts,"unknowns":unknowns,"summary":{"operations":len(operations_out),"create":sum(c["disposition"]=="CREATE" for o in operations_out for c in o["components"]),"reuse":sum(c["disposition"] in {"REUSE","EXTEND"} for o in operations_out for c in o["components"]),"conflict":len(conflicts),"unknown":len(unknowns),"tests":sum(len(o["tests"]) for o in operations_out)},"effects":{"sourceChanged":False,"testsExecuted":False,"codeDryRunAuthorized":False,"gitCommitOrPush":"NOT_RUN"}}
 
 def validate(value:dict,root:Path)->list[str]:
- required={"httpApiSpringMappingVersion","status","contractId","featureId","target","inputs","scan","decisions","customLayout","decisionEvidence","boundaries","operationMappings","sourceEvidence","revision","conflicts","unknowns","summary","effects"}
+ required={"httpApiSpringMappingVersion","status","contractId","featureId","target","inputs","schemaCatalog","scan","decisions","customLayout","decisionEvidence","boundaries","operationMappings","sourceEvidence","revision","conflicts","unknowns","summary","effects"}
  if not isinstance(value,dict) or set(value)!=required or value.get("httpApiSpringMappingVersion")!=2:raise ValueError("HTTP API Spring mapping is invalid")
  blockers=[]
  if value["status"] not in {"BLOCKED","REVIEW_READY"}:raise ValueError("mapping status is invalid")
@@ -170,7 +216,7 @@ def validate(value:dict,root:Path)->list[str]:
  operation_ids=[i["operationId"] for i in value["operationMappings"]]
  if not operation_ids or len(operation_ids)!=len(set(operation_ids)):raise ValueError("operation mappings must be non-empty and unique")
  for operation in value["operationMappings"]:
-  if set(operation)!={"operationId","method","path","requirementRefs","security","components","tests"} or not operation["path"].startswith("/"):raise ValueError("operation mapping structure is invalid")
+  if set(operation)!={"operationId","method","path","requirementRefs","implementationSemantics","security","components","tests"} or not operation["path"].startswith("/"):raise ValueError("operation mapping structure is invalid")
   roles=[item.get("role") for item in operation["components"]]
   if roles[:2]!=["CONTROLLER","APPLICATION_SERVICE"] or len(roles)!=len(set(roles)) or not set(roles)<={"CONTROLLER","APPLICATION_SERVICE","REQUEST_DTO","RESPONSE_DTO"}:raise ValueError("operation component roles are invalid")
   for component in operation["components"]:

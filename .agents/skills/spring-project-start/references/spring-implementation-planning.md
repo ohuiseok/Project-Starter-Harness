@@ -60,3 +60,13 @@ agree. Validation blockers and advancement readiness are separate user-visible
 results. Exact plan approval and cancellation are immutable receipts; approval
 never claims code-dry-run authorization. Revise implementation structure at the
 approved Spring-mapping boundary, then derive one new deterministic plan.
+
+Before a renderer exists, the approved mapping must own a minimized semantic
+snapshot sufficient for deterministic method signatures, DTO fields and
+validation, media types, response statuses, and referenced schemas. Do not copy
+descriptions, examples, or defaults into planning evidence. Test paths derive
+from the mapped Controller package for every supported architecture and must
+conflict with existing unowned files. Human-readable component IDs end with a
+stable digest so normalization cannot merge distinct paths. Validate capability
+catalog structure, unique adapter IDs, non-overlapping selectors, and renderer
+claims independently from plan generation.

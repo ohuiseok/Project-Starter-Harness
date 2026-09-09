@@ -14,8 +14,8 @@ def render(value:dict,blockers:list[str])->str:
   if item["detail"]:lines.append(f"- {name} 직접 구성: {esc(item['detail'])}")
  lines.extend(["","## 보호되는 경계","","- API DTO와 영속 Entity는 분리","- 데이터 계약 없이는 Entity·Repository를 추론하지 않음","- 쓰기 트랜잭션은 Application Service만 소유","- MSA 경계를 넘는 Repository 직접 접근 금지","","## API별 구현과 검증",""])
  for op in value["operationMappings"]:
-  states=", ".join(f"{c['role']} {c['disposition']}" for c in op["components"]); tests=", ".join(t["kind"] for t in op["tests"])
-  lines.extend([f"- **{esc(op['method'])} `{esc(op['path'])}`** · `{esc(op['operationId'])}`",f"  - 구현: {esc(states)}",f"  - 보안: {'필요' if op['security']['required'] else '없음'} ({esc(op['security']['profileOption'])})",f"  - 테스트: {esc(tests)}"])
+  states=", ".join(f"{c['role']} {c['disposition']}" for c in op["components"]); tests=", ".join(t["kind"] for t in op["tests"]);semantics=op["implementationSemantics"];body=", ".join(semantics["requestBody"]["content"]) if semantics["requestBody"] else "없음"
+  lines.extend([f"- **{esc(op['method'])} `{esc(op['path'])}`** · `{esc(op['operationId'])}`",f"  - 구현: {esc(states)}",f"  - 입력: parameter {len(semantics['parameters'])}개 · body {esc(body)}",f"  - 응답 상태: {', '.join(esc(i) for i in semantics['responses'])}",f"  - 보안: {'필요' if op['security']['required'] else '없음'} ({esc(op['security']['profileOption'])})",f"  - 테스트: {esc(tests)}"])
  lines.extend(["","## 충돌과 확인 필요",""])
  if not value["conflicts"] and not value["unknowns"] and not blockers:lines.append("- 없음")
  for item in value["conflicts"]:lines.append(f"- 충돌 · {item['message']} (`{item['subject']}`)")

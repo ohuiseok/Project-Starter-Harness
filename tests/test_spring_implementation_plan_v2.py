@@ -5,12 +5,13 @@ from unittest import mock
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent.parent;SCRIPTS=ROOT/".agents/skills/spring-project-start/scripts";sys.path[:0]=[str(SCRIPTS),str(ROOT)]
 from http_api_spring_mapping import build as build_mapping,reference
-from spring_implementation_plan_v2 import build,validate
+from spring_implementation_plan_v2 import build,cid,validate
 from render_spring_implementation_plan_v2 import render
 import cancel_spring_implementation_plan_v2 as cancel_plan
 import record_spring_implementation_plan_v2_approval as approve_plan
 import spring_implementation_plan_v2 as plan_core
 import validate_spring_implementation_plan_v2_approval as validate_plan_approval
+from validate_spring_implementation_capabilities_v2 import load_and_validate
 from tests.test_http_api_spring_mapping import feature,profile,api
 class PlanV2Tests(unittest.TestCase):
  def fixture(self,root,document=None,choices=None,security="security.none"):
@@ -26,7 +27,7 @@ class PlanV2Tests(unittest.TestCase):
    plan,_,_=self.fixture(Path(d));self.assertEqual(2,len(plan["operationLinks"]));self.assertTrue(all(i["componentRefs"] and i["testRefs"] for i in plan["operationLinks"]));self.assertTrue(all(c["symbols"] for c in plan["components"]))
  def test_request_and_response_components_follow_mapping(self):
   with tempfile.TemporaryDirectory() as d:
-   document=api();op=document["paths"]["/orders"]["post"];op["requestBody"]={"content":{"application/json":{"schema":{"type":"object"}}}};op["responses"]["201"]={"description":"ok","content":{"application/json":{"schema":{"type":"object"}}}};plan,_,_=self.fixture(Path(d),document);roles={i["role"] for i in plan["components"]};self.assertTrue({"REQUEST_DTO","RESPONSE_DTO"}<=roles)
+   document=api();op=document["paths"]["/orders"]["post"];op["requestBody"]={"content":{"application/json":{"schema":{"type":"object"}}}};op["responses"]["201"]={"description":"ok","content":{"application/json":{"schema":{"type":"object"}}}};plan,_,_=self.fixture(Path(d),document);roles={i["role"] for i in plan["components"]};self.assertTrue({"REQUEST_DTO","RESPONSE_DTO"}<=roles);self.assertIsNotNone(plan["operationLinks"][0]["implementationSemantics"]["requestBody"])
  def test_mapping_conflicts_propagate(self):
   with tempfile.TemporaryDirectory() as d:
    plan,_,_=self.fixture(Path(d),choices={"webStack":"WEBFLUX"});self.assertEqual("BLOCKED",plan["status"]);self.assertTrue(any(i["source"]=="SPRING_MAPPING" for i in plan["conflicts"]))
@@ -58,6 +59,15 @@ class PlanV2Tests(unittest.TestCase):
  def test_public_operation_in_secured_project_stays_api_only(self):
   with tempfile.TemporaryDirectory() as d:
    plan,_,_=self.fixture(Path(d),security="security.token");self.assertEqual("REVIEW_READY",plan["status"]);self.assertEqual("NOT_USED",plan["scope"]["security"])
+ def test_test_paths_follow_controller_architecture_and_occupied_path_blocks(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);plan,mapping_path,approval=self.fixture(root,choices={"architecture":"HEXAGONAL"});test=next(i for i in plan["components"] if i["role"]=="TEST");self.assertIn("adapter/in/web",test["target"]["path"]);path=root/test["target"]["path"];path.parent.mkdir(parents=True,exist_ok=True);path.write_text("existing");mapping=json.loads(mapping_path.read_text());blocked=build(mapping,reference(mapping_path,root),reference(approval,root),root);self.assertTrue(any(i["code"]=="TEST_PATH_OCCUPIED" for i in blocked["conflicts"]))
+ def test_component_ids_keep_hash_identity_after_readable_normalization(self):
+  self.assertNotEqual(cid("TEST","x/y","Z"),cid("TEST","x-y","Z"));self.assertRegex(cid("TEST","x/y","Z"),r"-[0-9a-f]{10}$")
+ def test_capability_catalog_rejects_overlapping_selectors(self):
+  with tempfile.TemporaryDirectory() as d:
+   source=json.loads((ROOT/".agents/skills/spring-project-start/references/spring-implementation-capabilities-v2.json").read_text());source["adapters"].append(dict(source["adapters"][0],id="JAVA_MVC_DUPLICATE"));path=Path(d)/"catalog.json";path.write_text(json.dumps(source))
+   with self.assertRaisesRegex(ValueError,"overlap"):load_and_validate(path)
  def test_exact_plan_approval_never_authorizes_code_and_cancel_invalidates_it(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);plan,mapping_path,_=self.fixture(root);plan_path=root/"docs/implementation-plan-v2.json";view=plan_path.with_suffix(".md");plan_path.write_text(json.dumps(plan));view.write_text(render(plan,[]));approval=root/"docs/implementation-plan-v2-approval.json";mapping_ref=reference(mapping_path,root)
