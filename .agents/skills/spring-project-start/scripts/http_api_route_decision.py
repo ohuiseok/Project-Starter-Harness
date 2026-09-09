@@ -17,6 +17,7 @@ import advance_design_route_draft as advance
 from continuation_route import markdown, sanitize
 from discover_http_api_evidence import atomic_create, discover, encoded, render as render_discovery
 from record_spec_approval import atomic_write_bytes
+from render_design_route import render as render_route
 from spring_milestone_completion import sha, target_path
 from validate_feature_specs import load_object
 
@@ -39,6 +40,19 @@ def argument_path(root: Path, value: Path, label: str) -> Path:
 
 def reference(path: Path, root: Path) -> dict:
     return {"path": path.relative_to(root).as_posix(), "sha256": sha(path)}
+
+
+def committed_route_transition_is_current(root: Path, application: dict) -> bool:
+    route_path = target_path(root, application["nextRoute"]["path"], "next route")
+    view_path = target_path(root, application["nextView"]["path"], "next route view")
+    if reference(route_path, root) == application["nextRoute"] and reference(view_path, root) == application["nextView"]:
+        return True
+    route = load_object(route_path)
+    if route.get("approval", {}).get("status") != "APPROVED": return False
+    draft = copy.deepcopy(route); draft["approval"] = {"status": "DRAFT", "approvedBy": None, "approvedAt": None, "approvedContentSha256": None}
+    if hashlib.sha256(encoded(draft)).hexdigest() != application["nextRoute"]["sha256"]: return False
+    feature = load_object(target_path(root, route["inputs"]["feature"]["path"], "feature")); project = load_object(target_path(root, route["inputs"]["projectBrief"]["path"], "project brief")); profile = load_object(target_path(root, route["inputs"]["technologyProfile"]["path"], "profile"))
+    return view_path.is_file() and view_path.read_text() == render_route(route, feature, project, profile)
 
 
 def revalidate_discovery(root: Path, report_path: Path, view_path: Path, derived_paths: list[Path] | None = None) -> dict:
@@ -278,9 +292,10 @@ def recover(args: argparse.Namespace) -> int:
         if set(value) != APPLICATION_FIELDS or value.get("httpApiRouteDecisionApplicationVersion") != 1 or value.get("state") not in {"PREPARED", "COMMITTED"}:
             raise ValueError("application receipt schema or state is invalid")
         if value["state"] == "COMMITTED":
-            for label in ("decision", "approval", "previousRoute", "nextRoute", "nextView", "routeJournal"):
+            for label in ("decision", "approval", "previousRoute", "routeJournal"):
                 path = target_path(root, value[label]["path"], label)
                 if reference(path, root) != value[label]: raise ValueError(f"committed {label} evidence drifted")
+            if not committed_route_transition_is_current(root, value): raise ValueError("committed route or approved transition drifted")
             print("HTTP_API_ROUTE_DECISION_RECOVERED: yes\nAPPLICATION_STATE: COMMITTED\nRECOVERY_ACTION: NONE"); return 0
         original = receipt.read_bytes(); previous = value["previousRoute"]
         previous_path = target_path(root, previous["path"], "previous route")
@@ -325,9 +340,10 @@ def status(args: argparse.Namespace) -> int:
             application = load_object(receipt); state = application.get("state")
             if set(application) != APPLICATION_FIELDS or state not in {"PREPARED", "COMMITTED"}: raise ValueError("application receipt is invalid")
             if state == "COMMITTED":
-                for label in ("decision", "approval", "previousRoute", "nextRoute", "nextView", "routeJournal"):
+                for label in ("decision", "approval", "previousRoute", "routeJournal"):
                     path = target_path(root, application[label]["path"], label)
                     if reference(path, root) != application[label]: raise ValueError(f"committed {label} evidence drifted")
+                if not committed_route_transition_is_current(root, application): raise ValueError("committed route or approved transition drifted")
             status_value = "RECOVERY_REQUIRED" if state == "PREPARED" else "COMMITTED"
             action = "복구 후 다시 상태 확인" if state == "PREPARED" else "다음 계약 설계 단계로 진행"
         elif approval_exists:

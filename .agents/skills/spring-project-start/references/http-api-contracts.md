@@ -37,6 +37,26 @@ and metadata shown to the user, keeps OpenAPI unchanged, and atomically updates
 metadata and its Markdown view. Contract approval permits implementation
 planning only; it does not authorize source changes.
 
+## Contract Preparation Handoff
+
+After an HTTP API route decision has a committed application receipt and the
+latest route revision is approved, create one immutable handoff per active
+`contractId`. Revalidate the receipt, decision approval, route journal,
+revision ancestry, feature, project brief, technology profile, discovery, and
+evidence. An earlier contract decision may point to an intermediate revision;
+the final approved route is acceptable only when every immutable `previous`
+reference proves that it is a descendant.
+
+The handoff selects the disposition adapter and proposed output paths without
+executing it. For existing APIs, freeze the selected operation IDs, methods,
+paths, requirement references, complete inline operation documents, path
+parameters, effective security, reachable local components, and unresolved
+external references into a normalized snapshot hash. Missing coverage,
+external references, or occupied outputs produce a visible `BLOCKED` handoff.
+Validate the exact handoff again immediately before a later adapter consumes
+it. Handoff preparation never creates contract artifacts, edits OpenAPI, or
+changes source.
+
 ## Existing APIs
 
 Before choosing an existing API, run bounded read-only discovery with

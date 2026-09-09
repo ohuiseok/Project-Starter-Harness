@@ -148,6 +148,14 @@ inside that route's module, and reject evidence already owned by another HTTP
 API route. Apply writes a separate `PREPARED`/`COMMITTED` application receipt;
 use the `recover` command to reconcile an interrupted receipt with the exact
 route journal before retrying.
+After the latest route revision is fully approved, use
+`prepare_http_api_contract_handoff.py` for each active HTTP API `contractId` and
+check it with `validate_http_api_contract_handoff.py`. The handoff verifies the
+decision application lineage (including verified descendant revisions), route
+approval and latest-revision state, current feature/profile/evidence, adapter
+choice, operation scope, reachable local components, external references, and
+output collisions. It is immutable and never invokes the CREATE, EXTEND, or
+REUSE adapter itself.
 
 Create selected detailed contracts from `templates/design-contract.json`.
 The metadata owns target identity, route linkage, evidence, traceability, and
