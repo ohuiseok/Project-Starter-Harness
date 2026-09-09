@@ -155,7 +155,23 @@ decision application lineage (including verified descendant revisions), route
 approval and latest-revision state, current feature/profile/evidence, adapter
 choice, operation scope, reachable local components, external references, and
 output collisions. It is immutable and never invokes the CREATE, EXTEND, or
-REUSE adapter itself.
+REUSE adapter itself. Existing APIs require an explicit operation selection:
+either acceptance of the complete recommendation or a user-confirmed subset.
+Unresolved external references remain blocked rather than being fetched.
+
+Next use `prepare_http_api_contract_dry_run.py`. CREATE and EXTEND bind the
+exact agent-prepared OpenAPI source path and SHA-256; REUSE binds the exact
+baseline and selected operation snapshot. The report renders every intended
+CREATE without changing the target. Record explicit approval with
+`record_http_api_contract_dry_run_approval.py`, then apply only that exact
+report with `apply_approved_http_api_contract.py`. Apply revalidates every
+handoff and source input immediately before writing, uses a transaction journal,
+and records the committed file hashes as the baseline. A partial failure rolls
+back exact files created by that transaction; use
+`recover_http_api_contract_apply.py` for an interrupted process. Every contract
+has independent outputs and a content-addressed transaction, so one adapter
+failure cannot mutate another contract. Direct execution of the two legacy
+`create_*http_api_contract.py` materializers is disabled.
 
 Create selected detailed contracts from `templates/design-contract.json`.
 The metadata owns target identity, route linkage, evidence, traceability, and
@@ -166,9 +182,9 @@ never duplicate request or response schemas in metadata. Validate metadata with
 not source-file application.
 
 For a route v2 `HTTP_API` instance with disposition `CREATE`, read
-`references/http-api-contracts.md` completely. Materialize an agent-prepared
-OpenAPI JSON draft and derived metadata with `create_http_api_contract.py`,
-validate them with `validate_http_api_contract.py`, and render the basic view
+`references/http-api-contracts.md` completely. Use the handoff and approved
+dry-run pipeline above to materialize an agent-prepared OpenAPI JSON draft and
+derived metadata, validate them with `validate_http_api_contract.py`, and render the basic view
 with `render_http_api_contract.py`. After the user approves that view, use
 `record_http_api_contract_approval.py`; it rechecks current route inputs and the
 exact OpenAPI without modifying the OpenAPI artifact. Do not use this CREATE

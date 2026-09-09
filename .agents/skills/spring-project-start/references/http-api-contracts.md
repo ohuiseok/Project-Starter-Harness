@@ -124,8 +124,27 @@ target, or otherwise unreadable, rendering still produces a safe recovery view
 with the current state and three next actions. It does not expose internal paths
 or raw errors in the basic view.
 
-Create the evidence assessment with `create_existing_http_api_contract.py`,
-validate it with `validate_existing_http_api_contract.py`, and render it with
-`render_existing_http_api_contract.py`. After explicit approval use
-`record_existing_http_api_contract_approval.py`, which rechecks the route,
-baseline, proposal, comparison report, and Markdown atomically.
+Prepare a v2 handoff only after the selected operation IDs are explicitly
+confirmed. The safe default ownership policy is exclusive: a baseline already
+owned by another active HTTP API contract is not shared, even when proposed
+operation subsets appear disjoint. This avoids ambiguous future component and
+security ownership. External `$ref` values are never fetched implicitly and
+block apply until a separately immutable evidence workflow is available.
+
+Run `prepare_http_api_contract_dry_run.py` to bind the exact proposal source
+(EXTEND) or baseline snapshot (REUSE), derive metadata and compatibility bytes,
+and report output collisions without writing them. `REVIEW`, `BREAKING`,
+`SECURITY`, and `UNKNOWN` compatibility findings keep the report blocked.
+Record a clear report with `record_http_api_contract_dry_run_approval.py`, then
+use `apply_approved_http_api_contract.py`. It re-renders and compares every
+planned SHA-256 immediately before a create-only transaction. It records a
+PREPARED/APPLYING/COMMITTED journal and committed baseline; exact partial files
+are rolled back automatically. Use `recover_http_api_contract_apply.py` only
+after process interruption. Legacy direct materializers are intentionally
+disabled so they cannot bypass handoff, dry-run, or approval.
+
+After apply, validate with `validate_existing_http_api_contract.py`, render with
+`render_existing_http_api_contract.py`, and use
+`record_existing_http_api_contract_approval.py` for the later semantic contract
+approval. Contract materialization approval and semantic contract approval are
+separate decisions.

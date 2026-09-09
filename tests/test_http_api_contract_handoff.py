@@ -8,6 +8,9 @@ import http_api_route_decision as decision
 import prepare_http_api_contract_handoff as handoff
 import validate_http_api_contract_handoff as validate_handoff
 import record_design_route_approval as approve_route
+import prepare_http_api_contract_dry_run as dry_run
+import record_http_api_contract_dry_run_approval as approve_dry_run
+import apply_approved_http_api_contract as apply_contract
 from spring_milestone_completion import sha
 from validate_feature_specs import approval_content_hash
 import tests.test_http_api_route_decision as decision_fixtures
@@ -28,10 +31,10 @@ class HttpApiContractHandoffTests(unittest.TestCase):
    route_value=json.loads(next_route.read_text()); code,text=self.invoke(approve_route,["approve","--route",str(next_route),"--feature",str(feature),"--project-brief",str(project),"--profile",str(profile),"--target",str(root),"--expected-route-hash",approval_content_hash(route_value),"--approved-by","user","--approved-at","2026-09-09T12:00:00+09:00"]); self.assertEqual(0,code,text)
   application=root/".starter-harness/http-api-route-decisions/F001-http-api.json"; return root,next_route,feature,project,profile,application
  def args(self,root,route,feature,project,profile,application):
-  output=root/"docs/features/F001/http-api-contract-handoff.json"; return ["handoff","--application",str(application),"--route",str(route),"--feature",str(feature),"--project-brief",str(project),"--profile",str(profile),"--target",str(root),"--contract-id","http-api","--output",str(output),"--view",str(output.with_suffix('.md'))],output
+  output=root/"docs/features/F001/http-api-contract-handoff.json"; return ["handoff","--application",str(application),"--route",str(route),"--feature",str(feature),"--project-brief",str(project),"--profile",str(profile),"--target",str(root),"--contract-id","http-api","--operation-id","requestLeave","--operation-selection-source","RECOMMENDATION_ACCEPTED","--output",str(output),"--view",str(output.with_suffix('.md'))],output
  def test_approved_reuse_route_creates_ready_immutable_handoff(self):
   with tempfile.TemporaryDirectory() as d:
-   values=self.fixture(Path(d)); args,output=self.args(*values); code,text=self.invoke(handoff,args); self.assertEqual(0,code,text); value=json.loads(output.read_text()); self.assertEqual(("READY","REUSE_EXISTING_HTTP_API_CONTRACT"),(value["status"],value["expectedOutputs"]["adapter"])); self.assertTrue(value["operationScope"]["operations"]); self.assertFalse(value["effects"]["adapterExecuted"]); self.assertIn("기존 OpenAPI는 변경하지 않음",output.with_suffix('.md').read_text())
+   values=self.fixture(Path(d)); args,output=self.args(*values); code,text=self.invoke(handoff,args); self.assertEqual(0,code,text); value=json.loads(output.read_text()); self.assertEqual(("READY_FOR_REUSE_DRY_RUN","REUSE_EXISTING_HTTP_API_CONTRACT"),(value["status"],value["expectedOutputs"]["adapter"])); self.assertTrue(value["operationScope"]["operations"]); self.assertFalse(value["effects"]["adapterExecuted"]); self.assertIn("기존 OpenAPI는 변경하지 않음",output.with_suffix('.md').read_text())
  def test_unapproved_route_cannot_create_handoff(self):
   with tempfile.TemporaryDirectory() as d:
    values=self.fixture(Path(d),approve=False); args,output=self.args(*values); code,text=self.invoke(handoff,args); self.assertEqual(1,code); self.assertIn("approved",text); self.assertFalse(output.exists())
@@ -46,5 +49,25 @@ class HttpApiContractHandoffTests(unittest.TestCase):
  def test_final_route_may_be_a_verified_descendant_of_contract_decision(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d); first=root/"route-v1.json"; first_view=root/"route-v1.md"; first.write_text('{}'); first_view.write_text("view"); application={"nextRoute":{"path":"route-v1.json","sha256":sha(first)},"nextView":{"path":"route-v1.md","sha256":sha(first_view)}}; second=root/"route-v2.json"; second.write_text(json.dumps({"revision":{"previous":{"path":"route-v1.json","sha256":sha(first)}}})); self.assertTrue(handoff.route_descends_from_application(root,second,application)); first.write_text('{"drift":true}'); self.assertFalse(handoff.route_descends_from_application(root,second,application))
+ def test_reuse_dry_run_approval_and_atomic_apply(self):
+  with tempfile.TemporaryDirectory() as d:
+   values=self.fixture(Path(d)); args,handoff_path=self.args(*values); self.assertEqual(0,self.invoke(handoff,args)[0]); root=values[0]; report=root/"docs/features/F001/http-api-dry-run.json"
+   dry_args=["dry","--handoff",str(handoff_path),"--handoff-view",str(handoff_path.with_suffix('.md')),"--target",str(root),"--output",str(report)]; code,text=self.invoke(dry_run,dry_args); self.assertEqual(0,code,text); self.assertIn("READY_FOR_APPROVAL",text)
+   approval=root/"docs/features/F001/http-api-dry-run-approval.json"; approval_args=["approve","--dry-run",str(report),"--target",str(root),"--output",str(approval),"--approved-by","user","--approved-at","2026-09-09T12:30:00+09:00"]; self.assertEqual(0,self.invoke(approve_dry_run,approval_args)[0])
+   apply_args=["apply","--dry-run",str(report),"--approval",str(approval),"--target",str(root)]; code,text=self.invoke(apply_contract,apply_args); self.assertEqual(0,code,text); self.assertIn("BASELINE_RECORDED: yes",text)
+   for item in json.loads(report.read_text())["plannedFiles"]: self.assertEqual(item["sha256"],sha(root/item["path"]))
+ def test_source_or_approval_drift_is_rejected(self):
+  with tempfile.TemporaryDirectory() as d:
+   values=self.fixture(Path(d)); args,handoff_path=self.args(*values); self.assertEqual(0,self.invoke(handoff,args)[0]); root=values[0]; report=root/"dry.json"; self.assertEqual(0,self.invoke(dry_run,["dry","--handoff",str(handoff_path),"--handoff-view",str(handoff_path.with_suffix('.md')),"--target",str(root),"--output",str(report)])[0]); approval=root/"approval.json"; self.assertEqual(0,self.invoke(approve_dry_run,["approve","--dry-run",str(report),"--target",str(root),"--output",str(approval),"--approved-by","user","--approved-at","2026-09-09T12:30:00+09:00"])[0]); value=json.loads(approval.read_text()); value["dryRun"]["sha256"]="0"*64; approval.write_text(json.dumps(value)); code,text=self.invoke(apply_contract,["apply","--dry-run",str(report),"--approval",str(approval),"--target",str(root)]); self.assertEqual(1,code); self.assertIn("exact ready dry-run",text)
+ def test_partial_apply_failure_rolls_back_exact_created_files(self):
+  with tempfile.TemporaryDirectory() as d:
+   values=self.fixture(Path(d)); args,handoff_path=self.args(*values); self.assertEqual(0,self.invoke(handoff,args)[0]); root=values[0]; report=root/"dry.json"; self.assertEqual(0,self.invoke(dry_run,["dry","--handoff",str(handoff_path),"--handoff-view",str(handoff_path.with_suffix('.md')),"--target",str(root),"--output",str(report)])[0]); approval=root/"approval.json"; self.assertEqual(0,self.invoke(approve_dry_run,["approve","--dry-run",str(report),"--target",str(root),"--output",str(approval),"--approved-by","user","--approved-at","2026-09-09T12:30:00+09:00"])[0]); original=apply_contract.atomic_create; calls=0
+   def fail_third(content,path):
+    nonlocal calls; calls+=1
+    if calls==3: raise OSError("injected failure")
+    return original(content,path)
+   with mock.patch.object(apply_contract,"atomic_create",side_effect=fail_third): code,text=self.invoke(apply_contract,["apply","--dry-run",str(report),"--approval",str(approval),"--target",str(root)])
+   self.assertEqual(1,code); self.assertIn("ROLLBACK: complete",text)
+   for item in json.loads(report.read_text())["plannedFiles"]: self.assertFalse((root/item["path"]).exists())
 
 if __name__=="__main__": unittest.main()

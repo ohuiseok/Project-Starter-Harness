@@ -206,10 +206,9 @@ class HttpApiContractTests(unittest.TestCase):
             with mock.patch.object(sys, "argv", arguments), mock.patch.object(
                 create_http_api_contract, "assess", return_value=(True, True, [])
             ), contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(0, create_http_api_contract.main())
-            metadata = json.loads(contract_output.read_text(encoding="utf-8"))
-            self.assertEqual(derived_traceability(openapi()), metadata["traceability"])
-            self.assertEqual(openapi(), json.loads(openapi_output.read_text(encoding="utf-8")))
+                self.assertEqual(1, create_http_api_contract.main())
+            self.assertFalse(contract_output.exists())
+            self.assertFalse(openapi_output.exists())
             self.assertFalse((root / "src").exists())
 
     def test_approval_updates_metadata_and_view_without_changing_openapi(self) -> None:

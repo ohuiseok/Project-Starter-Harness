@@ -31,6 +31,8 @@ def main() -> int:
     parser.add_argument("--proposed-output", type=Path)
     parser.add_argument("--comparison-output", required=True, type=Path)
     args = parser.parse_args()
+    print("EXISTING_HTTP_API_CONTRACT_CREATED: no\nERROR: direct adapter execution is disabled; use an approved HTTP API contract dry-run")
+    return 1
     created: list[tuple[Path, bytes]] = []
     try:
         root = args.target.resolve(strict=True)

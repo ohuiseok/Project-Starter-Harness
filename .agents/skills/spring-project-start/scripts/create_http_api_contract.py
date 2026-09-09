@@ -26,6 +26,8 @@ def main() -> int:
     parser.add_argument("--contract-output", required=True, type=Path)
     parser.add_argument("--openapi-output", required=True, type=Path)
     args = parser.parse_args()
+    print("HTTP_API_CONTRACT_CREATED: no\nERROR: direct adapter execution is disabled; use an approved HTTP API contract dry-run")
+    return 1
     created: list[tuple[Path, bytes]] = []
     try:
         root = args.target.resolve(strict=True)
