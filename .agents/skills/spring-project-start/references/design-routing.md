@@ -74,6 +74,17 @@ itself. A parent may have only one committed child. Recover an interrupted
 overwrite a drifted child. Approve only the current revision and its generated
 Markdown view.
 
+For an HTTP API route, use `discover_http_api_evidence.py` before proposing
+`EXTEND` or `REUSE`. Scan only explicit module scopes with bounded file count,
+individual size, and total content limits. Exclude build, generated, dependency,
+log, and VCS directories. An OpenAPI JSON operation with both feature relevance
+and complete requirement traceability may support `REUSE`; a related but
+incomplete contract may support `EXTEND`. Controller mappings cannot prove
+reuse alone. YAML is reported as unsupported until a validating adapter exists.
+Dirty evidence is unstable and scan truncation makes the overall answer
+`UNKNOWN`. Revalidate the exact report and user view immediately before using
+its selected evidence in a route revision.
+
 The basic Markdown view must use the same assessment as the readiness gate,
 including profile and target-evidence checks. Show every blocker in user
 language and distinguish `drafting`, `decision required`, `input changed`,

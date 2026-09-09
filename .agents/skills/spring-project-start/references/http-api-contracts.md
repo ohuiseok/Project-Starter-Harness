@@ -39,6 +39,16 @@ planning only; it does not authorize source changes.
 
 ## Existing APIs
 
+Before choosing an existing API, run bounded read-only discovery with
+`discover_http_api_evidence.py` and revalidate its report/view with
+`validate_http_api_evidence_discovery.py`. Discovery prefers semantically valid
+OpenAPI JSON, separates observed operations from feature-term matches, and
+requires matching-operation traceability plus no semantic blockers before
+recommending `REUSE`. Related incomplete contracts may be `EXTEND` candidates.
+Controllers are supporting evidence only, dirty files are `UNSTABLE`, YAML is
+`UNSUPPORTED`, and a truncated scan is `UNKNOWN`. Discovery itself never edits
+the design route.
+
 `REUSE` and `EXTEND` require an existing OpenAPI JSON file recorded in route
 code evidence. `REUSE` points to that exact file and never copies or edits it.
 `EXTEND` writes a separate proposed OpenAPI and compares it with the baseline;

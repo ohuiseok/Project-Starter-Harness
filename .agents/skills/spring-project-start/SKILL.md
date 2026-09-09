@@ -128,6 +128,13 @@ If a `PREPARED` update remains, use
 `recover_design_route_draft_update.py`; recovery removes only exact unchanged
 child artifacts and refuses external drift. The current revision's Markdown is
 the approval view consumed by `record_design_route_approval.py`.
+Before recommending HTTP API `EXTEND` or `REUSE`, run
+`discover_http_api_evidence.py` over explicit project/module scopes and verify
+the exact report with `validate_http_api_evidence_discovery.py`. Prefer current
+OpenAPI JSON; Controller mappings are supporting evidence only. Mark dirty
+evidence `UNSTABLE`, YAML `UNSUPPORTED`, and exhausted scan limits `UNKNOWN`.
+Discovery never changes the route; only a later natural-language route revision
+may adopt selected, revalidated evidence hashes.
 
 Create selected detailed contracts from `templates/design-contract.json`.
 The metadata owns target identity, route linkage, evidence, traceability, and
