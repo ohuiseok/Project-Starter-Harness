@@ -331,6 +331,7 @@ for required in \
   "$HARNESS_ROOT/templates/http-api-evidence-discovery.json" \
   "$HARNESS_ROOT/templates/http-api-route-decision.json" \
   "$HARNESS_ROOT/templates/http-api-route-decision-approval.json" \
+  "$HARNESS_ROOT/templates/http-api-route-decision-application.json" \
   "$HARNESS_ROOT/templates/design-contract.json" \
   "$HARNESS_ROOT/templates/http-api-openapi.json" \
   "$HARNESS_ROOT/templates/relational-physical-contract.json" \
@@ -543,7 +544,7 @@ expect_out "HTTP API evidence discovery: all focused scenarios ran" "Ran 13 test
 OUT="$(python3 "$HARNESS_ROOT/tests/test_http_api_route_decision.py" 2>&1)"
 CODE=$?
 expect_code "HTTP API route decision: focused regression suite passes" 0
-expect_out "HTTP API route decision: all focused scenarios ran" "Ran 6 tests"
+expect_out "HTTP API route decision: all focused scenarios ran" "Ran 10 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_design_contract.py" 2>&1)"
 CODE=$?

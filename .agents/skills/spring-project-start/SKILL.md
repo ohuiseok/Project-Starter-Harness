@@ -142,7 +142,12 @@ revalidates the discovery, candidate, feature, profile, branch, decision,
 proposal, and approval before delegating to the immutable journaled route
 revision writer. A recommendation of `UNKNOWN` cannot be accepted implicitly.
 `CREATE` records why no existing candidate was used. Selection and approval do
-not modify an existing route, OpenAPI document, or application source.
+not modify an existing route, OpenAPI document, or application source. Scope
+discovery evidence by HTTP API `contractId`, require selected evidence to stay
+inside that route's module, and reject evidence already owned by another HTTP
+API route. Apply writes a separate `PREPARED`/`COMMITTED` application receipt;
+use the `recover` command to reconcile an interrupted receipt with the exact
+route journal before retrying.
 
 Create selected detailed contracts from `templates/design-contract.json`.
 The metadata owns target identity, route linkage, evidence, traceability, and

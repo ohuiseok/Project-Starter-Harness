@@ -97,6 +97,18 @@ revalidates every bound input immediately before appending an immutable route
 revision through the existing `PREPARED`/`COMMITTED` journal. The discovery
 report and selected contract hashes remain route evidence; existing routes,
 OpenAPI files, and source files are never overwritten.
+For route v2, namespace discovery evidence by `contractId`; updating one HTTP
+API decision must not remove another instance's evidence. The selected contract
+must be inside the route instance's explicit module scope and cannot already be
+owned by another HTTP API instance. Approval repeats full discovery and
+proposal validation. Apply produces an immutable completion receipt linked to
+the route journal. A lingering `PREPARED` receipt is reconciled or rolled back
+through explicit recovery, while a verified `COMMITTED` receipt makes repeated
+apply unnecessary and visible.
+Use the decision `status` view to distinguish waiting for approval, approved but
+not applied, recovery required, and committed. Never discard a `PREPARED`
+application receipt while its route journal still exists; recover the journal
+and receipt together from their exact hashes.
 
 The basic Markdown view must use the same assessment as the readiness gate,
 including profile and target-evidence checks. Show every blocker in user
