@@ -18,36 +18,59 @@ def test_path(target:dict,operation_id:str,kind:str)->str:
 def adapter(mapping:dict)->dict:
  catalog=load_object(CATALOG);matches=[a for a in catalog["adapters"] if a["language"]==mapping["target"]["language"] and a["webStack"]==mapping["decisions"]["webStack"]["value"] and mapping["decisions"]["architecture"]["value"] in a["architectures"]]
  return matches[0] if len(matches)==1 else {"id":"NONE","planning":"UNSUPPORTED","codeDryRunRenderer":"NOT_IMPLEMENTED"}
+def related_documents(root:Path,key:str,expected:dict)->list[Path]:
+ found=[]
+ for path in (root/"docs").glob("**/*.json") if (root/"docs").is_dir() else []:
+  try:value=json.loads(path.read_text())
+  except (OSError,json.JSONDecodeError):continue
+  if value.get(key)==expected:found.append(path)
+ return found
+def plans_for_mapping(root:Path,mapping_ref:dict)->list[Path]:
+ found=[]
+ for path in (root/"docs").glob("**/*.json") if (root/"docs").is_dir() else []:
+  try:value=json.loads(path.read_text())
+  except (OSError,json.JSONDecodeError):continue
+  if value.get("implementationPlanVersion")==2 and value.get("inputs",{}).get("springMapping")==mapping_ref:found.append(path)
+ return found
+def plan_approvals(root:Path,plan_ref:dict)->list[Path]:return related_documents(root,"implementationPlan",plan_ref)
+def plan_cancellations(root:Path,plan_ref:dict)->list[Path]:return related_documents(root,"cancelledPlan",plan_ref)
 def build(mapping:dict,mapping_ref:dict,approval_ref:dict,root:Path)->dict:
  capability=adapter(mapping);conflicts=[{"code":i["code"],"subject":i["subject"],"message":i["message"],"source":"SPRING_MAPPING"} for i in mapping["conflicts"]];unknowns=[{"code":i["code"],"subject":i["subject"],"message":i["message"],"source":"SPRING_MAPPING"} for i in mapping["unknowns"]]
  if capability["planning"]!="SUPPORTED":conflicts.append({"code":"PLANNING_ADAPTER_UNAVAILABLE","subject":f"{mapping['target']['language']}/{mapping['decisions']['webStack']['value']}","message":"이 기술 조합의 구현 계획 adapter가 없습니다.","source":"CAPABILITY_CATALOG"})
+ secured_operations=[op for op in mapping["operationMappings"] if op["security"]["required"]];security_profiles=sorted({op["security"]["profileOption"] for op in secured_operations})
+ unsupported_security=sorted(set(security_profiles)-set(capability.get("securityProfiles",[])))
+ if unsupported_security or secured_operations and not capability.get("securedOperations",False):conflicts.append({"code":"SECURITY_CAPABILITY_UNAVAILABLE","subject":", ".join(unsupported_security or security_profiles),"message":"현재 adapter는 이 보안 구성을 구현 계획에 포함하지 못합니다.","source":"CAPABILITY_CATALOG"})
  grouped={};operation_links=[]
  for op in mapping["operationMappings"]:
-  op_components=[]
+  op_components=[];controller_refs=[]
   for raw in op["components"]:
    key=(raw["role"],raw["plannedPath"],raw["typeName"]);identity=cid(*key)
    symbol={"operationId":op["operationId"],"kind":"HTTP_HANDLER" if raw["role"]=="CONTROLLER" else "USE_CASE_METHOD" if raw["role"]=="APPLICATION_SERVICE" else "DATA_TYPE","action":"REUSE_METHOD" if raw["disposition"]=="REUSE" else "ADD_METHOD" if raw["disposition"]=="EXTEND" else "CREATE_TYPE","httpMethod":op["method"] if raw["role"]=="CONTROLLER" else None,"httpPath":op["path"] if raw["role"]=="CONTROLLER" else None}
    if key not in grouped:grouped[key]={"componentId":identity,"role":raw["role"],"disposition":raw["disposition"],"owner":{"contractId":mapping["contractId"],"modulePath":mapping["target"]["modulePath"]},"target":{"path":raw["plannedPath"],"typeName":raw["typeName"]},"symbols":[],"operationRefs":[],"requirementRefs":[],"dependsOn":[]}
+   elif grouped[key]["disposition"]!=raw["disposition"]:conflicts.append({"code":"SHARED_COMPONENT_DISPOSITION_CONFLICT","subject":raw["plannedPath"],"message":"공유 컴포넌트에 서로 다른 생성·확장·재사용 판단이 지정됐습니다.","source":"PLAN_CORE"})
    item=grouped[key];item["symbols"].append(symbol);item["operationRefs"].append(op["operationId"]);item["requirementRefs"].extend(op["requirementRefs"]);op_components.append(identity)
+   if raw["role"]=="CONTROLLER":controller_refs.append(identity)
   test_ids=[]
   for test in op["tests"]:
-   path=test_path(mapping["target"],op["operationId"],test["kind"]);key=("TEST",path,Path(path).stem);identity=cid(*key);grouped[key]={"componentId":identity,"role":"TEST","disposition":"CREATE","owner":{"contractId":mapping["contractId"],"modulePath":mapping["target"]["modulePath"]},"target":{"path":path,"typeName":Path(path).stem},"symbols":[{"operationId":op["operationId"],"kind":test["kind"],"action":"CREATE_TYPE","httpMethod":None,"httpPath":None}],"operationRefs":[op["operationId"]],"requirementRefs":list(dict.fromkeys(test["covers"][1:])),"dependsOn":[i for i in op_components if "controller" in i]};test_ids.append(identity)
+   path=test_path(mapping["target"],op["operationId"],test["kind"]);key=("TEST",path,Path(path).stem);identity=cid(*key);grouped[key]={"componentId":identity,"role":"TEST","disposition":"CREATE","owner":{"contractId":mapping["contractId"],"modulePath":mapping["target"]["modulePath"]},"target":{"path":path,"typeName":Path(path).stem},"symbols":[{"operationId":op["operationId"],"kind":test["kind"],"action":"CREATE_TYPE","httpMethod":None,"httpPath":None}],"operationRefs":[op["operationId"]],"requirementRefs":list(dict.fromkeys(test["covers"][1:])),"dependsOn":sorted(set(controller_refs))};test_ids.append(identity)
   operation_links.append({"operationId":op["operationId"],"method":op["method"],"path":op["path"],"componentRefs":op_components,"testRefs":test_ids,"requirementRefs":op["requirementRefs"],"security":op["security"]})
  components=[]
  for item in grouped.values():
   item["operationRefs"]=sorted(set(item["operationRefs"]));item["requirementRefs"]=sorted(set(item["requirementRefs"]));item["symbols"]=sorted(item["symbols"],key=lambda x:(x["operationId"],x["kind"]));components.append(item)
- controllers={op["operationId"]:next((i for i in op["componentRefs"] if "controller" in i),None) for op in operation_links};services={op["operationId"]:next((i for i in op["componentRefs"] if "service" in i),None) for op in operation_links}
+ roles={i["componentId"]:i["role"] for i in components};services={op["operationId"]:next((i for i in op["componentRefs"] if roles.get(i)=="APPLICATION_SERVICE"),None) for op in operation_links}
  for item in components:
   if item["role"]=="CONTROLLER":item["dependsOn"]=sorted({services[o] for o in item["operationRefs"] if services.get(o)})
  coverage=[]
  for requirement in sorted({r for op in operation_links for r in op["requirementRefs"]}):coverage.append({"requirementRef":requirement,"operationRefs":[op["operationId"] for op in operation_links if requirement in op["requirementRefs"]],"implementationRefs":sorted({c["componentId"] for c in components if requirement in c["requirementRefs"] and c["role"]!="TEST"}),"testRefs":sorted({c["componentId"] for c in components if requirement in c["requirementRefs"] and c["role"]=="TEST"})})
+ for item in coverage:
+  if not item["implementationRefs"] or not item["testRefs"]:conflicts.append({"code":"REQUIREMENT_COVERAGE_INCOMPLETE","subject":item["requirementRef"],"message":"요구사항의 구현 또는 자동화 테스트 연결이 비어 있습니다.","source":"PLAN_CORE"})
  path_owners={}
  for component in components:path_owners.setdefault(component["target"]["path"],[]).append(component["componentId"])
  for path,owners in path_owners.items():
   if len(owners)>1:conflicts.append({"code":"TARGET_PATH_OWNERSHIP_COLLISION","subject":path,"message":"서로 다른 컴포넌트가 같은 파일 경로를 소유하려 합니다.","source":"PLAN_CORE"})
  status="BLOCKED" if conflicts or unknowns else "REVIEW_READY";renderer=capability.get("codeDryRunRenderer","NOT_IMPLEMENTED")
  plan_id=re.sub(r"[^a-z0-9]+","-",f"{mapping['featureId']}-{mapping['contractId']}-implementation-v2".lower()).strip("-")
- return {"implementationPlanVersion":2,"status":status,"planId":plan_id,"featureId":mapping["featureId"],"contractId":mapping["contractId"],"target":mapping["target"],"inputs":{"springMapping":mapping_ref,"springMappingApproval":approval_ref,"capabilityCatalog":{"path":"HARNESS:.agents/skills/spring-project-start/references/spring-implementation-capabilities-v2.json","sha256":hashlib.sha256(CATALOG.read_bytes()).hexdigest()}},"capability":{"adapterId":capability["id"],"planning":capability["planning"],"codeDryRunRenderer":renderer},"scope":{"persistence":"NOT_USED","externalClients":"NOT_USED","buildChanges":"NONE_PLANNED"},"operationLinks":operation_links,"components":sorted(components,key=lambda x:x["componentId"]),"coverage":coverage,"conflicts":conflicts,"unknowns":unknowns,"summary":{"operations":len(operation_links),"components":len(components),"create":sum(i["disposition"]=="CREATE" for i in components),"extend":sum(i["disposition"]=="EXTEND" for i in components),"reuse":sum(i["disposition"]=="REUSE" for i in components),"tests":sum(i["role"]=="TEST" for i in components)},"advancement":{"implementationPlanApproval":status=="REVIEW_READY","codeDryRun":False,"reason":"v2 code dry-run renderer is not implemented" if renderer=="NOT_IMPLEMENTED" else "separate approval required"},"effects":{"sourceChanged":False,"testsExecuted":False,"gitCommitOrPush":"NOT_RUN"}}
+ return {"implementationPlanVersion":2,"status":status,"planId":plan_id,"featureId":mapping["featureId"],"contractId":mapping["contractId"],"target":mapping["target"],"inputs":{"springMapping":mapping_ref,"springMappingApproval":approval_ref,"capabilityCatalog":{"path":"HARNESS:.agents/skills/spring-project-start/references/spring-implementation-capabilities-v2.json","sha256":hashlib.sha256(CATALOG.read_bytes()).hexdigest()}},"capability":{"adapterId":capability["id"],"planning":capability["planning"],"codeDryRunRenderer":renderer},"scope":{"security":"UNSUPPORTED" if secured_operations else "NOT_USED","persistence":"NOT_USED","externalClients":"NOT_USED","buildChanges":"NONE_PLANNED"},"operationLinks":operation_links,"components":sorted(components,key=lambda x:x["componentId"]),"coverage":coverage,"conflicts":conflicts,"unknowns":unknowns,"summary":{"operations":len(operation_links),"components":len(components),"create":sum(i["disposition"]=="CREATE" for i in components),"extend":sum(i["disposition"]=="EXTEND" for i in components),"reuse":sum(i["disposition"]=="REUSE" for i in components),"tests":sum(i["role"]=="TEST" for i in components)},"advancement":{"implementationPlanApproval":status=="REVIEW_READY","codeDryRun":False,"reason":"v2 code dry-run renderer is not implemented" if renderer=="NOT_IMPLEMENTED" else "separate approval required"},"effects":{"sourceChanged":False,"testsExecuted":False,"gitCommitOrPush":"NOT_RUN"}}
 def validate(plan:dict,root:Path,verify_approval:bool=True)->list[str]:
  required={"implementationPlanVersion","status","planId","featureId","contractId","target","inputs","capability","scope","operationLinks","components","coverage","conflicts","unknowns","summary","advancement","effects"}
  if set(plan)!=required or plan.get("implementationPlanVersion")!=2 or not ID.fullmatch(plan["planId"]):raise ValueError("implementation plan v2 identity is invalid")
@@ -58,7 +81,7 @@ def validate(plan:dict,root:Path,verify_approval:bool=True)->list[str]:
  if not blockers and verify_approval:
   receipt=validate_mapping_approval(root,root/plan["inputs"]["springMappingApproval"]["path"])
   if receipt["mapping"]!=plan["inputs"]["springMapping"]:blockers.append("mapping approval does not authorize this mapping")
- ids=[i["componentId"] for i in plan["components"]];paths=[i["target"]["path"] for i in plan["components"]]
+ ids=[i["componentId"] for i in plan["components"]]
  if len(ids)!=len(set(ids)):raise ValueError("component IDs must be unique")
  idset=set(ids)
  for item in plan["components"]:
@@ -73,4 +96,5 @@ def validate(plan:dict,root:Path,verify_approval:bool=True)->list[str]:
  if any(not i["implementationRefs"] or not i["testRefs"] for i in plan["coverage"]):blockers.append("requirement coverage is incomplete")
  mapping=load_object(root/plan["inputs"]["springMapping"]["path"]);expected=build(mapping,plan["inputs"]["springMapping"],plan["inputs"]["springMappingApproval"],root)
  if expected!=plan:blockers.append("plan does not match deterministic reconstruction")
+ if plan["status"]!="BLOCKED" and blockers:blockers.append("plan status does not reflect validation blockers")
  return blockers

@@ -7,7 +7,7 @@
   "target": {"root": "UNKNOWN", "projectId": "UNKNOWN", "modulePath": ".", "packageName": "UNKNOWN", "language": "JAVA"},
   "inputs": {"springMapping": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "springMappingApproval": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "capabilityCatalog": {"path": "HARNESS:.agents/skills/spring-project-start/references/spring-implementation-capabilities-v2.json", "sha256": "UNKNOWN"}},
   "capability": {"adapterId": "NONE", "planning": "UNSUPPORTED", "codeDryRunRenderer": "NOT_IMPLEMENTED"},
-  "scope": {"persistence": "NOT_USED", "externalClients": "NOT_USED", "buildChanges": "NONE_PLANNED"},
+  "scope": {"security": "NOT_USED", "persistence": "NOT_USED", "externalClients": "NOT_USED", "buildChanges": "NONE_PLANNED"},
   "operationLinks": [], "components": [], "coverage": [], "conflicts": [], "unknowns": [],
   "summary": {"operations": 0, "components": 0, "create": 0, "extend": 0, "reuse": 0, "tests": 0},
   "advancement": {"implementationPlanApproval": false, "codeDryRun": false, "reason": "v2 code dry-run renderer is not implemented"},

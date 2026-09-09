@@ -6,7 +6,7 @@ from pathlib import Path
 from discover_http_api_evidence import atomic_create
 from http_api_spring_mapping import reference
 from render_spring_implementation_plan_v2 import render
-from spring_implementation_plan_v2 import build,encoded,validate
+from spring_implementation_plan_v2 import build,encoded,plans_for_mapping,validate
 from validate_feature_specs import load_object
 from validate_http_api_spring_mapping_approval import validate_approval
 def main()->int:
@@ -14,7 +14,9 @@ def main()->int:
  try:
   root=a.target.resolve(strict=True);approval=a.mapping_approval.resolve(strict=True);out=a.output.resolve();view=a.view.resolve()
   if out.exists() or view.exists() or view!=out.with_suffix(".md") or root not in out.parents or out.relative_to(root).parts[0]!="docs":raise ValueError("implementation plan v2 outputs are unsafe or occupied")
-  receipt=validate_approval(root,approval);mapping_path=root/receipt["mapping"]["path"];mapping=load_object(mapping_path);plan=build(mapping,reference(mapping_path,root),reference(approval,root),root);blockers=validate(plan,root);payload=encoded(plan);markdown=render(plan,blockers).encode();out.parent.mkdir(parents=True,exist_ok=True)
+  receipt=validate_approval(root,approval);mapping_path=root/receipt["mapping"]["path"];mapping_ref=reference(mapping_path,root)
+  if plans_for_mapping(root,mapping_ref):raise ValueError("this approved mapping already has an implementation plan v2")
+  mapping=load_object(mapping_path);plan=build(mapping,mapping_ref,reference(approval,root),root);blockers=validate(plan,root);payload=encoded(plan);markdown=render(plan,blockers).encode();out.parent.mkdir(parents=True,exist_ok=True)
   for path,content in ((out,payload),(view,markdown)):atomic_create(content,path);written.append((path,content))
  except (OSError,ValueError,KeyError,TypeError) as e:
   for path,content in reversed(written):

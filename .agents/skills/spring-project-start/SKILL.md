@@ -293,7 +293,19 @@ ownership, and implementation/test coverage. The first adapter is explicitly
 `validate_spring_implementation_plan_v2.py`. Until a matching v2 code renderer
 exists, `codeDryRunRenderer: NOT_IMPLEMENTED` and `codeDryRun: false` are
 mandatory even for a `REVIEW_READY` plan. Do not route v2 into the legacy v1
-code dry-run.
+code dry-run. The first adapter supports only operations that do not require
+security implementation; a JWT, session, OAuth2, or otherwise secured operation
+remains a visible capability blocker. A security-enabled project may still plan
+an explicitly public operation because that slice does not modify security.
+The plan view separates structural validity from advancement readiness and shows
+approve, revise upstream mapping in natural language, and cancel actions. Record
+approval with `record_spring_implementation_plan_v2_approval.py` and recheck its
+exact immutable receipt with
+`validate_spring_implementation_plan_v2_approval.py`. Approval still does not
+authorize code dry-run until a matching renderer exists. Cancel with
+`cancel_spring_implementation_plan_v2.py`; preserve all plan evidence. Plan
+changes are made through a new Spring-mapping revision and a new deterministic
+plan, rather than by adding a second conflicting edit surface to the plan.
 
 After the selected CREATE feature has approved HTTP API and PostgreSQL physical
 contracts plus a passing migration/schema-fingerprint report, read

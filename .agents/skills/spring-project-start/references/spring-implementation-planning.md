@@ -50,3 +50,13 @@ HTTP operations without persistence, external clients, or build changes. Its
 code renderer is intentionally `NOT_IMPLEMENTED`, so a reviewable plan cannot
 claim code-dry-run readiness. Plan v1 remains available only for its existing
 narrow Java/JPA POST workflow.
+
+The first v2 adapter does not implement secured operations. It must block JWT,
+session, OAuth2, and other secured operation mappings until a security-aware
+adapter owns their components and verification, while allowing public
+operations in a project that happens to have security elsewhere. Shared
+components may merge only when role, path, type, ownership, and disposition
+agree. Validation blockers and advancement readiness are separate user-visible
+results. Exact plan approval and cancellation are immutable receipts; approval
+never claims code-dry-run authorization. Revise implementation structure at the
+approved Spring-mapping boundary, then derive one new deterministic plan.

@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import json,subprocess,sys,tempfile,unittest
+import contextlib,io,json,subprocess,sys,tempfile,unittest
+from unittest import mock
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent.parent;SCRIPTS=ROOT/".agents/skills/spring-project-start/scripts";sys.path[:0]=[str(SCRIPTS),str(ROOT)]
 from http_api_spring_mapping import build as build_mapping,reference
 from spring_implementation_plan_v2 import build,validate
 from render_spring_implementation_plan_v2 import render
+import cancel_spring_implementation_plan_v2 as cancel_plan
+import record_spring_implementation_plan_v2_approval as approve_plan
+import spring_implementation_plan_v2 as plan_core
+import validate_spring_implementation_plan_v2_approval as validate_plan_approval
 from tests.test_http_api_spring_mapping import feature,profile,api
 class PlanV2Tests(unittest.TestCase):
- def fixture(self,root,document=None,choices=None):
-  subprocess.run(["git","init","-q"],cwd=root,check=True);docs=root/"docs";docs.mkdir();document=document or api();sources={"featureSpec":feature(),"technologyProfile":profile(),"designRoute":{},"httpApiContract":{"contractId":"orders-api","target":{"projectId":"orders"}},"openApi":document};refs={}
+ def fixture(self,root,document=None,choices=None,security="security.none"):
+  subprocess.run(["git","init","-q"],cwd=root,check=True);docs=root/"docs";docs.mkdir();document=document or api();selected_profile=profile(security=security);sources={"featureSpec":feature(),"technologyProfile":selected_profile,"designRoute":{},"httpApiContract":{"contractId":"orders-api","target":{"projectId":"orders"}},"openApi":document};refs={}
   for name,value in sources.items():path=docs/f"{name}.json";path.write_text(json.dumps(value));refs[name]=reference(path,root)
-  mapping=build_mapping(feature(),profile(),document,root,".","com.example",choices or {},"USER_CONFIRMED",refs);mapping_path=docs/"mapping.json";mapping_path.write_text(json.dumps(mapping));approval=docs/"mapping-approval.json";approval.write_text("{}")
+  mapping=build_mapping(feature(),selected_profile,document,root,".","com.example",choices or {},"USER_CONFIRMED",refs);mapping_path=docs/"mapping.json";mapping_path.write_text(json.dumps(mapping));approval=docs/"mapping-approval.json";approval.write_text("{}")
   plan=build(mapping,reference(mapping_path,root),reference(approval,root),root);return plan,mapping_path,approval
  def test_java_mvc_api_only_plan_is_reviewable_but_not_code_ready(self):
   with tempfile.TemporaryDirectory() as d:
@@ -42,4 +47,25 @@ class PlanV2Tests(unittest.TestCase):
    root=Path(d);_,mapping_path,approval=self.fixture(root);mapping=json.loads(mapping_path.read_text());components=[op["components"][1] for op in mapping["operationMappings"]]
    components[1]["plannedPath"]=components[0]["plannedPath"]
    plan=build(mapping,reference(mapping_path,root),reference(approval,root),root);self.assertEqual("BLOCKED",plan["status"]);self.assertTrue(any(i["code"]=="TARGET_PATH_OWNERSHIP_COLLISION" for i in plan["conflicts"]))
+ def test_shared_component_with_mixed_dispositions_is_blocked(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);_,mapping_path,approval=self.fixture(root);mapping=json.loads(mapping_path.read_text());controllers=[next(i for i in op["components"] if i["role"]=="CONTROLLER") for op in mapping["operationMappings"]]
+   for item in controllers:item.update({"plannedPath":"src/main/java/com/example/api/OrdersController.java","typeName":"OrdersController"})
+   controllers[0]["disposition"]="REUSE";controllers[1]["disposition"]="EXTEND";plan=build(mapping,reference(mapping_path,root),reference(approval,root),root);self.assertEqual("BLOCKED",plan["status"]);self.assertTrue(any(i["code"]=="SHARED_COMPONENT_DISPOSITION_CONFLICT" for i in plan["conflicts"]))
+ def test_security_profile_is_not_falsely_supported(self):
+  with tempfile.TemporaryDirectory() as d:
+   document=api();document["paths"]["/orders"]["post"]["security"]=[{"bearerAuth":[]}];plan,_,_=self.fixture(Path(d),document,security="security.token");self.assertEqual("BLOCKED",plan["status"]);self.assertEqual("UNSUPPORTED",plan["scope"]["security"]);self.assertTrue(any(i["code"]=="SECURITY_CAPABILITY_UNAVAILABLE" for i in plan["conflicts"]))
+ def test_public_operation_in_secured_project_stays_api_only(self):
+  with tempfile.TemporaryDirectory() as d:
+   plan,_,_=self.fixture(Path(d),security="security.token");self.assertEqual("REVIEW_READY",plan["status"]);self.assertEqual("NOT_USED",plan["scope"]["security"])
+ def test_exact_plan_approval_never_authorizes_code_and_cancel_invalidates_it(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);plan,mapping_path,_=self.fixture(root);plan_path=root/"docs/implementation-plan-v2.json";view=plan_path.with_suffix(".md");plan_path.write_text(json.dumps(plan));view.write_text(render(plan,[]));approval=root/"docs/implementation-plan-v2-approval.json";mapping_ref=reference(mapping_path,root)
+   argv=["approve","--plan",str(plan_path),"--view",str(view),"--target",str(root),"--output",str(approval),"--approved-by","user","--approved-at","2026-09-10T00:00:00+09:00"]
+   with mock.patch.object(sys,"argv",argv),mock.patch.object(plan_core,"validate_mapping_approval",return_value={"mapping":mapping_ref}),contextlib.redirect_stdout(io.StringIO()):self.assertEqual(0,approve_plan.main())
+   with mock.patch.object(plan_core,"validate_mapping_approval",return_value={"mapping":mapping_ref}):receipt=validate_plan_approval.validate_approval(root,approval)
+   self.assertFalse(receipt["effects"]["codeDryRunAuthorized"])
+   cancellation=root/"docs/implementation-plan-v2-cancellation.json";argv=["cancel","--plan",str(plan_path),"--target",str(root),"--output",str(cancellation),"--reason","구현 방향 재검토"]
+   with mock.patch.object(sys,"argv",argv),mock.patch.object(plan_core,"validate_mapping_approval",return_value={"mapping":mapping_ref}),contextlib.redirect_stdout(io.StringIO()):self.assertEqual(0,cancel_plan.main())
+   with mock.patch.object(plan_core,"validate_mapping_approval",return_value={"mapping":mapping_ref}),self.assertRaisesRegex(ValueError,"cancelled"):validate_plan_approval.validate_approval(root,approval)
 if __name__=="__main__":unittest.main()

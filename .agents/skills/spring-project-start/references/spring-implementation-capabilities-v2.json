@@ -6,6 +6,8 @@
       "language": "JAVA",
       "webStack": "SPRING_MVC",
       "architectures": ["LAYERED", "HEXAGONAL", "CLEAN", "MODULAR", "MICROSERVICE", "CUSTOM"],
+      "securityProfiles": ["security.none"],
+      "securedOperations": false,
       "persistence": "NOT_USED",
       "planning": "SUPPORTED",
       "codeDryRunRenderer": "NOT_IMPLEMENTED"

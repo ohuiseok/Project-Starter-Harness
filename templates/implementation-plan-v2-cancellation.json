@@ -1,0 +1,7 @@
+{
+  "springImplementationPlanV2CancellationVersion": 1,
+  "state": "CANCELLED",
+  "cancelledPlan": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "reason": "UNKNOWN",
+  "effects": {"planDeleted": false, "codeDryRunAuthorized": false, "sourceChanged": false, "gitCommitOrPush": "NOT_RUN"}
+}
