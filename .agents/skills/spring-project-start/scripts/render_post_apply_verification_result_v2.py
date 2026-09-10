@@ -7,15 +7,15 @@ from post_apply_verification_v2 import validate_approval,validate_plan
 from spring_code_apply_v2 import MANAGED,sha
 from validate_feature_specs import load_object
 def validate(value:dict,path:Path,root:Path)->None:
- required={"postApplyVerificationReportV2Version","state","category","verificationLevel","plan","approval","applyResult","target","preRunSnapshotSha256","postRunSnapshotSha256","command","result","log","startedAt","finishedAt","readyForMilestoneCompletion","milestoneCompletionAuthorized"}
+ required={"postApplyVerificationReportV2Version","attemptId","state","category","failureAttribution","verificationLevel","plan","approval","applyResult","target","preRunSnapshotSha256","postRunSnapshotSha256","command","result","log","startedAt","finishedAt","readyForMilestoneCompletion","milestoneCompletionAuthorized"}
  if not isinstance(value,dict) or set(value)!=required or value["postApplyVerificationReportV2Version"]!=1 or value["state"] not in {"VERIFIED","FAILED","UNKNOWN"} or value["verificationLevel"]!="APPLIED_TEST_ISOLATED" or Path(value["target"]).resolve()!=root:raise ValueError("post-apply verification v2 result is invalid")
  for key in ("plan","approval","applyResult"):
   if reference(root/value[key]["path"],root)!=value[key]:raise ValueError(f"verification {key} evidence changed")
  plan_path=root/value["plan"]["path"];plan=load_object(plan_path);validate_plan(plan,plan_path,root,False);validate_approval(root,root/value["approval"]["path"],plan_path,False)
- if value["applyResult"]!=plan["applyResult"] or value["command"]!=plan["command"] or value["preRunSnapshotSha256"]!=plan["preRunSnapshot"]["sha256"] or value["postRunSnapshotSha256"]!=plan["preRunSnapshot"]["sha256"]:raise ValueError("verification result does not match its plan and snapshots")
+ if value["attemptId"]!=plan["attemptId"] or value["applyResult"]!=plan["applyResult"] or value["command"]!=plan["command"] or value["preRunSnapshotSha256"]!=plan["preRunSnapshot"]["sha256"] or value["postRunSnapshotSha256"]!=plan["preRunSnapshot"]["sha256"]:raise ValueError("verification result does not match its plan and snapshots")
  log=root/value["log"]["path"]
- expected_prefix=f"{MANAGED}/logs/post-apply-v2/"
- if not value["log"]["path"].startswith(expected_prefix):raise ValueError("verification log path is unsafe")
+ expected=f"{MANAGED}/logs/post-apply-v2/{value['attemptId']}.log"
+ if value["log"]["path"]!=expected:raise ValueError("verification log path is unsafe")
  if sha(log)!=value["log"]["sha256"] or log.stat().st_size!=value["log"]["sizeBytes"]:raise ValueError("verification log changed")
  if value["readyForMilestoneCompletion"] is not (value["state"]=="VERIFIED") or value["milestoneCompletionAuthorized"] is not False:raise ValueError("verification completion boundary is invalid")
  if path.is_symlink() or root not in path.resolve().parents:raise ValueError("verification result must be target-owned")

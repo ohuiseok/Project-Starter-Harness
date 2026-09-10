@@ -10,7 +10,7 @@ def main()->int:
  try:
   root=a.target.resolve(strict=True);result=a.apply_result.resolve(strict=True);output=a.output.resolve();view=a.view.resolve()
   if output.exists() or view.exists() or root not in output.parents or view!=output.with_suffix(".md") or output.relative_to(root).parts[0]!="docs":raise ValueError("verification review outputs are unsafe or occupied")
-  plan=build_plan(root,result,a.timeout_seconds);data=(json.dumps(plan,ensure_ascii=False,indent=2)+"\n").encode();markdown=render_plan(plan,load_object(result)).encode();output.parent.mkdir(parents=True,exist_ok=True)
+  plan=build_plan(root,result,a.timeout_seconds,output.relative_to(root).as_posix());data=(json.dumps(plan,ensure_ascii=False,indent=2)+"\n").encode();markdown=render_plan(plan,load_object(result)).encode();output.parent.mkdir(parents=True,exist_ok=True)
   for path,payload in ((output,data),(view,markdown)):atomic_create(payload,path);written.append((path,payload))
  except (OSError,ValueError,KeyError,TypeError) as e:
   for path,payload in reversed(written):

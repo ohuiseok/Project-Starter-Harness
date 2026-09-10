@@ -720,7 +720,7 @@ expect_out "post-apply verification: all focused scenarios ran" "Ran 8 tests"
 OUT="$(python3 "$HARNESS_ROOT/tests/test_post_apply_verification_v2.py" 2>&1)"
 CODE=$?
 expect_code "post-apply verification v2: focused regression suite passes" 0
-expect_out "post-apply verification v2: all focused scenarios ran" "Ran 7 tests"
+expect_out "post-apply verification v2: all focused scenarios ran" "Ran 9 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_continuation_route.py" 2>&1)"
 CODE=$?

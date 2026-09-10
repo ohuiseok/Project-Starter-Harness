@@ -467,6 +467,11 @@ the journal-owned process/workspace and never reruns the command. Render the
 immutable result with `render_post_apply_verification_result_v2.py`. Even a
 `VERIFIED` result only prepares milestone completion: updating completion and
 progress remains a separate approval boundary.
+Every retry must use a new plan path and therefore a new `attemptId` and exact
+approval. Do not reuse consumed approval. Treat relevant input symlinks as
+blockers, retain infrastructure failure receipts, and recover only process
+groups and temporary workspaces whose PID start evidence and ownership marker
+match the journal.
 
 After progress exists, read `references/natural-language-continuation.md` for
 requests such as “next”, a feature description, revision, bug fix, technology

@@ -49,3 +49,11 @@ group, TERM grace period, and KILL fallback; an interrupted journal requires
 recovery and recovery never silently reexecutes the command. A verified report
 sets `readyForMilestoneCompletion`, but keeps `milestoneCompletionAuthorized`
 false so progress mutation still requires a separate review and approval.
+
+Each v2 plan path derives a distinct `attemptId`. Approval is consumed before
+the attempt allocates or runs its sandbox and cannot be reused; retries require
+a new plan, view, and approval, preserving every prior result and log. Relevant
+input symlinks are approval blockers. Runner infrastructure errors create a
+separate immutable failure receipt when approval was consumed. Recovery checks
+PID start ticks and a workspace ownership marker, terminates the owned process
+group with TERM then KILL, and never deletes an unproven temporary directory.

@@ -26,6 +26,17 @@ class PostApplyV2Tests(unittest.TestCase):
    root=Path(d);result=self.fixture(root);(root/"gradlew").chmod(0o644)
    with mock.patch.object(core,"validate_apply_result"),mock.patch.object(core,"reference",return_value={"path":"docs/apply.json","sha256":"a"*64}),mock.patch.object(core,"cache_evidence",return_value={"kind":"GRADLE","status":"READY"}),mock.patch.object(core,"git_state",return_value={}):plan=core.build_plan(root,result)
    self.assertEqual("WRAPPER_NOT_EXECUTABLE",plan["blockers"][0]["code"]);self.assertFalse(plan["readyForApproval"])
+ def test_symlink_input_is_blocked_before_approval(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);result=self.fixture(root);(root/"src/main/A.java").unlink();(root/"src/main/A.java").symlink_to("/tmp/outside")
+   with mock.patch.object(core,"validate_apply_result"),mock.patch.object(core,"reference",return_value={"path":"docs/apply.json","sha256":"a"*64}),mock.patch.object(core,"cache_evidence",return_value={"kind":"GRADLE","status":"READY"}),mock.patch.object(core,"git_state",return_value={}):plan=core.build_plan(root,result)
+   self.assertIn("UNSAFE_SYMLINK",{i["code"] for i in plan["blockers"]});self.assertFalse(plan["readyForApproval"])
+ def test_plan_path_creates_distinct_attempt_ids(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);result=self.fixture(root)
+   common=(mock.patch.object(core,"validate_apply_result"),mock.patch.object(core,"reference",return_value={"path":"docs/apply.json","sha256":"a"*64}),mock.patch.object(core,"cache_evidence",return_value={"kind":"GRADLE","status":"READY"}),mock.patch.object(core,"git_state",return_value={}))
+   with common[0],common[1],common[2],common[3]:first=core.build_plan(root,result,attempt_seed="docs/attempt-1.json");second=core.build_plan(root,result,attempt_seed="docs/attempt-2.json")
+   self.assertNotEqual(first["attemptId"],second["attemptId"])
  def test_failure_categories_distinguish_test_environment_timeout_and_secret(self):
   self.assertEqual(("FAILED","TEST_OR_BUILD_FAILURE"),runner.classify(1,"tests failed",False,False));self.assertEqual(("UNKNOWN","OFFLINE_DEPENDENCY_OR_INFRASTRUCTURE"),runner.classify(1,"Could not resolve",False,False));self.assertEqual(("UNKNOWN","TIMEOUT"),runner.classify(124,"",True,False));self.assertEqual(("UNKNOWN","SENSITIVE_OUTPUT"),runner.classify(0,"",False,True))
  def test_result_view_keeps_completion_as_separate_approval(self):

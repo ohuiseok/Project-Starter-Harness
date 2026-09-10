@@ -11,32 +11,36 @@ from validate_feature_specs import load_object
 JOURNAL=f"{MANAGED}/transactions/post-apply-v2-active.json"
 INPUT_NAMES={"build.gradle","build.gradle.kts","settings.gradle","settings.gradle.kts","gradle.properties","pom.xml","gradlew","mvnw"}
 def manifest(root:Path)->dict:
- files={}
+ files={};unsafe=[]
  for path in sorted(root.rglob("*")):
-  if path.is_symlink():continue
   rel=path.relative_to(root).as_posix()
-  if path.is_file() and (rel.startswith("src/") or path.name in INPUT_NAMES or rel==BASELINE):files[rel]={"sha256":sha(path),"mode":path.stat().st_mode&0o777}
- digest=hashlib.sha256(json.dumps(files,sort_keys=True,separators=(",",":")).encode()).hexdigest()
- return {"sha256":digest,"files":files}
+  relevant=rel.startswith("src/") or path.name in INPUT_NAMES or rel==BASELINE
+  if path.is_symlink():
+   if relevant:unsafe.append(rel)
+   continue
+  if path.is_file() and relevant:files[rel]={"sha256":sha(path),"mode":path.stat().st_mode&0o777}
+ evidence={"files":files,"unsafeSymlinks":unsafe};digest=hashlib.sha256(json.dumps(evidence,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+ return {"sha256":digest,**evidence}
 def command(root:Path)->dict:
  if (root/"gradlew").is_file():return {"executable":"./gradlew","arguments":["--offline","--no-daemon","test"],"workingDirectory":"."}
  if (root/"mvnw").is_file():return {"executable":"./mvnw","arguments":["-o","test"],"workingDirectory":"."}
  raise ValueError("target has no Gradle or Maven wrapper")
 def cache_evidence(root:Path)->dict:return cache("GRADLE" if (root/"gradlew").is_file() else "MAVEN")
-def build_plan(root:Path,result_path:Path,timeout:int=600)->dict:
+def build_plan(root:Path,result_path:Path,timeout:int=600,attempt_seed:str="default")->dict:
  result=load_object(result_path);validate_apply_result(result,result_path,root);snapshot=manifest(root);cmd=command(root);dependency=cache_evidence(root);paths=set(snapshot["files"]);blockers=[]
  if dependency["status"]!="READY":blockers.append({"code":"DEPENDENCY_CACHE_MISSING","subject":dependency["kind"]})
  if not os.access(root/cmd["executable"],os.X_OK):blockers.append({"code":"WRAPPER_NOT_EXECUTABLE","subject":cmd["executable"]})
- return {"postApplyVerificationPlanV2Version":1,"state":"PLAN_READY" if not blockers else "BLOCKED","target":str(root),"applyResult":reference(result_path,root),"applyTransactionId":result["transactionId"],"preRunSnapshot":snapshot,"git":git_state(root,paths),"command":cmd,"dependencyCache":dependency,"allowedOutputs":[".gradle/","build/","target/"],"limits":{"timeoutSeconds":timeout,"maxLogBytes":1000000,"termGraceSeconds":5},"effects":{"network":"DISABLED","dockerSocket":"HIDDEN","database":"NOT_STARTED","ports":"NOT_PUBLISHED","targetInputs":"READ_ONLY_TEMP_COPY","logs":f"{MANAGED}/logs/post-apply-v2/"},"blockers":blockers,"readyForApproval":not blockers}
+ blockers.extend({"code":"UNSAFE_SYMLINK","subject":i} for i in snapshot["unsafeSymlinks"]);attempt=hashlib.sha256((reference(result_path,root)["sha256"]+"\0"+attempt_seed).encode()).hexdigest()[:24]
+ return {"postApplyVerificationPlanV2Version":1,"state":"PLAN_READY" if not blockers else "BLOCKED","attemptId":"post-apply-v2-"+attempt,"target":str(root),"applyResult":reference(result_path,root),"applyTransactionId":result["transactionId"],"preRunSnapshot":snapshot,"git":git_state(root,paths),"command":cmd,"dependencyCache":dependency,"allowedOutputs":[".gradle/","build/","target/"],"limits":{"timeoutSeconds":timeout,"maxLogBytes":1000000,"termGraceSeconds":5},"effects":{"network":"DISABLED","dockerSocket":"HIDDEN","database":"NOT_STARTED","ports":"NOT_PUBLISHED","targetInputs":"READ_ONLY_TEMP_COPY","logs":f"{MANAGED}/logs/post-apply-v2/"},"blockers":blockers,"readyForApproval":not blockers}
 def validate_plan(value:dict,path:Path,root:Path,current:bool=True)->dict:
- required={"postApplyVerificationPlanV2Version","state","target","applyResult","applyTransactionId","preRunSnapshot","git","command","dependencyCache","allowedOutputs","limits","effects","blockers","readyForApproval"}
+ required={"postApplyVerificationPlanV2Version","state","attemptId","target","applyResult","applyTransactionId","preRunSnapshot","git","command","dependencyCache","allowedOutputs","limits","effects","blockers","readyForApproval"}
  if not isinstance(value,dict) or set(value)!=required or value["postApplyVerificationPlanV2Version"]!=1 or Path(value["target"]).resolve()!=root:raise ValueError("post-apply verification v2 plan is invalid")
  result_path=root/value["applyResult"]["path"]
  if reference(result_path,root)!=value["applyResult"]:raise ValueError("apply result changed")
  limits=value["limits"]
  if set(limits)!={"timeoutSeconds","maxLogBytes","termGraceSeconds"} or not 30<=limits["timeoutSeconds"]<=1800 or not 10000<=limits["maxLogBytes"]<=5000000 or not 1<=limits["termGraceSeconds"]<=30:raise ValueError("verification limits are invalid")
  if current:
-  expected=build_plan(root,result_path,limits["timeoutSeconds"]);expected["limits"]=limits
+  expected=build_plan(root,result_path,limits["timeoutSeconds"],path.relative_to(root).as_posix());expected["limits"]=limits
   if value!=expected:raise ValueError("post-apply verification v2 plan is stale")
  if path.is_symlink() or root not in path.resolve().parents:raise ValueError("verification plan must be target-owned")
  return load_object(result_path)
