@@ -293,6 +293,14 @@ for required in \
   "$SKILL_ROOT/scripts/recover_spring_code_verification_v2.py" \
   "$SKILL_ROOT/scripts/render_spring_code_verification_report_v2.py" \
   "$SKILL_ROOT/scripts/validate_spring_code_verification_apply_readiness_v2.py" \
+  "$SKILL_ROOT/scripts/spring_code_apply_v2.py" \
+  "$SKILL_ROOT/scripts/prepare_spring_code_apply_review_v2.py" \
+  "$SKILL_ROOT/scripts/validate_spring_code_apply_review_v2.py" \
+  "$SKILL_ROOT/scripts/record_spring_code_apply_approval_v2.py" \
+  "$SKILL_ROOT/scripts/validate_spring_code_apply_approval_v2.py" \
+  "$SKILL_ROOT/scripts/apply_approved_spring_code_v2.py" \
+  "$SKILL_ROOT/scripts/recover_spring_code_apply_v2.py" \
+  "$SKILL_ROOT/scripts/render_spring_code_apply_result_v2.py" \
   "$SKILL_ROOT/scripts/prepare_spring_implementation_plan_v2.py" \
   "$SKILL_ROOT/scripts/render_spring_implementation_plan_v2.py" \
   "$SKILL_ROOT/scripts/validate_spring_implementation_plan_v2.py" \
@@ -401,6 +409,9 @@ for required in \
   "$HARNESS_ROOT/templates/spring-code-verification-report-v2.json" \
   "$HARNESS_ROOT/templates/spring-code-verification-approval.json" \
   "$HARNESS_ROOT/templates/spring-code-apply-approval.json" \
+  "$HARNESS_ROOT/templates/spring-code-apply-review-v2.json" \
+  "$HARNESS_ROOT/templates/spring-code-apply-approval-v2.json" \
+  "$HARNESS_ROOT/templates/spring-code-apply-result-v2.json" \
   "$HARNESS_ROOT/templates/progress.json" \
   "$HARNESS_ROOT/templates/milestone-completion.json" \
   "$HARNESS_ROOT/templates/post-apply-verification-plan.json" \
@@ -681,6 +692,11 @@ OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_code_apply.py" 2>&1)"
 CODE=$?
 expect_code "Spring code apply: focused regression suite passes" 0
 expect_out "Spring code apply: all focused scenarios ran" "Ran 8 tests"
+
+OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_code_apply_v2.py" 2>&1)"
+CODE=$?
+expect_code "Spring code apply v2: focused regression suite passes" 0
+expect_out "Spring code apply v2: all focused scenarios ran" "Ran 6 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_milestone_completion.py" 2>&1)"
 CODE=$?

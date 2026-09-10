@@ -1,0 +1,21 @@
+{
+  "springCodeApplyReviewV2Version": 1,
+  "state": "REVIEW_READY",
+  "transactionId": "spring-code-v2-<derived-id>",
+  "target": "<canonical-target>",
+  "verification": {"path": "docs/<report>.json", "sha256": "<sha256>"},
+  "dryRun": {"path": "docs/<dry-run>.json", "sha256": "<sha256>"},
+  "git": {},
+  "baseline": {},
+  "fileActions": {"creates": [], "reuses": [], "updates": [], "deletes": []},
+  "parentDirectories": [],
+  "filesystem": {},
+  "backup": {},
+  "journal": {},
+  "result": {"path": "docs/spring-code-apply-result-v2.json"},
+  "desiredBaseline": {},
+  "warnings": [],
+  "blockers": [],
+  "effects": {},
+  "readyForApproval": true
+}

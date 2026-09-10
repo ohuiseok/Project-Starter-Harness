@@ -611,6 +611,29 @@ report unless that replacement is in the approved milestone.
 
 ## Approved Apply
 
+For v2 Spring code artifacts, use the v2 review and approval workflow. Do not
+apply directly from a dry run or treat isolated verification approval as file
+approval:
+
+```bash
+python3 .agents/skills/spring-project-start/scripts/prepare_spring_code_apply_review_v2.py \
+  --verification-report <target>/docs/spring-code-verification-report-v2.json \
+  --target <target> --output <target>/docs/spring-code-apply-review-v2.json \
+  --view <target>/docs/spring-code-apply-review-v2.md \
+  --result docs/spring-code-apply-result-v2.json
+
+python3 .agents/skills/spring-project-start/scripts/apply_approved_spring_code_v2.py \
+  --review <target>/docs/spring-code-apply-review-v2.json \
+  --approval <target>/docs/spring-code-apply-approval-v2.json --target <target>
+```
+
+The v2 path supports exact CREATE and unchanged REUSE only. It revalidates at
+apply time, uses an OS lock, a durable transaction journal, a manifest-checked
+backup, atomic file replacement, verified rollback, and a cumulative baseline
+written last. Run `recover_spring_code_apply_v2.py` for an active transaction.
+`APPLIED_PREVERIFIED` means the approved files were applied; it does not mean
+post-apply tests passed. See `references/spring-code-apply.md`.
+
 After the user reviews a conflict-free report, record explicit approval with
 the exact report SHA-256 using `templates/generation-approval.json`. Then apply
 the same rendered result:

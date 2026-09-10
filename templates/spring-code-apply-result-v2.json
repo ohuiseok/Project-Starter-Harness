@@ -1,0 +1,16 @@
+{
+  "springCodeApplyResultV2Version": 1,
+  "state": "APPLIED_PREVERIFIED",
+  "transactionId": "spring-code-v2-<derived-id>",
+  "review": {},
+  "approval": {},
+  "verification": {},
+  "target": "<canonical-target>",
+  "createsApplied": [],
+  "reusesUnchanged": [],
+  "baseline": {},
+  "backup": {},
+  "postApplyVerification": "NOT_RUN",
+  "effects": {},
+  "committedAt": "<ISO-8601 timestamp with timezone>"
+}

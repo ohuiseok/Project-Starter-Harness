@@ -1,0 +1,9 @@
+{
+  "springCodeApplyApprovalV2Version": 1,
+  "state": "APPROVED",
+  "review": {"path": "docs/<review>.json", "sha256": "<sha256>"},
+  "view": {"path": "docs/<review>.md", "sha256": "<sha256>"},
+  "approvedBy": "<user>",
+  "approvedAt": "<ISO-8601 timestamp with timezone>",
+  "effects": {"applyAuthorized": true, "testsExecuted": false, "gitCommitOrPush": "NOT_RUN"}
+}
