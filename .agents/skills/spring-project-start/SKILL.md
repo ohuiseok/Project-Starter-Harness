@@ -457,6 +457,17 @@ as redacted `UNKNOWN`. If the required offline cache is missing, show the
 blocker before approval. Record this common level as
 `APPLIED_TEST_ISOLATED`, not as application runtime verification.
 
+For a v2 apply result, use `prepare_post_apply_verification_v2.py`, show its
+Markdown review, record exact approval with
+`record_post_apply_verification_approval_v2.py`, then run
+`run_post_apply_verification_v2.py`. The plan exposes a structured single
+command, snapshot, output allowlist, timeout, log limit, and excluded effects.
+Use `recover_post_apply_verification_v2.py` after interruption; it cleans only
+the journal-owned process/workspace and never reruns the command. Render the
+immutable result with `render_post_apply_verification_result_v2.py`. Even a
+`VERIFIED` result only prepares milestone completion: updating completion and
+progress remains a separate approval boundary.
+
 After progress exists, read `references/natural-language-continuation.md` for
 requests such as “next”, a feature description, revision, bug fix, technology
 change, deferred resume, or verification retry. Use the continuation route and

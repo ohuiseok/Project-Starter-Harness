@@ -39,3 +39,13 @@ is immutable evidence; retry with a new attempt output rather than overwriting
 it. This common runner records `APPLIED_TEST_ISOLATED`, while DB, application
 startup, HTTP smoke, messaging, and distributed integration checks require
 their own future verification levels.
+
+V2 consumes the committed Spring code apply result directly. It records a
+source/config/baseline manifest and relevant Git snapshot before approval,
+stores the command as an executable plus argument array, and runs exactly one
+offline wrapper test command. Output is stored separately with a size limit,
+hash, truncation flag, and secret/PII redaction status. The runner uses a process
+group, TERM grace period, and KILL fallback; an interrupted journal requires
+recovery and recovery never silently reexecutes the command. A verified report
+sets `readyForMilestoneCompletion`, but keeps `milestoneCompletionAuthorized`
+false so progress mutation still requires a separate review and approval.

@@ -301,6 +301,12 @@ for required in \
   "$SKILL_ROOT/scripts/apply_approved_spring_code_v2.py" \
   "$SKILL_ROOT/scripts/recover_spring_code_apply_v2.py" \
   "$SKILL_ROOT/scripts/render_spring_code_apply_result_v2.py" \
+  "$SKILL_ROOT/scripts/post_apply_verification_v2.py" \
+  "$SKILL_ROOT/scripts/prepare_post_apply_verification_v2.py" \
+  "$SKILL_ROOT/scripts/record_post_apply_verification_approval_v2.py" \
+  "$SKILL_ROOT/scripts/run_post_apply_verification_v2.py" \
+  "$SKILL_ROOT/scripts/recover_post_apply_verification_v2.py" \
+  "$SKILL_ROOT/scripts/render_post_apply_verification_result_v2.py" \
   "$SKILL_ROOT/scripts/prepare_spring_implementation_plan_v2.py" \
   "$SKILL_ROOT/scripts/render_spring_implementation_plan_v2.py" \
   "$SKILL_ROOT/scripts/validate_spring_implementation_plan_v2.py" \
@@ -417,6 +423,9 @@ for required in \
   "$HARNESS_ROOT/templates/post-apply-verification-plan.json" \
   "$HARNESS_ROOT/templates/post-apply-verification-approval.json" \
   "$HARNESS_ROOT/templates/post-apply-verification-report.json" \
+  "$HARNESS_ROOT/templates/post-apply-verification-plan-v2.json" \
+  "$HARNESS_ROOT/templates/post-apply-verification-approval-v2.json" \
+  "$HARNESS_ROOT/templates/post-apply-verification-report-v2.json" \
   "$HARNESS_ROOT/templates/continuation-route.json" \
   "$HARNESS_ROOT/templates/continuation-route-approval.json" \
   "$HARNESS_ROOT/templates/continuation-handoff.json" \
@@ -707,6 +716,11 @@ OUT="$(python3 "$HARNESS_ROOT/tests/test_post_apply_verification.py" 2>&1)"
 CODE=$?
 expect_code "post-apply verification: focused regression suite passes" 0
 expect_out "post-apply verification: all focused scenarios ran" "Ran 8 tests"
+
+OUT="$(python3 "$HARNESS_ROOT/tests/test_post_apply_verification_v2.py" 2>&1)"
+CODE=$?
+expect_code "post-apply verification v2: focused regression suite passes" 0
+expect_out "post-apply verification v2: all focused scenarios ran" "Ran 7 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_continuation_route.py" 2>&1)"
 CODE=$?
