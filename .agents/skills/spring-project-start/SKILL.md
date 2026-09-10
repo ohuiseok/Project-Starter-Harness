@@ -473,6 +473,17 @@ blockers, retain infrastructure failure receipts, and recover only process
 groups and temporary workspaces whose PID start evidence and ownership marker
 match the journal.
 
+After a v2 applied verification is `VERIFIED`, prepare a separate completion
+review with `prepare_milestone_completion_v2.py`, record exact approval with
+`record_milestone_completion_approval_v2.py`, and apply it with
+`apply_milestone_completion_v2.py`. Completion and verification depth are
+separate fields. The evidence chain must resolve from feature through plan,
+dry run, candidate verification, apply, applied verification, and baseline.
+Canonical completion/progress JSON commits before its derived Markdown; use
+`recover_milestone_completion_v2.py` for `COMMITTED_VIEW_PENDING`. A legacy v1
+progress ledger is a migration blocker and must not be silently converted as
+part of the same completion approval.
+
 After progress exists, read `references/natural-language-continuation.md` for
 requests such as “next”, a feature description, revision, bug fix, technology
 change, deferred resume, or verification retry. Use the continuation route and

@@ -1,0 +1,1 @@
+{"milestoneCompletionApprovalV2Version":1,"state":"APPROVED","completionAttemptId":"completion-v2-<id>","review":{},"view":{},"approvedBy":"<user>","approvedAt":"<time>","effects":{"milestoneCompletion":true,"progressMutation":true,"sourceMutation":false,"testExecution":false,"gitCommitOrPush":"NOT_RUN"}}

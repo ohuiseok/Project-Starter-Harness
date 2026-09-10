@@ -57,3 +57,19 @@ input symlinks are approval blockers. Runner infrastructure errors create a
 separate immutable failure receipt when approval was consumed. Recovery checks
 PID start ticks and a workspace ownership marker, terminates the owned process
 group with TERM then KILL, and never deletes an unproven temporary directory.
+
+## V2 completion and progress
+
+A verified attempt is only an input to a separate completion review. V2 traces
+the exact feature through implementation plan, dry run, candidate verification,
+apply result, applied verification, and cumulative baseline. Completion state
+is `COMPLETED`; verification depth is recorded independently so DB integration,
+startup, HTTP smoke, and deployment may remain `NOT_RUN` without being hidden.
+
+The review binds the current progress SHA-256 and the complete desired progress
+document. Approval is single-use because its completion attempt directory must
+not already exist. Completion JSON and progress JSON are canonical; progress
+Markdown is derived afterward. A Markdown failure leaves
+`COMMITTED_VIEW_PENDING` for exact recovery. Existing v1 progress blocks v2
+completion with `PROGRESS_V1_MIGRATION_REQUIRED`; migration must be a separate
+reviewed milestone rather than being folded into feature completion.
