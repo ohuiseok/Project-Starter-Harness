@@ -1,0 +1,16 @@
+{
+  "springCodeVerificationPlanV2Version": 1,
+  "target": "UNKNOWN",
+  "dryRunApproval": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "dryRun": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "targetContext": {"sha256": "UNKNOWN", "files": {}},
+  "wrapper": {"kind": "GRADLE", "status": "UNKNOWN", "files": [], "command": []},
+  "dependencyCache": {"kind": "GRADLE", "status": "UNKNOWN", "copiedEntries": ["caches", "wrapper"], "credentialSettingsCopied": false},
+  "environment": {"java": {"status": "UNKNOWN", "version": "UNKNOWN"}, "bubblewrap": {"status": "UNKNOWN"}},
+  "javaCompatibility": {"status": "NOT_DECLARED", "requiredMajor": null, "currentMajor": null, "source": "NOT_DECLARED"},
+  "command": [],
+  "effects": {"network": "DISABLED", "dockerSocket": "HIDDEN", "database": "NOT_STARTED", "ports": "NOT_PUBLISHED", "targetSource": "READ_ONLY_AND_MONITORED", "workspace": "TEMPORARY_ALLOWLIST_COPY", "hostEnvironment": "CLEARED", "credentialSettings": "NOT_COPIED"},
+  "limits": {"timeoutSeconds": 600, "maxOutputCharacters": 20000},
+  "blockers": [],
+  "readyForApproval": false
+}

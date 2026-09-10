@@ -48,3 +48,17 @@ secret-like literals, target collisions, candidate limits, and reuse hashes.
 The report binds the exact plan approval, renderability report, embedded source
 and desired v2 manifest. A separate exact dry-run approval authorizes only a
 future isolated verification; it never authorizes source application.
+
+V2 isolated verification starts with an immutable execution plan. It binds the
+exact dry-run approval, target source/build/wrapper context, wrapper command,
+local offline-cache presence, Java evidence, sandbox availability, effects,
+timeout, and output limit. Show its user-first view and obtain a separate exact
+approval. The runner reconstructs embedded candidates in an allowlist-only
+temporary copy, copies dependency artifacts but never Maven/Gradle credential
+settings, clears the environment, hides home and common secret-bearing paths,
+unshares all namespaces, disables networking, and points Docker at a nonexistent
+socket. Timeouts, unavailable offline artifacts, and redacted secret-like output
+are `UNKNOWN`, while ordinary compilation or test failures are `FAILED`.
+Journal `PREPARED` and `RUNNING` before execution; interrupted work must be
+recovered by exact temporary-root and process evidence. A passing report permits
+only a later apply review, not apply itself.

@@ -1,0 +1,9 @@
+{
+  "springCodeVerificationPlanV2ApprovalVersion": 1,
+  "state": "APPROVED",
+  "plan": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "view": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "approvedBy": "UNKNOWN",
+  "approvedAt": "UNKNOWN",
+  "effects": {"verificationExecutionAuthorized": true, "sourceChanged": false, "applyAuthorized": false, "gitCommitOrPush": "NOT_RUN"}
+}

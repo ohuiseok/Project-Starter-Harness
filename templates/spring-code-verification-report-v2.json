@@ -1,0 +1,16 @@
+{
+  "springCodeVerificationReportV2Version": 1,
+  "verificationLevel": "CANDIDATE_TEST_ISOLATED",
+  "plan": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "approval": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "dryRun": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "target": "UNKNOWN",
+  "targetContextSha256": "UNKNOWN",
+  "command": [],
+  "isolation": {},
+  "startedAt": "UNKNOWN",
+  "finishedAt": "UNKNOWN",
+  "result": {"state": "UNKNOWN", "exitCode": 3, "output": "", "redacted": false, "timedOut": false},
+  "targetSourceChanged": false,
+  "readyForApplyReview": false
+}

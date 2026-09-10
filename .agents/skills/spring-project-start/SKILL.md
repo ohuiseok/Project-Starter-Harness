@@ -352,6 +352,24 @@ and the desired v2 baseline while continuing to label coverage
 future isolated v2 verification, not source application. Never send this v2
 report to the legacy v1 verification or apply pipeline.
 
+Next create the v2 isolated execution plan with
+`prepare_spring_code_verification_plan_v2.py`, validate its exact sibling view,
+and record explicit approval with
+`record_spring_code_verification_plan_v2_approval.py`. The plan must prove the
+wrapper, local offline cache presence, Java, operational bubblewrap isolation,
+target context, exact command, effects, timeout, and output bound before it is
+approvable. Run only that approval with `run_spring_code_verification_v2.py`.
+The runner reconstructs embedded candidates in a temporary allowlist copy,
+copies dependency artifacts without credential settings, clears the host
+environment, hides user homes and common secret-bearing paths, disables network
+and Docker access, monitors source/build inputs, bounds output, and records a
+journal. Timeout, missing offline artifacts, and redacted secret-like output are
+`UNKNOWN`; compilation and test failures are `FAILED`. Validate and render the
+result with `render_spring_code_verification_report_v2.py`. A passing result is
+ready only for a later apply review. Recover an interrupted exact process and
+temporary root with `recover_spring_code_verification_v2.py`; never retry while
+its journal remains.
+
 After the selected CREATE feature has approved HTTP API and PostgreSQL physical
 contracts plus a passing migration/schema-fingerprint report, read
 `references/spring-implementation-planning.md`. Create a source-free component
