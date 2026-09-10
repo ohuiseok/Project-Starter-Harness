@@ -12,6 +12,10 @@ import record_spring_implementation_plan_v2_approval as approve_plan
 import spring_implementation_plan_v2 as plan_core
 import validate_spring_implementation_plan_v2_approval as validate_plan_approval
 from validate_spring_implementation_capabilities_v2 import load_and_validate
+from spring_code_renderability_v2 import assess,schema_blockers
+from render_spring_code_renderability_v2 import render as render_readiness
+import prepare_spring_code_renderability_v2 as prepare_readiness
+import validate_spring_code_renderability_v2 as validate_readiness
 from tests.test_http_api_spring_mapping import feature,profile,api
 class PlanV2Tests(unittest.TestCase):
  def fixture(self,root,document=None,choices=None,security="security.none"):
@@ -64,6 +68,23 @@ class PlanV2Tests(unittest.TestCase):
    root=Path(d);plan,mapping_path,approval=self.fixture(root,choices={"architecture":"HEXAGONAL"});test=next(i for i in plan["components"] if i["role"]=="TEST");self.assertIn("adapter/in/web",test["target"]["path"]);path=root/test["target"]["path"];path.parent.mkdir(parents=True,exist_ok=True);path.write_text("existing");mapping=json.loads(mapping_path.read_text());blocked=build(mapping,reference(mapping_path,root),reference(approval,root),root);self.assertTrue(any(i["code"]=="TEST_PATH_OCCUPIED" for i in blocked["conflicts"]))
  def test_component_ids_keep_hash_identity_after_readable_normalization(self):
   self.assertNotEqual(cid("TEST","x/y","Z"),cid("TEST","x-y","Z"));self.assertRegex(cid("TEST","x/y","Z"),r"-[0-9a-f]{10}$")
+ def test_file_actions_evidence_coverage_and_v2_baseline_are_explicit(self):
+  with tempfile.TemporaryDirectory() as d:
+   plan,_,_=self.fixture(Path(d));self.assertTrue(all(i["fileAction"]=="CREATE_FILE" for i in plan["components"]));self.assertTrue(all(i["verificationLevel"]=="API_CONTRACT_ONLY" for i in plan["coverage"]));self.assertEqual(".starter-harness-implementation-v2.json",plan["baseline"]["path"]);self.assertTrue(all("sourceEvidence" in i for i in plan["components"]))
+ def test_renderability_checks_build_schema_update_and_limits_without_effects(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);plan,_,_=self.fixture(root);report=assess(plan,root);self.assertTrue(any(i["code"]=="BUILD_CAPABILITY_MISSING" for i in report["blockers"]));self.assertFalse(report["readyForCodeDryRun"]);self.assertFalse(report["effects"]["sourceChanged"]);self.assertEqual(100,report["limits"]["maxFiles"]);self.assertIn("비즈니스 행동 완료를 의미하지 않음",render_readiness(report))
+   (root/"build.gradle").write_text("implementation 'org.springframework.boot:spring-boot-starter-web'\nimplementation 'org.springframework.boot:spring-boot-starter-validation'\ntestImplementation 'org.springframework.boot:spring-boot-starter-test'");self.assertFalse(any(i["code"]=="BUILD_CAPABILITY_MISSING" for i in assess(plan,root)["blockers"]))
+ def test_unsupported_schema_composition_is_blocked_before_rendering(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);plan,_,_=self.fixture(root);plan["operationLinks"][0]["implementationSemantics"]["requestBody"]={"required":True,"content":{"application/json":{"oneOf":[{"type":"string"},{"type":"integer"}]}}};self.assertTrue(any(i["code"]=="SCHEMA_COMPOSITION_UNSUPPORTED" for i in schema_blockers(plan)))
+ def test_approved_plan_prepares_and_revalidates_atomic_renderability_view(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);plan,_,_=self.fixture(root);plan_path=root/"docs/plan.json";plan_path.write_text(json.dumps(plan));approval=root/"docs/plan-approval.json";approval.write_text("{}");receipt={"implementationPlan":reference(plan_path,root)};report=root/"docs/renderability.json";view=report.with_suffix(".md");argv=["prepare","--plan-approval",str(approval),"--target",str(root),"--output",str(report),"--view",str(view)]
+   with mock.patch.object(sys,"argv",argv),mock.patch.object(prepare_readiness,"validate_approval",return_value=receipt),contextlib.redirect_stdout(io.StringIO()):self.assertEqual(0,prepare_readiness.main())
+   argv=["validate","--report",str(report),"--view",str(view),"--target",str(root)]
+   with mock.patch.object(sys,"argv",argv),mock.patch.object(validate_readiness,"validate_approval",return_value=receipt),contextlib.redirect_stdout(io.StringIO()):self.assertEqual(0,validate_readiness.main())
+   self.assertIn("코드 dry-run 준비 점검",view.read_text());self.assertFalse(json.loads(report.read_text())["effects"]["sourceChanged"])
  def test_capability_catalog_rejects_overlapping_selectors(self):
   with tempfile.TemporaryDirectory() as d:
    source=json.loads((ROOT/".agents/skills/spring-project-start/references/spring-implementation-capabilities-v2.json").read_text());source["adapters"].append(dict(source["adapters"][0],id="JAVA_MVC_DUPLICATE"));path=Path(d)/"catalog.json";path.write_text(json.dumps(source))

@@ -316,6 +316,17 @@ Validate the capability catalog with
 `validate_spring_implementation_capabilities_v2.py` before adding or changing
 an adapter; duplicate IDs, overlapping selectors, and unregistered renderer
 claims are invalid.
+Before implementing the v2 renderer, use the source-free renderability gate in
+`spring_code_renderability_v2.py`. Create its exact report and user view with
+`prepare_spring_code_renderability_v2.py` only from a current plan approval and
+recheck them with `validate_spring_code_renderability_v2.py`. The gate records
+build dependency evidence, relevant Git overlap, schema blockers, conservative
+candidate size limits, and the separate
+`.starter-harness-implementation-v2.json` baseline identity. File actions and
+symbol actions are distinct, existing source evidence is rehashed, and current
+coverage is labelled `API_CONTRACT_ONLY`; never present it as completed business
+behavior. UPDATE rendering remains blocked until structural Java changes can be
+verified. This gate does not generate code or authorize verification.
 
 After the selected CREATE feature has approved HTTP API and PostgreSQL physical
 contracts plus a passing migration/schema-fingerprint report, read

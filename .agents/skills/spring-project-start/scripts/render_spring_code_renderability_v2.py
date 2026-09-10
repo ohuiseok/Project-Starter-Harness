@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+"""Render the user-first v2 code renderability assessment."""
+from __future__ import annotations
+def esc(value):return str(value).replace("`","\\`").replace("<","&lt;").replace(">","&gt;")
+def render(report:dict)->str:
+ build=report["buildCapability"];lines=["# Spring 코드 dry-run 준비 점검","",f"- 상태: {'준비 가능' if not report['blockers'] else '보완 필요'}","- 코드 renderer: 아직 구현하지 않음","- 대상 source 변경: 없음","- 컴파일·테스트·네트워크·Docker 실행: 없음","","## 빌드 준비","",f"- Spring MVC: {'확인' if build['checks']['springMvc'] else '누락'}",f"- Bean Validation: {'확인' if build['checks']['beanValidation'] else '누락'}",f"- Spring Test·MockMvc·JUnit·Mockito: {'확인' if all(build['checks'][i] for i in ('springTest','mockMvc','junit','mockito')) else '누락'}","","## 검증 범위","",f"- 현재 커버리지: {report['coverageLevel']}","- 비즈니스 행동 완료를 의미하지 않음",f"- 전용 baseline: {report['baseline']['state']}",f"- 후보 제한: {report['limits']['maxFiles']}파일 · 파일당 {report['limits']['maxFileBytes']}바이트 · 전체 {report['limits']['maxTotalBytes']}바이트","","## 차단 사항",""]
+ lines.extend([f"- `{esc(i['code'])}` · {esc(i['subject'])}" for i in report["blockers"]] or ["- 없음"]);lines.extend(["","## 다음 선택","","- 추천: 차단 사항을 해결하고 v2 renderer 구현","- 빌드 변경이 필요하면 기술/구현 계획 revision","- 자연어로 다른 구현 방식 입력","- 취소","","## 현재 효과","","- 이 점검은 후보 코드 생성이나 검증 실행을 승인하지 않음",""]);return "\n".join(lines)

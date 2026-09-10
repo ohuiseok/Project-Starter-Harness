@@ -70,3 +70,12 @@ conflict with existing unowned files. Human-readable component IDs end with a
 stable digest so normalization cannot merge distinct paths. Validate capability
 catalog structure, unique adapter IDs, non-overlapping selectors, and renderer
 claims independently from plan generation.
+
+Every planned component declares a file action separately from its symbol
+actions and carries exact existing-source evidence. API contract tests provide
+`API_CONTRACT_ONLY` coverage and do not prove business behavior. The renderer
+preflight verifies existing MVC, validation, Spring Test, MockMvc, JUnit, and
+Mockito build capabilities without changing the build. It uses a separate v2
+baseline identity and fixed candidate size limits. Unsupported schema
+composition, maps, formats, missing references, cycles, and existing-file
+updates remain explicit blockers before candidate generation.

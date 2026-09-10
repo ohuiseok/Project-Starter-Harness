@@ -8,6 +8,8 @@
   "inputs": {"springMapping": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "springMappingApproval": {"path": "UNKNOWN", "sha256": "UNKNOWN"}, "capabilityCatalog": {"path": "HARNESS:.agents/skills/spring-project-start/references/spring-implementation-capabilities-v2.json", "sha256": "UNKNOWN"}},
   "capability": {"adapterId": "NONE", "planning": "UNSUPPORTED", "codeDryRunRenderer": "NOT_IMPLEMENTED"},
   "scope": {"security": "NOT_USED", "persistence": "NOT_USED", "externalClients": "NOT_USED", "buildChanges": "NONE_PLANNED"},
+  "buildRequirements": {"main": ["spring-boot-starter-web", "spring-boot-starter-validation"], "test": ["spring-boot-starter-test", "mockmvc", "junit", "mockito"], "changesAllowed": false},
+  "baseline": {"artifactKind": "SPRING_IMPLEMENTATION_V2", "path": ".starter-harness-implementation-v2.json", "manifestVersion": 2},
   "schemaCatalog": {},
   "operationLinks": [], "components": [], "coverage": [], "conflicts": [], "unknowns": [],
   "summary": {"operations": 0, "components": 0, "create": 0, "extend": 0, "reuse": 0, "tests": 0},

@@ -19,3 +19,11 @@ candidate, hides the Docker socket, disables networking with bubblewrap, and
 runs the wrapper tests offline. A passing verification permits review of a later
 apply approval; it does not apply files. Updates require the canonical
 implementation baseline; an unrelated existing file is always a conflict.
+
+Plan v2 first passes a separate source-free renderability assessment. It binds
+the exact plan approval, current build evidence, relevant Git overlap, supported
+schema subset, conservative file/total limits, and the dedicated
+`.starter-harness-implementation-v2.json` manifest. It labels contract coverage
+separately from business behavior and does not activate a renderer. Existing
+file UPDATE remains blocked until symbol-preserving structural validation is
+implemented; never fall back to regex replacement or whole-file overwrite.
