@@ -55,8 +55,9 @@ class PlanV2Tests(unittest.TestCase):
  def test_shared_component_with_mixed_dispositions_is_blocked(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);_,mapping_path,approval=self.fixture(root);mapping=json.loads(mapping_path.read_text());controllers=[next(i for i in op["components"] if i["role"]=="CONTROLLER") for op in mapping["operationMappings"]]
+   source=root/"src/main/java/com/example/api/OrdersController.java";source.parent.mkdir(parents=True);source.write_text("package com.example.api; public class OrdersController {}")
    for item in controllers:item.update({"plannedPath":"src/main/java/com/example/api/OrdersController.java","typeName":"OrdersController"})
-   controllers[0]["disposition"]="REUSE";controllers[1]["disposition"]="EXTEND";plan=build(mapping,reference(mapping_path,root),reference(approval,root),root);self.assertEqual("BLOCKED",plan["status"]);self.assertTrue(any(i["code"]=="SHARED_COMPONENT_DISPOSITION_CONFLICT" for i in plan["conflicts"]))
+   controllers[0].update({"disposition":"REUSE","candidateEvidence":[reference(source,root)]});controllers[1]["disposition"]="EXTEND";plan=build(mapping,reference(mapping_path,root),reference(approval,root),root);component=next(i for i in plan["components"] if i["role"]=="CONTROLLER");self.assertEqual("UPDATE_FILE",component["fileAction"]);self.assertEqual({"REUSE_METHOD","ADD_METHOD"},{i["action"] for i in component["symbols"]});self.assertFalse(any(i["code"]=="SHARED_COMPONENT_DISPOSITION_CONFLICT" for i in plan["conflicts"]))
  def test_security_profile_is_not_falsely_supported(self):
   with tempfile.TemporaryDirectory() as d:
    document=api();document["paths"]["/orders"]["post"]["security"]=[{"bearerAuth":[]}];plan,_,_=self.fixture(Path(d),document,security="security.token");self.assertEqual("BLOCKED",plan["status"]);self.assertEqual("UNSUPPORTED",plan["scope"]["security"]);self.assertTrue(any(i["code"]=="SECURITY_CAPABILITY_UNAVAILABLE" for i in plan["conflicts"]))
@@ -85,6 +86,14 @@ class PlanV2Tests(unittest.TestCase):
    argv=["validate","--report",str(report),"--view",str(view),"--target",str(root)]
    with mock.patch.object(sys,"argv",argv),mock.patch.object(validate_readiness,"validate_approval",return_value=receipt),contextlib.redirect_stdout(io.StringIO()):self.assertEqual(0,validate_readiness.main())
    self.assertIn("코드 dry-run 준비 점검",view.read_text());self.assertFalse(json.loads(report.read_text())["effects"]["sourceChanged"])
+ def test_multimodule_dirty_paths_and_commented_dependencies_are_not_misread(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);plan,_,_=self.fixture(root,choices={"architecture":"MICROSERVICE"});plan["target"]["modulePath"]="order-service";module=root/"order-service";source=module/"src/main/java/X.java";source.parent.mkdir(parents=True);source.write_text("class X {}")
+   build_file=module/"build.gradle";build_file.write_text("// implementation 'org.springframework.boot:spring-boot-starter-web'")
+   report=assess(plan,root);self.assertIn("order-service/src/main/java/X.java",report["git"]["dirtyPaths"]);self.assertFalse(report["buildCapability"]["checks"]["springMvc"])
+ def test_baseline_content_or_mode_drift_is_blocking(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);plan,_,_=self.fixture(root);managed=root/"src/main/java/Managed.java";managed.parent.mkdir(parents=True);managed.write_text("before");baseline_path=root/".starter-harness-implementation-v2.json";baseline_path.write_text(json.dumps({"manifestVersion":2,"artifactKind":"SPRING_IMPLEMENTATION_V2","files":{"src/main/java/Managed.java":"0"*64},"modes":{"src/main/java/Managed.java":420}}));report=assess(plan,root);self.assertEqual("DRIFTED",report["baseline"]["state"]);self.assertTrue(any(i["code"]=="BASELINE_DRIFT" for i in report["blockers"]))
  def test_capability_catalog_rejects_overlapping_selectors(self):
   with tempfile.TemporaryDirectory() as d:
    source=json.loads((ROOT/".agents/skills/spring-project-start/references/spring-implementation-capabilities-v2.json").read_text());source["adapters"].append(dict(source["adapters"][0],id="JAVA_MVC_DUPLICATE"));path=Path(d)/"catalog.json";path.write_text(json.dumps(source))

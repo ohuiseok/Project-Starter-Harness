@@ -50,7 +50,11 @@ def build(mapping:dict,mapping_ref:dict,approval_ref:dict,root:Path)->dict:
    key=(raw["role"],raw["plannedPath"],raw["typeName"]);identity=cid(*key)
    symbol={"operationId":op["operationId"],"kind":"HTTP_HANDLER" if raw["role"]=="CONTROLLER" else "USE_CASE_METHOD" if raw["role"]=="APPLICATION_SERVICE" else "DATA_TYPE","action":"REUSE_METHOD" if raw["disposition"]=="REUSE" else "ADD_METHOD" if raw["disposition"]=="EXTEND" else "CREATE_TYPE","httpMethod":op["method"] if raw["role"]=="CONTROLLER" else None,"httpPath":op["path"] if raw["role"]=="CONTROLLER" else None}
    if key not in grouped:grouped[key]={"componentId":identity,"role":raw["role"],"disposition":raw["disposition"],"fileAction":file_action(raw["disposition"]),"sourceEvidence":raw["candidateEvidence"],"owner":{"contractId":mapping["contractId"],"modulePath":mapping["target"]["modulePath"]},"target":{"path":raw["plannedPath"],"typeName":raw["typeName"]},"symbols":[],"operationRefs":[],"requirementRefs":[],"dependsOn":[]}
-   elif grouped[key]["disposition"]!=raw["disposition"]:conflicts.append({"code":"SHARED_COMPONENT_DISPOSITION_CONFLICT","subject":raw["plannedPath"],"message":"공유 컴포넌트에 서로 다른 생성·확장·재사용 판단이 지정됐습니다.","source":"PLAN_CORE"})
+   elif grouped[key]["disposition"]!=raw["disposition"]:
+    item=grouped[key];states={item["disposition"],raw["disposition"]}
+    if raw["role"] in {"CONTROLLER","APPLICATION_SERVICE"} and states<={"CREATE","EXTEND","REUSE"}:
+     item["disposition"]="EXTEND";item["fileAction"]="UPDATE_FILE";evidence={i["path"]:i for i in [*item["sourceEvidence"],*raw["candidateEvidence"]]};item["sourceEvidence"]=[evidence[i] for i in sorted(evidence)]
+    else:conflicts.append({"code":"SHARED_COMPONENT_DISPOSITION_CONFLICT","subject":raw["plannedPath"],"message":"공유 컴포넌트에 호환되지 않는 생성·확장·재사용 판단이 지정됐습니다.","source":"PLAN_CORE"})
    item=grouped[key];item["symbols"].append(symbol);item["operationRefs"].append(op["operationId"]);item["requirementRefs"].extend(op["requirementRefs"]);op_components.append(identity)
    if raw["role"]=="CONTROLLER":controller_refs.append(identity)
   test_ids=[];controller_path=next(raw["plannedPath"] for raw in op["components"] if raw["role"]=="CONTROLLER")
@@ -61,6 +65,10 @@ def build(mapping:dict,mapping_ref:dict,approval_ref:dict,root:Path)->dict:
   operation_links.append({"operationId":op["operationId"],"method":op["method"],"path":op["path"],"componentRefs":op_components,"testRefs":test_ids,"requirementRefs":op["requirementRefs"],"implementationSemantics":op["implementationSemantics"],"security":op["security"]})
  components=[]
  for item in grouped.values():
+  if item["fileAction"]=="UPDATE_FILE" and item["role"] in {"CONTROLLER","APPLICATION_SERVICE"}:
+   for symbol in item["symbols"]:
+    if symbol["action"]=="CREATE_TYPE":symbol["action"]="ADD_METHOD"
+  if item["fileAction"]=="UPDATE_FILE" and not item["sourceEvidence"]:conflicts.append({"code":"UPDATE_SOURCE_EVIDENCE_REQUIRED","subject":item["target"]["path"],"message":"기존 파일 확장에는 현재 파일 해시 증거가 필요합니다.","source":"PLAN_CORE"})
   item["operationRefs"]=sorted(set(item["operationRefs"]));item["requirementRefs"]=sorted(set(item["requirementRefs"]));item["symbols"]=sorted(item["symbols"],key=lambda x:(x["operationId"],x["kind"]));components.append(item)
  roles={i["componentId"]:i["role"] for i in components};services={op["operationId"]:next((i for i in op["componentRefs"] if roles.get(i)=="APPLICATION_SERVICE"),None) for op in operation_links}
  for item in components:

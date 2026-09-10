@@ -326,7 +326,16 @@ candidate size limits, and the separate
 symbol actions are distinct, existing source evidence is rehashed, and current
 coverage is labelled `API_CONTRACT_ONLY`; never present it as completed business
 behavior. UPDATE rendering remains blocked until structural Java changes can be
-verified. This gate does not generate code or authorize verification.
+verified. This gate does not generate code or authorize verification. Parse
+Gradle and Maven dependency declarations rather than matching comments, and
+scope relevant dirty paths to the selected module with NUL-safe Git output.
+Rehash every baseline-managed file and mode; missing, unsafe, or changed entries
+are `BASELINE_DRIFT`. A shared Controller or application service may combine
+`REUSE_METHOD` and `ADD_METHOD` under one evidence-backed `UPDATE_FILE`, but the
+renderer remains blocked until it can preserve unrelated Java structure. The
+semantic snapshot includes response headers and unresolved references; the gate
+blocks unsupported media types, parameter locations, external refs, and a body
+on HTTP 204.
 
 After the selected CREATE feature has approved HTTP API and PostgreSQL physical
 contracts plus a passing migration/schema-fingerprint report, read

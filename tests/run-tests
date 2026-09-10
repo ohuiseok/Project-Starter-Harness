@@ -590,7 +590,7 @@ expect_out "HTTP API contract handoff: all focused scenarios ran" "Ran 9 tests"
 OUT="$(python3 "$HARNESS_ROOT/tests/test_http_api_spring_mapping.py" 2>&1)"
 CODE=$?
 expect_code "HTTP API Spring mapping: focused regression suite passes" 0
-expect_out "HTTP API Spring mapping: all focused scenarios ran" "Ran 17 tests"
+expect_out "HTTP API Spring mapping: all focused scenarios ran" "Ran 18 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_design_contract.py" 2>&1)"
 CODE=$?
@@ -640,7 +640,7 @@ expect_out "Spring implementation planning: all focused scenarios ran" "Ran 6 te
 OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_implementation_plan_v2.py" 2>&1)"
 CODE=$?
 expect_code "Spring implementation planning v2: focused regression suite passes" 0
-expect_out "Spring implementation planning v2: all focused scenarios ran" "Ran 19 tests"
+expect_out "Spring implementation planning v2: all focused scenarios ran" "Ran 21 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_code_dry_run.py" 2>&1)"
 CODE=$?

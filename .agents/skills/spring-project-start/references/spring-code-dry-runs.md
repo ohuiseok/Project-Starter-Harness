@@ -27,3 +27,10 @@ schema subset, conservative file/total limits, and the dedicated
 separately from business behavior and does not activate a renderer. Existing
 file UPDATE remains blocked until symbol-preserving structural validation is
 implemented; never fall back to regex replacement or whole-file overwrite.
+Dependency evidence comes from parsed Gradle/Maven declarations, not comments.
+Git overlap is module-aware and NUL-safe. Recheck the content and mode of every
+v2 baseline-managed file and report drift before rendering. Planning may combine
+reused and added methods in an evidence-backed existing Controller or service,
+while rendering that UPDATE stays closed. Unsupported media types, parameter
+locations, unresolved references, response headers, and 204 body rules are part
+of the semantic readiness assessment.

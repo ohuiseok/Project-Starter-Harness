@@ -69,13 +69,18 @@ def implementation_semantics(openapi:dict,path:str,operation:dict)->dict:
  for raw in [*path_item.get("parameters",[]),*operation.get("parameters",[])]:
   item=resolved_component(openapi,raw,"parameters")
   if not isinstance(item,dict):continue
-  value={"name":item.get("name","UNKNOWN"),"in":item.get("in","UNKNOWN"),"required":bool(item.get("required")),"style":item.get("style"),"explode":item.get("explode"),"schema":structural_schema(item.get("schema",{}))};parameter_map[(value["name"],value["in"])]=value
+  value={"name":item.get("name","UNKNOWN"),"in":item.get("in","UNKNOWN"),"required":bool(item.get("required")),"style":item.get("style"),"explode":item.get("explode"),"unresolvedRef":item.get("$ref"),"schema":structural_schema(item.get("schema",{}))};parameter_map[(value["name"],value["in"])]=value
  parameters=list(parameter_map.values());body=resolved_component(openapi,operation.get("requestBody"),"requestBodies");body=body if isinstance(body,dict) else None
- request={"required":bool(body.get("required")),"content":{media:structural_schema(item.get("schema",{})) for media,item in sorted(body.get("content",{}).items()) if isinstance(item,dict)}} if body else None
+ request={"required":bool(body.get("required")),"unresolvedRef":body.get("$ref"),"content":{media:structural_schema(item.get("schema",{})) for media,item in sorted(body.get("content",{}).items()) if isinstance(item,dict)}} if body else None
  responses={}
  for code,raw in sorted(operation.get("responses",{}).items(),key=lambda i:str(i[0])):
   response=resolved_component(openapi,raw,"responses")
-  if isinstance(response,dict):responses[str(code)]={"content":{media:structural_schema(item.get("schema",{})) for media,item in sorted(response.get("content",{}).items()) if isinstance(item,dict)}}
+  if isinstance(response,dict):
+   headers={}
+   for name,raw_header in sorted(response.get("headers",{}).items()):
+    header=resolved_component(openapi,raw_header,"headers")
+    if isinstance(header,dict):headers[name]={"required":bool(header.get("required")),"unresolvedRef":header.get("$ref"),"schema":structural_schema(header.get("schema",{}))}
+   responses[str(code)]={"unresolvedRef":response.get("$ref"),"headers":headers,"content":{media:structural_schema(item.get("schema",{})) for media,item in sorted(response.get("content",{}).items()) if isinstance(item,dict)}}
  return {"parameters":parameters,"requestBody":request,"responses":responses}
 def child_mappings(root:Path,mapping_path:Path)->list[Path]:
  expected=reference(mapping_path,root);found=[]
