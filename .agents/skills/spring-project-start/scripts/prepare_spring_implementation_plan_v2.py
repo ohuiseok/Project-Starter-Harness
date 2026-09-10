@@ -22,5 +22,5 @@ def main()->int:
   for path,content in reversed(written):
    if path.exists() and path.read_bytes()==content:path.unlink()
   print(f"SPRING_IMPLEMENTATION_PLAN_V2_CREATED: no\nERROR: {e}");return 1
- print(f"SPRING_IMPLEMENTATION_PLAN_V2_CREATED: yes\nPLAN_STATUS: {plan['status']}\nCODE_DRY_RUN_READY: no\nTARGET_SOURCE_CHANGED: no");return 0
+ print(f"SPRING_IMPLEMENTATION_PLAN_V2_CREATED: yes\nPLAN_STATUS: {plan['status']}\nCODE_DRY_RUN_PREPARATION_AVAILABLE: {'yes' if plan['advancement']['codeDryRun'] else 'no'}\nTARGET_SOURCE_CHANGED: no");return 0
 if __name__=="__main__":sys.exit(main())

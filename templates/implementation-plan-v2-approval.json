@@ -1,9 +1,9 @@
 {
-  "springImplementationPlanV2ApprovalVersion": 1,
+  "springImplementationPlanV2ApprovalVersion": 2,
   "state": "APPROVED",
   "implementationPlan": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
   "view": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
   "approvedBy": "UNKNOWN",
   "approvedAt": "UNKNOWN",
-  "effects": {"codeDryRunAuthorized": false, "sourceChanged": false, "testsExecuted": false, "gitCommitOrPush": "NOT_RUN"}
+  "effects": {"codeDryRunPreparationAuthorized": true, "isolatedVerificationAuthorized": false, "sourceChanged": false, "testsExecuted": false, "gitCommitOrPush": "NOT_RUN"}
 }

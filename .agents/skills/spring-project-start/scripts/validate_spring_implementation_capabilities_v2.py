@@ -17,7 +17,8 @@ def load_and_validate(path:Path)->dict:
   if item["language"] not in {"JAVA","KOTLIN"} or item["webStack"] not in {"SPRING_MVC","WEBFLUX"} or not set(item["architectures"])<=ARCHITECTURES or not item["architectures"]:raise ValueError(f"capability adapter selector is invalid: {item['id']}")
   if len(item["architectures"])!=len(set(item["architectures"])) or len(item["securityProfiles"])!=len(set(item["securityProfiles"])) or not all(isinstance(i,str) and i for i in item["securityProfiles"]):raise ValueError(f"capability adapter choices are duplicated or invalid: {item['id']}")
   if not isinstance(item["securedOperations"],bool) or item["persistence"] not in {"NOT_USED"} or item["planning"] not in {"SUPPORTED","UNSUPPORTED"}:raise ValueError(f"capability adapter claims are invalid: {item['id']}")
-  if item["codeDryRunRenderer"]!="NOT_IMPLEMENTED":raise ValueError(f"unregistered code renderer claim: {item['id']}")
+  if item["codeDryRunRenderer"] not in {"NOT_IMPLEMENTED","JAVA_MVC_API_ONLY_V1"}:raise ValueError(f"unregistered code renderer claim: {item['id']}")
+  if item["codeDryRunRenderer"]=="JAVA_MVC_API_ONLY_V1" and (item["language"],item["webStack"],item["persistence"],item["securedOperations"])!=("JAVA","SPRING_MVC","NOT_USED",False):raise ValueError(f"renderer capability claim is invalid: {item['id']}")
   ids.append(item["id"]);selectors.extend((item["language"],item["webStack"],arch) for arch in item["architectures"])
  if len(ids)!=len(set(ids)) or len(selectors)!=len(set(selectors)):raise ValueError("capability adapter IDs or selectors overlap")
  return value

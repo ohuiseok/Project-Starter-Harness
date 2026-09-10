@@ -34,3 +34,17 @@ reused and added methods in an evidence-backed existing Controller or service,
 while rendering that UPDATE stays closed. Unsupported media types, parameter
 locations, unresolved references, response headers, and 204 body rules are part
 of the semantic readiness assessment.
+
+The first v2 renderer is `JAVA_MVC_API_ONLY_V1`. Activating it changes the
+capability-catalog hash, so an older plan and its approval can never silently
+gain rendering authority. Rebuild and approve the plan after that catalog
+change. Plan approval authorizes candidate preparation only. The renderer
+accepts agent-prepared Java candidates from a non-symlink directory, supports
+only `CREATE_FILE` and evidence-only `REUSE_FILE`, and keeps `UPDATE_FILE`
+blocked. It checks exact file coverage, Java identity, Spring roles, composed
+MVC mappings, parameters, request validation, response status, DTO shape,
+service operation names, executable test assertions, requirement traceability,
+secret-like literals, target collisions, candidate limits, and reuse hashes.
+The report binds the exact plan approval, renderability report, embedded source
+and desired v2 manifest. A separate exact dry-run approval authorizes only a
+future isolated verification; it never authorizes source application.

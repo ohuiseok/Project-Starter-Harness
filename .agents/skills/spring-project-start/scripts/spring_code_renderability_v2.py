@@ -66,6 +66,10 @@ def schema_blockers(plan:dict)->list[dict]:
   semantics=operation["implementationSemantics"]
   for parameter in semantics["parameters"]:
    if parameter["in"] not in {"path","query","header","cookie"}:blockers.append({"code":"PARAMETER_LOCATION_UNSUPPORTED","subject":f"{operation['operationId']}.{parameter['name']}"})
+   defaults={"path":("simple",False),"query":("form",True),"header":("simple",False),"cookie":("form",True)}
+   if parameter["in"] in defaults:
+    style=parameter.get("style") or defaults[parameter["in"]][0];explode=parameter.get("explode") if parameter.get("explode") is not None else style=="form"
+    if (style,explode)!=defaults[parameter["in"]]:blockers.append({"code":"PARAMETER_SERIALIZATION_UNSUPPORTED","subject":f"{operation['operationId']}.{parameter['name']}"})
    if parameter.get("unresolvedRef"):blockers.append({"code":"REFERENCE_UNRESOLVED","subject":parameter["unresolvedRef"]})
   request=semantics["requestBody"]
   if request:
@@ -102,4 +106,6 @@ def assess(plan:dict,root:Path,approval_ref:dict|None=None)->dict:
  blockers.extend(schemas)
  if base["state"]=="DRIFTED":blockers.append({"code":"BASELINE_DRIFT","subject":", ".join(i["path"] for i in base["drift"])})
  if any(i["fileAction"]=="UPDATE_FILE" for i in plan["components"]):blockers.append({"code":"UPDATE_RENDERER_NOT_IMPLEMENTED","subject":"existing source"})
- return {"springCodeRenderabilityVersion":2,"target":str(root),"planId":plan["planId"],"implementationPlanApproval":approval_ref,"git":git,"buildCapability":build,"schemaBlockers":schemas,"baseline":base,"limits":{"maxFiles":MAX_FILES,"maxFileBytes":MAX_FILE_BYTES,"maxTotalBytes":MAX_TOTAL_BYTES},"coverageLevel":"API_CONTRACT_ONLY","blockers":blockers,"renderer":"NOT_IMPLEMENTED","readyForCodeDryRun":False,"effects":{"sourceChanged":False,"testsExecuted":False,"network":"NOT_USED","docker":"NOT_USED","gitCommitOrPush":"NOT_RUN"}}
+ renderer=plan["capability"]["codeDryRunRenderer"]
+ if renderer=="NOT_IMPLEMENTED":blockers.append({"code":"RENDERER_NOT_IMPLEMENTED","subject":"capability"})
+ return {"springCodeRenderabilityVersion":2,"target":str(root),"planId":plan["planId"],"implementationPlanApproval":approval_ref,"git":git,"buildCapability":build,"schemaBlockers":schemas,"baseline":base,"limits":{"maxFiles":MAX_FILES,"maxFileBytes":MAX_FILE_BYTES,"maxTotalBytes":MAX_TOTAL_BYTES},"coverageLevel":"API_CONTRACT_ONLY","blockers":blockers,"renderer":renderer,"readyForCodeDryRun":not blockers,"effects":{"sourceChanged":False,"testsExecuted":False,"network":"NOT_USED","docker":"NOT_USED","gitCommitOrPush":"NOT_RUN"}}

@@ -10,7 +10,7 @@
   "limits": {"maxFiles": 100, "maxFileBytes": 1048576, "maxTotalBytes": 10485760},
   "coverageLevel": "API_CONTRACT_ONLY",
   "blockers": [],
-  "renderer": "NOT_IMPLEMENTED",
+  "renderer": "JAVA_MVC_API_ONLY_V1",
   "readyForCodeDryRun": false,
   "effects": {"sourceChanged": false, "testsExecuted": false, "network": "NOT_USED", "docker": "NOT_USED", "gitCommitOrPush": "NOT_RUN"}
 }

@@ -17,5 +17,5 @@ def main()->int:
   if report!=expected:raise ValueError("renderability report is stale")
   if view!=report_path.with_suffix(".md") or view.read_text()!=render(report):raise ValueError("renderability view is stale")
  except (OSError,ValueError,KeyError,TypeError) as e:print(f"SPRING_CODE_RENDERABILITY_V2_VALID: no\nERROR: {e}");return 1
- print(f"SPRING_CODE_RENDERABILITY_V2_VALID: yes\nBLOCKERS: {len(report['blockers'])}\nCODE_DRY_RUN_READY: no");return 0
+ print(f"SPRING_CODE_RENDERABILITY_V2_VALID: yes\nBLOCKERS: {len(report['blockers'])}\nCODE_DRY_RUN_READY: {'yes' if report['readyForCodeDryRun'] else 'no'}");return 0
 if __name__=="__main__":sys.exit(main())

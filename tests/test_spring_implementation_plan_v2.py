@@ -23,9 +23,9 @@ class PlanV2Tests(unittest.TestCase):
   for name,value in sources.items():path=docs/f"{name}.json";path.write_text(json.dumps(value));refs[name]=reference(path,root)
   mapping=build_mapping(feature(),selected_profile,document,root,".","com.example",choices or {},"USER_CONFIRMED",refs);mapping_path=docs/"mapping.json";mapping_path.write_text(json.dumps(mapping));approval=docs/"mapping-approval.json";approval.write_text("{}")
   plan=build(mapping,reference(mapping_path,root),reference(approval,root),root);return plan,mapping_path,approval
- def test_java_mvc_api_only_plan_is_reviewable_but_not_code_ready(self):
+ def test_java_mvc_api_only_plan_is_reviewable_and_has_scoped_renderer(self):
   with tempfile.TemporaryDirectory() as d:
-   root=Path(d);plan,_,_=self.fixture(root);self.assertEqual("REVIEW_READY",plan["status"]);self.assertEqual("JAVA_MVC_API_ONLY_V1",plan["capability"]["adapterId"]);self.assertFalse(plan["advancement"]["codeDryRun"]);self.assertEqual([],validate(plan,root,False));self.assertIn("코드 dry-run: 불가",render(plan,[]))
+   root=Path(d);plan,_,_=self.fixture(root);self.assertEqual("REVIEW_READY",plan["status"]);self.assertEqual("JAVA_MVC_API_ONLY_V1",plan["capability"]["adapterId"]);self.assertTrue(plan["advancement"]["codeDryRun"]);self.assertEqual([],validate(plan,root,False));self.assertIn("코드 dry-run 준비: 가능",render(plan,[]))
  def test_multiple_operations_have_symbol_and_test_links(self):
   with tempfile.TemporaryDirectory() as d:
    plan,_,_=self.fixture(Path(d));self.assertEqual(2,len(plan["operationLinks"]));self.assertTrue(all(i["componentRefs"] and i["testRefs"] for i in plan["operationLinks"]));self.assertTrue(all(c["symbols"] for c in plan["components"]))
@@ -38,9 +38,9 @@ class PlanV2Tests(unittest.TestCase):
  def test_plan_tampering_and_cycles_are_detected(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);plan,_,_=self.fixture(root);plan["components"][0]["target"]["typeName"]="Injected";plan["components"][0]["dependsOn"]=[plan["components"][0]["componentId"]];blockers=validate(plan,root,False);self.assertIn("plan does not match deterministic reconstruction",blockers);self.assertIn("component dependency cycle exists",blockers)
- def test_capability_catalog_prevents_false_renderer_claim(self):
+ def test_capability_catalog_registers_only_scoped_renderer(self):
   with tempfile.TemporaryDirectory() as d:
-   plan,_,_=self.fixture(Path(d));self.assertEqual("NOT_IMPLEMENTED",plan["capability"]["codeDryRunRenderer"]);self.assertEqual("NONE_PLANNED",plan["scope"]["buildChanges"])
+   plan,_,_=self.fixture(Path(d));self.assertEqual("JAVA_MVC_API_ONLY_V1",plan["capability"]["codeDryRunRenderer"]);self.assertEqual("NONE_PLANNED",plan["scope"]["buildChanges"])
  def test_shared_controller_is_deduplicated_with_multiple_symbols(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);plan,mapping_path,approval=self.fixture(root);mapping=json.loads(mapping_path.read_text());controllers=[]
@@ -98,13 +98,13 @@ class PlanV2Tests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    source=json.loads((ROOT/".agents/skills/spring-project-start/references/spring-implementation-capabilities-v2.json").read_text());source["adapters"].append(dict(source["adapters"][0],id="JAVA_MVC_DUPLICATE"));path=Path(d)/"catalog.json";path.write_text(json.dumps(source))
    with self.assertRaisesRegex(ValueError,"overlap"):load_and_validate(path)
- def test_exact_plan_approval_never_authorizes_code_and_cancel_invalidates_it(self):
+ def test_exact_plan_approval_authorizes_preparation_only_and_cancel_invalidates_it(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);plan,mapping_path,_=self.fixture(root);plan_path=root/"docs/implementation-plan-v2.json";view=plan_path.with_suffix(".md");plan_path.write_text(json.dumps(plan));view.write_text(render(plan,[]));approval=root/"docs/implementation-plan-v2-approval.json";mapping_ref=reference(mapping_path,root)
    argv=["approve","--plan",str(plan_path),"--view",str(view),"--target",str(root),"--output",str(approval),"--approved-by","user","--approved-at","2026-09-10T00:00:00+09:00"]
    with mock.patch.object(sys,"argv",argv),mock.patch.object(plan_core,"validate_mapping_approval",return_value={"mapping":mapping_ref}),contextlib.redirect_stdout(io.StringIO()):self.assertEqual(0,approve_plan.main())
    with mock.patch.object(plan_core,"validate_mapping_approval",return_value={"mapping":mapping_ref}):receipt=validate_plan_approval.validate_approval(root,approval)
-   self.assertFalse(receipt["effects"]["codeDryRunAuthorized"])
+   self.assertTrue(receipt["effects"]["codeDryRunPreparationAuthorized"]);self.assertFalse(receipt["effects"]["isolatedVerificationAuthorized"])
    cancellation=root/"docs/implementation-plan-v2-cancellation.json";argv=["cancel","--plan",str(plan_path),"--target",str(root),"--output",str(cancellation),"--reason","구현 방향 재검토"]
    with mock.patch.object(sys,"argv",argv),mock.patch.object(plan_core,"validate_mapping_approval",return_value={"mapping":mapping_ref}),contextlib.redirect_stdout(io.StringIO()):self.assertEqual(0,cancel_plan.main())
    with mock.patch.object(plan_core,"validate_mapping_approval",return_value={"mapping":mapping_ref}),self.assertRaisesRegex(ValueError,"cancelled"):validate_plan_approval.validate_approval(root,approval)

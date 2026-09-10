@@ -1,0 +1,9 @@
+{
+  "springCodeDryRunV2ApprovalVersion": 1,
+  "state": "APPROVED",
+  "dryRun": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "view": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "approvedBy": "UNKNOWN",
+  "approvedAt": "UNKNOWN",
+  "effects": {"isolatedVerificationAuthorized": true, "sourceChanged": false, "testsExecuted": false, "applyAuthorized": false, "gitCommitOrPush": "NOT_RUN"}
+}

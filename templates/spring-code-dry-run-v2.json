@@ -1,0 +1,18 @@
+{
+  "springCodeDryRunVersion": 2,
+  "target": "UNKNOWN",
+  "planId": "unknown",
+  "implementationPlanApproval": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "renderability": {"path": "UNKNOWN", "sha256": "UNKNOWN"},
+  "renderer": "JAVA_MVC_API_ONLY_V1",
+  "coverageLevel": "API_CONTRACT_ONLY",
+  "summary": {"operations": 0, "creates": 0, "reuses": 0, "updates": 0, "blockers": 0},
+  "qualityChecks": [],
+  "generatedFiles": [],
+  "reusedFiles": [],
+  "desiredManifest": {"manifestVersion": 2, "artifactKind": "SPRING_IMPLEMENTATION_V2", "files": {}, "modes": {}},
+  "blockers": [],
+  "verification": {"compilation": "NOT_RUN", "tests": "NOT_RUN", "businessBehavior": "NOT_PROVEN"},
+  "readyForVerificationApproval": false,
+  "effects": {"sourceChanged": false, "testsExecuted": false, "network": "NOT_USED", "docker": "NOT_USED", "gitCommitOrPush": "NOT_RUN"}
+}

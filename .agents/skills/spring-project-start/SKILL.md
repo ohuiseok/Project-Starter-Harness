@@ -337,6 +337,21 @@ semantic snapshot includes response headers and unresolved references; the gate
 blocks unsupported media types, parameter locations, external refs, and a body
 on HTTP 204.
 
+For a renderable API-only Java MVC v2 plan, prepare candidate Java in temporary
+storage and use `prepare_spring_code_dry_run_v2.py`. The first renderer accepts
+only `CREATE_FILE` and evidence-only `REUSE_FILE`; `UPDATE_FILE` remains
+blocked. A capability-catalog renderer change requires a newly generated plan
+and v2 plan approval, so an old approval never gains new authority. Validate
+the exact report and sibling view with `validate_spring_code_dry_run_v2.py`.
+The report must bind embedded candidate hashes, the current renderability gate,
+reuse evidence, target collisions, API semantics, test traceability, limits,
+and the desired v2 baseline while continuing to label coverage
+`API_CONTRACT_ONLY`. After the user approves that exact view, record it with
+`record_spring_code_dry_run_v2_approval.py` and recheck it with
+`validate_spring_code_dry_run_v2_approval.py`. That approval authorizes only a
+future isolated v2 verification, not source application. Never send this v2
+report to the legacy v1 verification or apply pipeline.
+
 After the selected CREATE feature has approved HTTP API and PostgreSQL physical
 contracts plus a passing migration/schema-fingerprint report, read
 `references/spring-implementation-planning.md`. Create a source-free component

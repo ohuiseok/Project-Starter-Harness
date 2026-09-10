@@ -19,7 +19,7 @@ def main()->int:
   if plan_approvals(root,plan_ref) or plan_cancellations(root,plan_ref):raise ValueError("implementation plan is already approved or cancelled")
   if view!=plan_path.with_suffix(".md") or view.read_text()!=render(plan,blockers):raise ValueError("implementation plan view is stale")
   if not a.approved_by.strip():raise ValueError("approved-by is required")
-  datetime.datetime.fromisoformat(a.approved_at.replace("Z","+00:00"));receipt={"springImplementationPlanV2ApprovalVersion":1,"state":"APPROVED","implementationPlan":plan_ref,"view":reference(view,root),"approvedBy":a.approved_by.strip(),"approvedAt":a.approved_at,"effects":{"codeDryRunAuthorized":False,"sourceChanged":False,"testsExecuted":False,"gitCommitOrPush":"NOT_RUN"}};output.parent.mkdir(parents=True,exist_ok=True);atomic_create(encoded(receipt),output)
+  datetime.datetime.fromisoformat(a.approved_at.replace("Z","+00:00"));receipt={"springImplementationPlanV2ApprovalVersion":2,"state":"APPROVED","implementationPlan":plan_ref,"view":reference(view,root),"approvedBy":a.approved_by.strip(),"approvedAt":a.approved_at,"effects":{"codeDryRunPreparationAuthorized":True,"isolatedVerificationAuthorized":False,"sourceChanged":False,"testsExecuted":False,"gitCommitOrPush":"NOT_RUN"}};output.parent.mkdir(parents=True,exist_ok=True);atomic_create(encoded(receipt),output)
  except (OSError,ValueError,KeyError,TypeError) as e:print(f"SPRING_IMPLEMENTATION_PLAN_V2_APPROVED: no\nERROR: {e}");return 1
- print("SPRING_IMPLEMENTATION_PLAN_V2_APPROVED: yes\nCODE_DRY_RUN_AUTHORIZED: no\nTARGET_SOURCE_CHANGED: no");return 0
+ print("SPRING_IMPLEMENTATION_PLAN_V2_APPROVED: yes\nCODE_DRY_RUN_PREPARATION_AUTHORIZED: yes\nISOLATED_VERIFICATION_AUTHORIZED: no\nTARGET_SOURCE_CHANGED: no");return 0
 if __name__=="__main__":sys.exit(main())

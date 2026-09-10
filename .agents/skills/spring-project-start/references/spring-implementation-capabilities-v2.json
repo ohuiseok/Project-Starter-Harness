@@ -10,7 +10,7 @@
       "securedOperations": false,
       "persistence": "NOT_USED",
       "planning": "SUPPORTED",
-      "codeDryRunRenderer": "NOT_IMPLEMENTED"
+      "codeDryRunRenderer": "JAVA_MVC_API_ONLY_V1"
     }
   ]
 }

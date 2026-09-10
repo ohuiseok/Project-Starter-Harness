@@ -278,6 +278,12 @@ for required in \
   "$SKILL_ROOT/scripts/prepare_spring_code_renderability_v2.py" \
   "$SKILL_ROOT/scripts/render_spring_code_renderability_v2.py" \
   "$SKILL_ROOT/scripts/validate_spring_code_renderability_v2.py" \
+  "$SKILL_ROOT/scripts/spring_code_dry_run_v2.py" \
+  "$SKILL_ROOT/scripts/prepare_spring_code_dry_run_v2.py" \
+  "$SKILL_ROOT/scripts/render_spring_code_dry_run_v2_markdown.py" \
+  "$SKILL_ROOT/scripts/validate_spring_code_dry_run_v2.py" \
+  "$SKILL_ROOT/scripts/record_spring_code_dry_run_v2_approval.py" \
+  "$SKILL_ROOT/scripts/validate_spring_code_dry_run_v2_approval.py" \
   "$SKILL_ROOT/scripts/prepare_spring_implementation_plan_v2.py" \
   "$SKILL_ROOT/scripts/render_spring_implementation_plan_v2.py" \
   "$SKILL_ROOT/scripts/validate_spring_implementation_plan_v2.py" \
@@ -379,6 +385,8 @@ for required in \
   "$HARNESS_ROOT/templates/implementation-plan-v2-cancellation.json" \
   "$HARNESS_ROOT/templates/spring-code-dry-run.json" \
   "$HARNESS_ROOT/templates/spring-code-renderability-v2.json" \
+  "$HARNESS_ROOT/templates/spring-code-dry-run-v2.json" \
+  "$HARNESS_ROOT/templates/spring-code-dry-run-v2-approval.json" \
   "$HARNESS_ROOT/templates/spring-code-verification-approval.json" \
   "$HARNESS_ROOT/templates/spring-code-apply-approval.json" \
   "$HARNESS_ROOT/templates/progress.json" \
@@ -646,6 +654,11 @@ OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_code_dry_run.py" 2>&1)"
 CODE=$?
 expect_code "Spring code dry run: focused regression suite passes" 0
 expect_out "Spring code dry run: all focused scenarios ran" "Ran 11 tests"
+
+OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_code_dry_run_v2.py" 2>&1)"
+CODE=$?
+expect_code "Spring code dry run v2: focused regression suite passes" 0
+expect_out "Spring code dry run v2: all focused scenarios ran" "Ran 4 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_code_apply.py" 2>&1)"
 CODE=$?

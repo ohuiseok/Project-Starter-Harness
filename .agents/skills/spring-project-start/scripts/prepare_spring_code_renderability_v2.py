@@ -20,5 +20,5 @@ def main()->int:
   for path,content in reversed(written):
    if path.exists() and path.read_bytes()==content:path.unlink()
   print(f"SPRING_CODE_RENDERABILITY_V2_CREATED: no\nERROR: {e}");return 1
- print(f"SPRING_CODE_RENDERABILITY_V2_CREATED: yes\nBLOCKERS: {len(report['blockers'])}\nCODE_DRY_RUN_READY: no\nTARGET_SOURCE_CHANGED: no");return 0
+ print(f"SPRING_CODE_RENDERABILITY_V2_CREATED: yes\nBLOCKERS: {len(report['blockers'])}\nCODE_DRY_RUN_READY: {'yes' if report['readyForCodeDryRun'] else 'no'}\nTARGET_SOURCE_CHANGED: no");return 0
 if __name__=="__main__":sys.exit(main())
