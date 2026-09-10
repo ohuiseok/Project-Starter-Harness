@@ -62,3 +62,20 @@ are `UNKNOWN`, while ordinary compilation or test failures are `FAILED`.
 Journal `PREPARED` and `RUNNING` before execution; interrupted work must be
 recovered by exact temporary-root and process evidence. A passing report permits
 only a later apply review, not apply itself.
+
+Before approval, hash a bounded canonical manifest of every cache artifact and
+reject incomplete scans or symlinks. Recheck it immediately before and after
+copying. Bind branch, HEAD, relevant dirty paths, Java compatibility, resources,
+Gradle build logic/version catalogs and Maven wrapper extensions into the plan.
+Dynamic or external build-script inputs, unsafe resource types, secret-like
+inputs and scan-limit exhaustion are blockers. The sandbox mounts only required
+system runtime trees; it never mounts host `/` or the actual target. Store PID
+start ticks and stop the exact process group before recovery deletes temporary
+storage. Decode output defensively, remove terminal control sequences, and turn
+secret-like or PII-like output into redacted `UNKNOWN`.
+
+Historical report validation and current apply readiness are different checks.
+A later cache cleanup or sandbox change must not erase valid execution evidence.
+`validate_spring_code_verification_apply_readiness_v2.py` separately rechecks
+the current dry run, target content, branch, HEAD, and relevant dirty paths
+immediately before an apply review.

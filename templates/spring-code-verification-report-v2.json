@@ -10,7 +10,7 @@
   "isolation": {},
   "startedAt": "UNKNOWN",
   "finishedAt": "UNKNOWN",
-  "result": {"state": "UNKNOWN", "exitCode": 3, "output": "", "redacted": false, "timedOut": false},
+  "result": {"state": "UNKNOWN", "category": "OFFLINE_DEPENDENCY_OR_INFRASTRUCTURE", "exitCode": 3, "output": "", "redacted": false, "timedOut": false},
   "targetSourceChanged": false,
   "readyForApplyReview": false
 }

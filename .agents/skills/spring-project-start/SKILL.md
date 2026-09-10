@@ -370,6 +370,20 @@ ready only for a later apply review. Recover an interrupted exact process and
 temporary root with `recover_spring_code_verification_v2.py`; never retry while
 its journal remains.
 
+The verification plan v2 fixes a bounded canonical dependency-cache manifest,
+Git branch/HEAD/relevant dirty paths, Java compatibility, resources, Gradle
+build logic and Maven wrapper extensions. Reject cache symlinks or scan-limit
+exhaustion, dynamic/external build inputs, unsupported resource types, and
+secret-like inputs. Recheck the cache immediately before and after copying.
+Mount only required system runtime trees in bubblewrap; never mount host `/` or
+the actual target. Record PID start ticks, terminate the exact process group on
+timeout or recovery, decode output defensively, remove terminal escapes, and
+redact secret-like or PII-like output to `UNKNOWN`. Keep historical execution
+validation independent of mutable local cache/Java/sandbox availability. Before
+an apply review, use
+`validate_spring_code_verification_apply_readiness_v2.py` to separately recheck
+the current dry run, target hashes, branch, HEAD, and relevant dirty paths.
+
 After the selected CREATE feature has approved HTTP API and PostgreSQL physical
 contracts plus a passing migration/schema-fingerprint report, read
 `references/spring-implementation-planning.md`. Create a source-free component
