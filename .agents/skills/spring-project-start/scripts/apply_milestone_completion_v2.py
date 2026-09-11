@@ -2,7 +2,7 @@
 from __future__ import annotations
 import argparse,datetime as dt,json,sys
 from pathlib import Path
-from apply_approved_spring_code_v2 import atomic_file,durable_json,fsync_dir
+from apply_approved_spring_code_v2 import atomic_file,backup_manifest,durable_json,fsync_dir,verify_backup
 from http_api_spring_mapping import reference
 from milestone_completion_v2 import PROGRESS,VIEW,encoded,render,render_progress,validate_review
 from spring_code_apply_v2 import MANAGED,apply_lock,sha
@@ -17,6 +17,12 @@ def validate_approval(root:Path,path:Path,review_path:Path)->dict:
  return value
 def rollback(root:Path,record:dict,journal:Path)->dict:
  errors=[];record["state"]="ROLLING_BACK";durable_json(record,journal)
+ try:
+  manifest=root/record["backup"]/"backup-manifest.json"
+  if sha(manifest)!=record["backupManifestSha256"]:raise ValueError("backup manifest reference changed")
+  verify_backup(root/record["backup"])
+ except (OSError,ValueError) as e:
+  record["state"]="ROLLBACK_INCOMPLETE";record["rollbackErrors"]=["backup: "+str(e)];durable_json(record,journal);return record
  for item in reversed(record["artifacts"]):
   path=root/item["path"]
   try:
@@ -32,14 +38,16 @@ def apply(root:Path,review_path:Path,approval_path:Path)->dict:
   validate_approval(root,approval_path,review_path);review=load_object(review_path);attempt=review["completionAttemptId"];base=root/MANAGED/"milestone-completion-v2"/attempt;journal=base/"transaction.json";consumed=base/"approval-consumed.json";backup=base/"before"
   if base.exists() or base.is_symlink() or any(path.exists() and path.is_symlink() for path in (root/MANAGED,root/MANAGED/"milestone-completion-v2")):raise ValueError("completion attempt already exists or managed path is unsafe")
   completion=root/review["completion"]["path"];progress=root/PROGRESS;view=root/VIEW
+  if completion in {review_path,approval_path}:raise ValueError("completion output collides with review or approval")
   if completion.exists() or completion.is_symlink():raise ValueError("completion output is occupied")
-  before_progress=progress.read_bytes() if progress.exists() else None;before_view=view.read_bytes() if view.exists() else None;completion_data=encoded(review["completion"]["document"]);progress_data=encoded(review["progressAfter"]["document"]);view_data=render_progress(review["progressAfter"]["document"]).encode();base.mkdir(parents=True);backup.mkdir();artifacts=[]
+  before_progress=progress.read_bytes() if progress.exists() else None;before_view=view.read_bytes() if view.exists() else None;completion_data=encoded(review["completion"]["document"]);progress_data=encoded(review["progressAfter"]["document"]);view_data=render_progress(review["progressAfter"]["document"]).encode();base.mkdir(parents=True);durable_json({"milestoneCompletionV2OwnershipVersion":1,"attemptId":attempt,"target":str(root)},base/"ownership.json");backup.mkdir();artifacts=[]
   for index,(path,before,after) in enumerate(((completion,None,completion_data),(progress,before_progress,progress_data))):
    name=f"{index}.bak"
    if before is not None:atomic_file(before,0o644,backup/name)
    artifacts.append({"path":path.relative_to(root).as_posix(),"beforeSha256":__import__("hashlib").sha256(before).hexdigest() if before else None,"afterSha256":__import__("hashlib").sha256(after).hexdigest(),"backupName":name})
   if before_view is not None:atomic_file(before_view,0o644,backup/"view.bak")
-  durable_json({"attemptId":attempt,"approval":reference(approval_path,root)},consumed);record={"milestoneCompletionTransactionV2Version":1,"attemptId":attempt,"state":"PREPARED","target":str(root),"review":reference(review_path,root),"approval":reference(approval_path,root),"backup":backup.relative_to(root).as_posix(),"artifacts":artifacts,"view":{"path":VIEW,"beforeSha256":__import__("hashlib").sha256(before_view).hexdigest() if before_view else None,"sha256":__import__("hashlib").sha256(view_data).hexdigest()},"rollbackErrors":[]};durable_json(record,journal)
+  manifest=backup_manifest(backup);durable_json(manifest,backup/"backup-manifest.json");manifest_sha=sha(backup/"backup-manifest.json")
+  durable_json({"attemptId":attempt,"approval":reference(approval_path,root)},consumed);record={"milestoneCompletionTransactionV2Version":1,"attemptId":attempt,"state":"PREPARED","target":str(root),"review":reference(review_path,root),"approval":reference(approval_path,root),"backup":backup.relative_to(root).as_posix(),"backupManifestSha256":manifest_sha,"artifacts":artifacts,"view":{"path":VIEW,"beforeSha256":__import__("hashlib").sha256(before_view).hexdigest() if before_view else None,"sha256":__import__("hashlib").sha256(view_data).hexdigest()},"rollbackErrors":[]};durable_json(record,journal)
   try:
    record["state"]="APPLYING";durable_json(record,journal)
    for path,before,after in ((completion,None,completion_data),(progress,before_progress,progress_data)):
@@ -52,7 +60,7 @@ def apply(root:Path,review_path:Path,approval_path:Path)->dict:
    raise ValueError("completion failed and was rolled back: "+str(e))
   try:
    if view.is_symlink() or (view.read_bytes() if view.exists() else None)!=before_view:raise ValueError("progress view changed before derived write")
-   atomic_file(view_data,0o644,view);record["state"]="COMMITTED";durable_json(record,journal)
+   atomic_file(view_data,0o644,view);committed=dict(record);committed["state"]="COMMITTED";durable_json(committed,journal);record=committed
   except Exception:return record
   return record
 def main()->int:

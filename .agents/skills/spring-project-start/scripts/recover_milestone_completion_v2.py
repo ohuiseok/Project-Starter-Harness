@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse,sys
+import argparse,shutil,sys
 from pathlib import Path
 from apply_approved_spring_code_v2 import atomic_file,durable_json
 from apply_milestone_completion_v2 import rollback
@@ -15,6 +15,10 @@ def main()->int:
   if not a.attempt_id.startswith("completion-v2-") or "/" in a.attempt_id or ".." in a.attempt_id:raise ValueError("completion attempt ID is invalid")
   journal=root/MANAGED/"milestone-completion-v2"/a.attempt_id/"transaction.json"
   with apply_lock(root):
+   if not journal.exists():
+    base=journal.parent;ownership=base/"ownership.json";value=load_object(ownership)
+    if value!={"milestoneCompletionV2OwnershipVersion":1,"attemptId":a.attempt_id,"target":str(root)} or base.is_symlink() or any(i.is_symlink() for i in base.rglob("*")):raise ValueError("orphan completion ownership cannot be proven")
+    shutil.rmtree(base);print("MILESTONE_COMPLETION_V2_RECOVERED: yes\nTRANSACTION_STATE: ORPHAN_CLEANED");return 0
    record=load_object(journal)
    if record.get("milestoneCompletionTransactionV2Version")!=1 or record.get("attemptId")!=a.attempt_id or Path(record.get("target","")).resolve()!=root:raise ValueError("completion transaction identity is invalid")
    if record["state"] in {"PREPARED","APPLYING","ROLLING_BACK"}:

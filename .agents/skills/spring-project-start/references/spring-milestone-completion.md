@@ -73,3 +73,13 @@ Markdown is derived afterward. A Markdown failure leaves
 `COMMITTED_VIEW_PENDING` for exact recovery. Existing v1 progress blocks v2
 completion with `PROGRESS_V1_MIGRATION_REQUIRED`; migration must be a separate
 reviewed milestone rather than being folded into feature completion.
+
+Existing v2 progress is accepted only after its completion references,
+verification levels, feature uniqueness, candidate-set disjointness,
+recommendation, unresolved UNKNOWN list, and exact derived Markdown are
+validated. Candidate recommendation uses an explicit status allowlist. All
+upstream evidence and canonical output paths participate in collision checks
+and relevant Git-state comparison. Transaction backups have a file/mode
+manifest whose own SHA-256 is journaled and checked before rollback. An
+ownership marker permits safe cleanup of an allocation interrupted before its
+journal exists, while unproven directories are never deleted.
