@@ -20,7 +20,7 @@ def classify(code:int,text:str,timed_out:bool,redacted:bool)->tuple[str,str]:
  if redacted:return "UNKNOWN","SENSITIVE_OUTPUT"
  if timed_out:return "UNKNOWN","TIMEOUT"
  if code==0:return "VERIFIED","TESTS_PASSED"
- if any(i in text for i in ("Could not resolve","Unknown host","No cached version")):return "UNKNOWN","OFFLINE_DEPENDENCY_OR_INFRASTRUCTURE"
+ if any(i in text for i in ("Could not resolve","Unknown host","No cached version","Error loading java.security file")):return "UNKNOWN","OFFLINE_DEPENDENCY_OR_INFRASTRUCTURE"
  if any(i in text for i in ("Compilation failed","cannot find symbol",":compileJava FAILED")):return "FAILED","COMPILATION_FAILURE"
  if "ApplicationContext" in text:return "FAILED","SPRING_CONTEXT_FAILURE"
  return "FAILED","TEST_OR_BUILD_FAILURE"

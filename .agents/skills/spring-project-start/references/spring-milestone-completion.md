@@ -92,3 +92,14 @@ also proves that tampering with an intermediate dry run is rejected before
 completion. This is not a full execution E2E. Separate execution fixtures run
 real local Gradle- and Maven-wrapper processes through the isolated runner and
 verify that retries require a fresh attempt while preserving prior logs.
+
+The opt-in `tests/run-spring-gradle-acceptance` smoke creates its Spring Boot
+fixture only in a temporary external Git repository. It copies the approved
+local Gradle cache into the same networkless bubblewrap shape used by production
+verification and executes a real Spring MVC MockMvc test. Missing tools or
+offline artifacts are `UNKNOWN`, a malformed fixture or sandbox is `BLOCKED`,
+and source/test failures are `FAILED`. The fast default suite checks this status
+contract without copying the roughly hundreds-of-megabytes dependency cache.
+This smoke proves real Spring execution; the contract-chain suite separately
+proves evidence lineage, so neither is described as one unmocked natural-language
+end-to-end test.

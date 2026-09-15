@@ -45,10 +45,18 @@ def sandbox(workspace:Path,home:Path,command:list[str])->list[str]:
  for source in ("/usr","/bin","/lib","/lib64"):
   if Path(source).exists():mounts.extend(["--ro-bind",source,source])
  if not any(java_home==Path(i) or Path(i) in java_home.parents for i in ("/usr","/bin","/lib","/lib64")):mounts.extend(["--ro-bind",str(java_home),str(java_home)])
+ external_config=set();java_configs=[java_home/"conf",*Path("/usr/lib/jvm").glob("*/conf")]
+ for config in java_configs:
+  for item in config.rglob("*") if config.is_dir() else []:
+   if item.is_symlink():
+    target=item.resolve(strict=True)
+    if target.is_relative_to("/etc") and len(target.parts)>2 and target.parts[2].startswith("java-"):external_config.add(Path("/etc")/target.parts[2])
+ if external_config:mounts.extend(["--dir","/etc"])
+ for source in sorted(external_config):mounts.extend(["--ro-bind",str(source),str(source)])
  return ["bwrap","--die-with-parent","--unshare-all","--new-session",*mounts,"--tmpfs","/tmp","--tmpfs","/run","--dir","/run/workspace","--dir","/run/workhome","--dev","/dev","--proc","/proc","--bind",str(workspace),"/run/workspace","--bind",str(home),"/run/workhome","--chdir","/run/workspace","--clearenv","--setenv","PATH",path,"--setenv","JAVA_HOME",str(java_home),"--setenv","HOME","/run/workhome","--setenv","GRADLE_USER_HOME","/run/workhome/.gradle","--setenv","LANG","C.UTF-8","--setenv","DOCKER_HOST","unix:///run/starter-harness-no-docker.sock","--",*command]
 def state(returncode:int,text:str)->str:
  if returncode==0:return "PASSED"
- markers=("Could not resolve","Could not install Gradle","PluginResolutionException","Unknown host","Network is unreachable","No cached version")
+ markers=("Could not resolve","Could not install Gradle","PluginResolutionException","Unknown host","Network is unreachable","No cached version","Error loading java.security file")
  return "UNKNOWN" if any(i in text for i in markers) else "FAILED"
 def category(result:str,text:str,timed_out:bool=False,redacted:bool=False)->str:
  if timed_out:return "TIMEOUT"

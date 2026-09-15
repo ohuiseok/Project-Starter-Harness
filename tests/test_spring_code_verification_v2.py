@@ -45,7 +45,7 @@ class VerificationV2Tests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);workspace=root/"workspace";home=root/"home";workspace.mkdir();home.mkdir()
    with mock.patch.object(runner.shutil,"which",side_effect=lambda name:"/usr/bin/java" if name=="java" else "/usr/bin/bwrap"):command=runner.sandbox(workspace,home,["./gradlew","test"])
-   pairs=list(zip(command,command[1:]));self.assertNotIn(("/","/"),pairs);self.assertNotIn("--ro-bind / /"," ".join(command))
+   pairs=list(zip(command,command[1:]));self.assertNotIn(("/","/"),pairs);self.assertNotIn(("/etc","/etc"),pairs);self.assertNotIn("--ro-bind / /"," ".join(command));self.assertTrue(any(left.startswith("/etc/java-") and left==right for left,right in pairs))
  def test_historical_plan_validation_does_not_recompute_environment(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);_,approval,receipt=self.fixture(root)
@@ -53,7 +53,7 @@ class VerificationV2Tests(unittest.TestCase):
    path=root/"docs/verification-plan.json";path.write_text(json.dumps(plan))
    with mock.patch.object(core,"build_plan",side_effect=AssertionError("must not run")):core.validate_plan(plan,path,root,False)
  def test_result_state_distinguishes_failure_and_unknown(self):
-  self.assertEqual("PASSED",runner.state(0,""));self.assertEqual("FAILED",runner.state(1,"assertion failed"));self.assertEqual("UNKNOWN",runner.state(1,"Could not resolve dependency"))
+  self.assertEqual("PASSED",runner.state(0,""));self.assertEqual("FAILED",runner.state(1,"assertion failed"));self.assertEqual("UNKNOWN",runner.state(1,"Could not resolve dependency"));self.assertEqual("UNKNOWN",runner.state(1,"Error loading java.security file"))
  def test_runner_records_pass_without_target_mutation(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);(root/"docs").mkdir();plan_path=root/"docs/plan.json";approval=root/"docs/approval.json";approval.write_text("{}");dry_path=root/"docs/dry.json";dry_path.write_text("{}");generated={"path":"src/test/java/X.java","content":"class X {}\n","mode":0o644};dry={"generatedFiles":[generated]};ctx=context_hash(source_context(root,{generated["path"]}));plan={"readyForApproval":True,"dryRun":reference(dry_path,root),"targetContext":{"files":{},"sha256":ctx},"git":self.git_value(),"dependencyCache":{"kind":"GRADLE"},"command":["./gradlew","test"],"limits":{"timeoutSeconds":30,"maxOutputCharacters":20000},"effects":{}};plan_path.write_text(json.dumps(plan));output=root/"docs/result.json"
