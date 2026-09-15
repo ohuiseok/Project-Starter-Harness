@@ -5,7 +5,7 @@ import argparse,datetime as dt,json,os,re,shutil,subprocess,sys,tempfile
 from pathlib import Path
 from discover_http_api_evidence import atomic_create
 from http_api_spring_mapping import reference
-from spring_code_verification_v2 import JOURNAL,PII,SECRET,cache,context_hash,git_state,sha,source_context,validate_approval,validate_plan
+from spring_code_verification_v2 import JOURNAL,PII,SECRET,cache,context_hash,git_state,runtime_mounts,sha,source_context,validate_approval,validate_plan
 from validate_feature_specs import load_object
 def atomic_json(value:dict,path:Path)->None:
  data=(json.dumps(value,ensure_ascii=False,indent=2)+"\n").encode();path.parent.mkdir(parents=True,exist_ok=True);temporary=path.with_name(path.name+".tmp")
@@ -38,19 +38,17 @@ def input_hash(workspace:Path,generated:list[dict])->str:
   if not path.is_file() or path.is_symlink():raise ValueError("generated verification input is missing or unsafe")
   evidence[item["path"]]={"sha256":sha(path),"mode":path.stat().st_mode&0o777}
  return context_hash(evidence)
-def sandbox(workspace:Path,home:Path,command:list[str])->list[str]:
+def sandbox(workspace:Path,home:Path,command:list[str],approved_mounts:dict|None=None)->list[str]:
  java=shutil.which("java")
  if not java or not shutil.which("bwrap"):raise ValueError("Java and bubblewrap are required")
  java_home=Path(java).resolve().parent.parent;path=f"{java_home}/bin:/usr/bin:/bin";mounts=[]
  for source in ("/usr","/bin","/lib","/lib64"):
   if Path(source).exists():mounts.extend(["--ro-bind",source,source])
  if not any(java_home==Path(i) or Path(i) in java_home.parents for i in ("/usr","/bin","/lib","/lib64")):mounts.extend(["--ro-bind",str(java_home),str(java_home)])
- external_config=set();java_configs=[java_home/"conf",*Path("/usr/lib/jvm").glob("*/conf")]
- for config in java_configs:
-  for item in config.rglob("*") if config.is_dir() else []:
-   if item.is_symlink():
-    target=item.resolve(strict=True)
-    if target.is_relative_to("/etc") and len(target.parts)>2 and target.parts[2].startswith("java-"):external_config.add(Path("/etc")/target.parts[2])
+ current_mounts=runtime_mounts()
+ if approved_mounts is not None and current_mounts!=approved_mounts:raise ValueError("Java runtime mount evidence changed after approval")
+ if current_mounts["state"]!="READY":raise ValueError("Java runtime mount evidence is unsafe")
+ external_config={Path(i) for i in current_mounts["mounts"]}
  if external_config:mounts.extend(["--dir","/etc"])
  for source in sorted(external_config):mounts.extend(["--ro-bind",str(source),str(source)])
  return ["bwrap","--die-with-parent","--unshare-all","--new-session",*mounts,"--tmpfs","/tmp","--tmpfs","/run","--dir","/run/workspace","--dir","/run/workhome","--dev","/dev","--proc","/proc","--bind",str(workspace),"/run/workspace","--bind",str(home),"/run/workhome","--chdir","/run/workspace","--clearenv","--setenv","PATH",path,"--setenv","JAVA_HOME",str(java_home),"--setenv","HOME","/run/workhome","--setenv","GRADLE_USER_HOME","/run/workhome/.gradle","--setenv","LANG","C.UTF-8","--setenv","DOCKER_HOST","unix:///run/starter-harness-no-docker.sock","--",*command]
@@ -79,7 +77,7 @@ def main()->int:
   copy_files(root,workspace,list(plan["targetContext"]["files"]));
   for item in dry["generatedFiles"]:
    destination=workspace/item["path"];destination.parent.mkdir(parents=True,exist_ok=True);destination.write_text(item["content"],encoding="utf-8");destination.chmod(item["mode"])
-  copy_cache(plan["dependencyCache"]["kind"],home,plan["dependencyCache"]);before=input_hash(workspace,dry["generatedFiles"]);started=dt.datetime.now(dt.timezone.utc).isoformat();process=subprocess.Popen(sandbox(workspace,home,plan["command"]),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True)
+  copy_cache(plan["dependencyCache"]["kind"],home,plan["dependencyCache"]);before=input_hash(workspace,dry["generatedFiles"]);started=dt.datetime.now(dt.timezone.utc).isoformat();process=subprocess.Popen(sandbox(workspace,home,plan["command"],plan["environment"]["runtimeMounts"]),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True)
   try:
    journal["state"]="RUNNING";journal["pid"]=process.pid;journal["processStartTicks"]=process_start_ticks(process.pid);atomic_json(journal,journal_path)
   except BaseException:

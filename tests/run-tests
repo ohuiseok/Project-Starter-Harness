@@ -704,7 +704,7 @@ expect_out "Spring code dry run v2: all focused scenarios ran" "Ran 4 tests"
 OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_code_verification_v2.py" 2>&1)"
 CODE=$?
 expect_code "Spring code verification v2: focused regression suite passes" 0
-expect_out "Spring code verification v2: all focused scenarios ran" "Ran 11 tests"
+expect_out "Spring code verification v2: all focused scenarios ran" "Ran 12 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_code_apply.py" 2>&1)"
 CODE=$?
@@ -749,7 +749,7 @@ expect_out "v2 execution loop: Gradle, Maven, and retry scenarios ran" "Ran 3 te
 OUT="$(python3 "$HARNESS_ROOT/tests/test_spring_gradle_acceptance.py" 2>&1)"
 CODE=$?
 expect_code "Spring Gradle acceptance: fast contract suite passes" 0
-expect_out "Spring Gradle acceptance: status and external fixture scenarios ran" "Ran 5 tests"
+expect_out "Spring Gradle acceptance: status and external fixture scenarios ran" "Ran 8 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_continuation_route.py" 2>&1)"
 CODE=$?

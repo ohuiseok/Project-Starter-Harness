@@ -8,6 +8,7 @@ from spring_code_dry_run_v2 import validate_report as validate_dry_run
 from validate_feature_specs import load_object
 from validate_spring_code_dry_run_v2_approval import validate_approval as validate_dry_run_approval
 MAX_OUTPUT=20000;MAX_CACHE_FILES=30000;MAX_CACHE_BYTES=4*1024*1024*1024;MAX_BUILD_FILES=2000;MAX_BUILD_BYTES=128*1024*1024;JOURNAL=".starter-harness/transactions/spring-code-verification-v2.json"
+MAX_RUNTIME_CONFIG_FILES=1000;MAX_RUNTIME_CONFIG_BYTES=16*1024*1024
 SECRET=re.compile(r"(?i)(?:AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9_]{20,}|(?:password|passwd|token|api[_-]?key|secret)\s*[:=]\s*\S+)")
 PII=re.compile(r"(?i)(?:\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|\b01[016789][- ]?\d{3,4}[- ]?\d{4}\b)")
 def sha(path:Path)->str:return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -22,6 +23,30 @@ def source_context(root:Path,generated:set[str])->dict:
   if path.is_file() and rel not in generated and (sources or path.name in names or build_aux or rel.startswith("gradle/wrapper/") or "/gradle/wrapper/" in rel or rel.startswith(".mvn/wrapper/") or "/.mvn/wrapper/" in rel):evidence[rel]={"sha256":sha(path),"mode":path.stat().st_mode&0o777}
  return evidence
 def context_hash(value:dict)->str:return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+def runtime_mounts()->dict:
+ java=shutil.which("java");roots=set()
+ if java:
+  java_home=Path(java).resolve().parent.parent
+  for config in [java_home/"conf",*Path("/usr/lib/jvm").glob("*/conf")]:
+   for item in config.rglob("*") if config.is_dir() else []:
+    if item.is_symlink():
+     try:target=item.resolve(strict=True)
+     except OSError:return {"state":"UNSAFE","mounts":[],"manifestSha256":None,"fileCount":0,"totalBytes":0}
+     if target.is_relative_to("/etc") and len(target.parts)>2 and target.parts[2].startswith("java-"):roots.add(Path("/etc")/target.parts[2])
+ evidence=[];count=total=0;digest=hashlib.sha256()
+ for root in sorted(roots):
+  if root.is_symlink() or not root.is_dir():return {"state":"UNSAFE","mounts":[],"manifestSha256":None,"fileCount":count,"totalBytes":total}
+  for path in sorted(root.rglob("*")):
+   if path.is_symlink():
+    try:resolved=path.resolve(strict=True)
+    except OSError:return {"state":"UNSAFE","mounts":[],"manifestSha256":None,"fileCount":count,"totalBytes":total}
+    if root not in resolved.parents:continue
+   if not path.is_file():continue
+   count+=1;size=path.stat().st_size;total+=size
+   if count>MAX_RUNTIME_CONFIG_FILES or total>MAX_RUNTIME_CONFIG_BYTES:return {"state":"LIMIT_EXCEEDED","mounts":[],"manifestSha256":None,"fileCount":count,"totalBytes":total}
+   digest.update(json.dumps([path.as_posix(),size,path.stat().st_mode&0o777,sha(path)],separators=(",",":")).encode()+b"\n")
+  evidence.append(root.as_posix())
+ return {"state":"READY","mounts":evidence,"manifestSha256":digest.hexdigest(),"fileCount":count,"totalBytes":total}
 def wrapper(root:Path,module:str)->dict:
  bases=[root] if module=="." else [root,root/module]
  for base in bases:
@@ -74,7 +99,7 @@ def environment()->dict:
     if Path(source).exists():mounts.extend(["--ro-bind",source,source])
    done=subprocess.run([bwrap,"--die-with-parent","--unshare-all",*mounts,"--dev","/dev","--proc","/proc","--tmpfs","/tmp","--tmpfs","/run","--","/bin/true"],capture_output=True,text=True,timeout=15,check=False);sandbox="READY" if done.returncode==0 else "UNAVAILABLE"
   except (OSError,subprocess.SubprocessError):sandbox="UNAVAILABLE"
- return {"java":{"status":"READY" if java and version!="UNKNOWN" else "UNKNOWN","version":version},"bubblewrap":{"status":sandbox}}
+ return {"java":{"status":"READY" if java and version!="UNKNOWN" else "UNKNOWN","version":version},"bubblewrap":{"status":sandbox},"runtimeMounts":runtime_mounts()}
 def java_compatibility(root:Path,environment_value:dict)->dict:
  required=None;source="NOT_DECLARED"
  for path in list(root.rglob("build.gradle"))+list(root.rglob("build.gradle.kts"))+list(root.rglob("pom.xml")):
@@ -94,6 +119,7 @@ def build_plan(root:Path,approval_path:Path,timeout:int=600)->dict:
  if dep["status"]!="READY":blockers.append({"code":"OFFLINE_CACHE_NOT_FIXED","subject":dep["status"]})
  if env["java"]["status"]!="READY":blockers.append({"code":"JAVA_UNAVAILABLE","subject":"java"})
  if env["bubblewrap"]["status"]!="READY":blockers.append({"code":"SANDBOX_UNAVAILABLE","subject":"bubblewrap"})
+ if env["runtimeMounts"]["state"]!="READY":blockers.append({"code":"JAVA_RUNTIME_MOUNTS_UNSAFE","subject":env["runtimeMounts"]["state"]})
  if compat["status"]=="INCOMPATIBLE":blockers.append({"code":"JAVA_VERSION_INCOMPATIBLE","subject":f"requires {compat['requiredMajor']}, current {compat['currentMajor']}"})
  context_bytes=sum((root/i).stat().st_size for i in context)
  if len(context)>MAX_BUILD_FILES or context_bytes>MAX_BUILD_BYTES:blockers.append({"code":"BUILD_INPUT_LIMIT_EXCEEDED","subject":f"{len(context)} files / {context_bytes} bytes"})
@@ -130,7 +156,9 @@ def validate_plan(plan:dict,path:Path,root:Path,current:bool=True)->dict:
  if path.is_symlink() or root not in path.resolve().parents:raise ValueError("verification plan must be target-owned")
  return load_object(root/plan["dryRun"]["path"])
 def render_plan(plan:dict)->str:
- return "\n".join(["# Spring 코드 v2 격리 검증 계획","","## 검토 결론","",f"- 실행 준비: {'예' if plan['readyForApproval'] else '아니요'}",f"- 명령: `{' '.join(plan['command']) or '결정 불가'}`",f"- Git: `{plan['git']['branch']}` · `{plan['git']['head'][:12]}` · 관련 변경 {len(plan['git']['relevantDirtyPaths'])}개",f"- Java: {plan['environment']['java']['version']}",f"- Java 호환성: {plan['javaCompatibility']['status']}",f"- 로컬 {plan['dependencyCache']['kind']} cache: {plan['dependencyCache']['status']} · {plan['dependencyCache']['fileCount']}개 파일",f"- 빌드 입력: {plan['targetContext']['fileCount']}개 · {plan['targetContext']['totalBytes']} bytes",f"- 차단 항목: {len(plan['blockers'])}개","","## 실제 효과","","- 네트워크·Docker·DB·포트: 차단 또는 사용하지 않음","- 실제 target과 호스트 `/`: sandbox에 mount하지 않음","- source/resource/build/wrapper allowlist만 임시 복사","- 호스트 환경변수 초기화, credential 설정 복사 안 함","- 컴파일·테스트 출력은 임시 공간에만 생성","","## 차단 항목",""]+[f"- `{i['code']}` · {i['subject']}" for i in plan["blockers"]] + ["- 없음" if not plan["blockers"] else "","","## 검증 의미","","- 통과 시 승인된 API 계약 후보가 임시 복사본에서 컴파일되고 테스트됐음을 의미","- 비즈니스 행동 완료, source 적용, commit, push를 의미하지 않음","","## 선택","","1. 추천: 이 검증 계획 승인","2. 제한 시간 등 항목 수정","3. 자연어로 다른 검증 요청","4. 취소",""])
+ mounts=plan["environment"].get("runtimeMounts");mount_summary=[] if mounts is None else [f"- Java 전용 runtime 설정: {mounts['state']} · {len(mounts['mounts'])}개 디렉터리 · {mounts['fileCount']}개 파일"]
+ mount_effect=[] if mounts is None else ["- 승인된 `/etc/java-*` runtime 설정만 읽기 전용 mount"]
+ return "\n".join(["# Spring 코드 v2 격리 검증 계획","","## 검토 결론","",f"- 실행 준비: {'예' if plan['readyForApproval'] else '아니요'}",f"- 명령: `{' '.join(plan['command']) or '결정 불가'}`",f"- Git: `{plan['git']['branch']}` · `{plan['git']['head'][:12]}` · 관련 변경 {len(plan['git']['relevantDirtyPaths'])}개",f"- Java: {plan['environment']['java']['version']}",f"- Java 호환성: {plan['javaCompatibility']['status']}",*mount_summary,f"- 로컬 {plan['dependencyCache']['kind']} cache: {plan['dependencyCache']['status']} · {plan['dependencyCache']['fileCount']}개 파일",f"- 빌드 입력: {plan['targetContext']['fileCount']}개 · {plan['targetContext']['totalBytes']} bytes",f"- 차단 항목: {len(plan['blockers'])}개","","## 실제 효과","","- 네트워크·Docker·DB·포트: 차단 또는 사용하지 않음","- 실제 target과 호스트 `/`: sandbox에 mount하지 않음","- source/resource/build/wrapper allowlist만 임시 복사",*mount_effect,"- 호스트 환경변수 초기화, credential 설정 복사 안 함","- 컴파일·테스트 출력은 임시 공간에만 생성","","## 차단 항목",""]+[f"- `{i['code']}` · {i['subject']}" for i in plan["blockers"]] + ["- 없음" if not plan["blockers"] else "","","## 검증 의미","","- 통과 시 승인된 API 계약 후보가 임시 복사본에서 컴파일되고 테스트됐음을 의미","- 비즈니스 행동 완료, source 적용, commit, push를 의미하지 않음","","## 선택","","1. 추천: 이 검증 계획 승인","2. 제한 시간 등 항목 수정","3. 자연어로 다른 검증 요청","4. 취소",""])
 def validate_approval(root:Path,path:Path,plan_path:Path,current:bool=True)->dict:
  reference(path,root);value=load_object(path)
  if set(value)!={"springCodeVerificationPlanV2ApprovalVersion","state","plan","view","approvedBy","approvedAt","effects"} or value["springCodeVerificationPlanV2ApprovalVersion"]!=1 or value["state"]!="APPROVED":raise ValueError("verification plan approval is invalid")

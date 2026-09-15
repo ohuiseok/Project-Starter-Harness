@@ -103,3 +103,12 @@ contract without copying the roughly hundreds-of-megabytes dependency cache.
 This smoke proves real Spring execution; the contract-chain suite separately
 proves evidence lineage, so neither is described as one unmocked natural-language
 end-to-end test.
+The checked scenario pins Spring Boot, Gradle, Java, the single allowed command,
+and output bounds. The seed Git commit intentionally excludes the feature
+Controller and test; their separate candidate hashes show what the smoke adds.
+Optional immutable result and redacted-log paths preserve evidence outside the
+temporary target. This still does not claim a production apply transaction.
+Candidate and post-apply verification plans bind a bounded manifest of the
+exact `/etc/java-*` runtime configuration directories required by installed
+JDK toolchains. Runners rehash that manifest immediately before sandbox launch;
+they never expose all of `/etc` and reject approval-time environment drift.

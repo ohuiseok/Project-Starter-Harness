@@ -35,15 +35,39 @@ class SpringGradleAcceptanceTests(unittest.TestCase):
         with mock.patch.object(acceptance, "prerequisites", return_value=runnable), mock.patch.object(acceptance, "copy_cache", side_effect=ValueError("unsafe cache")):
             value = acceptance.run()
         self.assertEqual("BLOCKED", value["acceptanceState"])
-        self.assertEqual("FIXTURE_OR_SANDBOX", value["stage"])
+        self.assertEqual("EVIDENCE", value["stage"])
 
-    def test_target_fixture_contains_real_spring_sources_without_touching_harness(self):
+    def test_seed_excludes_feature_and_candidates_are_separate(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)
-            acceptance.write_target_files(target)
+            scenario = acceptance.load_scenario(acceptance.DEFAULT_SCENARIO)
+            acceptance.write_seed_files(target, scenario)
             self.assertIn("org.springframework.boot", (target / "build.gradle").read_text())
+            self.assertFalse((target / "src/main/java/com/example/OrdersController.java").exists())
+            generated = acceptance.write_feature_candidates(target)
+            self.assertEqual(2, len(generated))
             self.assertTrue((target / "src/test/java/com/example/OrdersControllerTest.java").is_file())
             self.assertFalse((acceptance.ROOT / "src/main/java/com/example/AcceptanceApplication.java").exists())
+
+    def test_scenario_is_pinned_and_command_cannot_expand(self):
+        scenario = acceptance.load_scenario(acceptance.DEFAULT_SCENARIO)
+        self.assertEqual("3.2.0", scenario["springBootVersion"])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "scenario.json"
+            changed = dict(scenario, command=["./gradlew", "clean", "test"])
+            path.write_text(__import__("json").dumps(changed))
+            with self.assertRaisesRegex(ValueError, "command"): acceptance.load_scenario(path)
+
+    def test_atomic_output_rejects_occupied_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.json";path.write_text("owned")
+            with self.assertRaisesRegex(ValueError, "occupied"): acceptance.atomic_output(path, "new")
+
+    def test_atomic_output_materializes_new_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "nested/result.json"
+            acceptance.atomic_output(path, "evidence\n")
+            self.assertEqual("evidence\n", path.read_text())
 
 
 if __name__ == "__main__":

@@ -37,7 +37,7 @@ def main()->int:
    shutil.copytree(root,workspace,dirs_exist_ok=True,symlinks=True,ignore=shutil.ignore_patterns(".git",MANAGED,".gradle","build","target"))
    if any(i.is_symlink() for i in workspace.rglob("*")):raise ValueError("symbolic links are not allowed in verification copy")
    copy_cache(plan["dependencyCache"]["kind"],home,plan["dependencyCache"]);cmd=plan["command"];argv=[cmd["executable"],*cmd["arguments"]];started=dt.datetime.now(dt.timezone.utc).isoformat();journal={"postApplyVerificationV2JournalVersion":1,"attemptId":plan["attemptId"],"state":"PREPARED","plan":reference(plan_path,root),"approval":reference(approval_path,root),"output":output.relative_to(root).as_posix(),"temporaryRoot":str(temporary),"temporaryMarkerSha256":sha(marker),"pid":None,"processStartTicks":None};durable_json(journal,journal_path)
-   process=subprocess.Popen(sandbox(workspace,home,argv),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True)
+   process=subprocess.Popen(sandbox(workspace,home,argv,plan.get("effects",{}).get("runtimeMounts")),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True)
    try:journal.update(state="RUNNING",pid=process.pid,processStartTicks=process_start_ticks(process.pid));durable_json(journal,journal_path)
    except BaseException:terminate(process,plan["limits"]["termGraceSeconds"]);process.communicate();raise
    timed_out=False

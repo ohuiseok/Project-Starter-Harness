@@ -15,7 +15,7 @@ class PostApplyV2Tests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);result=self.fixture(root)
    with mock.patch.object(core,"validate_apply_result"),mock.patch.object(core,"reference",return_value={"path":"docs/apply.json","sha256":"a"*64}),mock.patch.object(core,"cache_evidence",return_value={"kind":"GRADLE","status":"READY"}),mock.patch.object(core,"git_state",return_value={"branch":"main","head":"b"*40,"relevantDirtyPaths":[]}):plan=core.build_plan(root,result)
-   self.assertEqual("./gradlew",plan["command"]["executable"]);self.assertEqual(["--offline","--no-daemon","test"],plan["command"]["arguments"]);self.assertEqual("DISABLED",plan["effects"]["network"]);self.assertTrue(plan["readyForApproval"])
+   self.assertEqual("./gradlew",plan["command"]["executable"]);self.assertEqual(["--offline","--no-daemon","test"],plan["command"]["arguments"]);self.assertEqual("DISABLED",plan["effects"]["network"]);self.assertEqual("READY",plan["effects"]["runtimeMounts"]["state"]);legacy=json.loads(json.dumps(plan));legacy["effects"].pop("runtimeMounts");self.assertNotIn("Java 전용 runtime 설정",core.render_plan(legacy,{}));self.assertTrue(plan["readyForApproval"])
  def test_missing_cache_blocks_approval(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);result=self.fixture(root)

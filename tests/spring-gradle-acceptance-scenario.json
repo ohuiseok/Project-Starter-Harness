@@ -1,0 +1,14 @@
+{
+  "scenarioVersion": 1,
+  "id": "java-mvc-api-only-gradle",
+  "springBootVersion": "3.2.0",
+  "dependencyManagementVersion": "1.1.4",
+  "gradleVersion": "8.5",
+  "javaToolchain": 17,
+  "command": ["./gradlew", "--offline", "--no-daemon", "test"],
+  "expectedTest": "GET /orders returns []",
+  "limits": {
+    "timeoutSeconds": 300,
+    "maxLogCharacters": 20000
+  }
+}
