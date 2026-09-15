@@ -136,3 +136,12 @@ a consumed apply approval cannot be reused, and a
 recovery entry point. Unit-level failure injection continues to cover partial
 write rollback and completion-view recovery without weakening production code
 with test-only failure switches.
+
+`--continue-request` extends the same external-target run through Production v2
+progress, natural-language recommendation selection, one-time handoff
+consumption, an immutable F002 draft revision, exact readiness validation,
+transactional official-spec promotion, and preparation of the next design-route
+review. `--inject continuation-handoff-replay-and-recovery` proves both replay
+rejection and forward recovery of an exact interrupted intake claim. The run
+stops at the design approval boundary; it does not silently approve F002 design
+or apply F002 source.

@@ -25,6 +25,11 @@ def validate_intake(value:dict,path:Path,root:Path)->dict:
  if value["requestSummary"]!=route["request"]["summary"]: raise ValueError("intake request summary does not match route")
  if not isinstance(value["requestSummary"],str) or not value["requestSummary"].strip(): raise ValueError("intake request summary is invalid")
  if path.is_symlink() or root not in path.resolve().parents: raise ValueError("intake must be target-owned")
+ claim_path=target_path(root,f".starter-harness/continuation-handoff-consumptions/{value['handoff']['sha256']}.json","handoff consumption claim")
+ if not claim_path.is_file(): raise ValueError("committed one-time handoff consumption is required")
+ claim=load_object(claim_path);required_claim={"continuationHandoffConsumptionVersion","handoff","intake","state"}
+ expected_intake={"path":path.relative_to(root).as_posix(),"sha256":sha(path)}
+ if set(claim)!=required_claim or claim["continuationHandoffConsumptionVersion"]!=1 or claim["state"]!="COMMITTED" or claim["handoff"]!=value["handoff"] or claim["intake"]!=expected_intake: raise ValueError("handoff consumption claim is invalid or belongs to another intake")
  return handoff
 def source_id(intake_hash:str,existing:dict|None)->str:
  base=f"CONTINUATION-{intake_hash[:12].upper()}"; used={item["id"] for item in (existing or {}).get("sources",[])}; candidate=base; index=2

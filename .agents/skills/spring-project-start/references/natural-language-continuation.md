@@ -11,6 +11,9 @@ Deterministic evidence wins over language inference. An explicit feature ID is
 preferred, then an exact candidate name, then the current recommendation for a
 generic next request. Unknown or multiple IDs require clarification. Technology
 terms come from the technology catalog rather than only a routing word list.
+Both validated `progressVersion: 1` and Production v2 `progressV2Version: 1`
+ledgers are accepted without rewriting either format; v2 blocker codes are
+normalized only for the user-facing route.
 
 A new feature atomically reserves the next unused stable ID in target-owned
 evidence, but is not added to the project brief until Feature Specification.
@@ -27,6 +30,11 @@ binds the structured route and rendered view and creates a handoff only. Consume
 that validated handoff into one immutable `READY_FOR_WORKFLOW` intake before
 starting the named workflow. Neither handoff nor intake approves a feature,
 design, execution, apply, runtime effects, Git commit, or push.
+Each handoff has one target-owned consumption claim, so it cannot create two
+competing intakes at different paths. If interruption leaves the claim
+`PREPARED`, use `recover_continuation_handoff_consumption.py`; it commits an
+exact already-written intake, releases a claim with no intake, and refuses
+drifted output.
 
 For `FEATURE_SPECIFICATION`, create `spec.draft.json` and its change-focused
 review first. The draft may contain blocking `UNKNOWN` decisions and does not

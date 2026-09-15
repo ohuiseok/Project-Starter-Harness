@@ -23,6 +23,9 @@ class ProductionApplyAcceptanceContractTests(unittest.TestCase):
   value=acceptance.outcome("PASSED","COMPLETION","DONE","다음 기능 입력");value["completedPhases"]=acceptance.PHASES
   rendered=acceptance.render_result(value)
   self.assertIn("후보 검증: 완료",rendered);self.assertIn("DB runtime: `NOT_RUN`",rendered);self.assertIn("다음 기능 입력",rendered)
+ def test_user_view_extends_through_continuation_design_boundary(self):
+  value=acceptance.outcome("PASSED","DESIGN_ROUTE_PREPARATION","DONE","F002 설계 검토");value["completedPhases"]=acceptance.PHASES+acceptance.CONTINUATION_PHASES
+  rendered=acceptance.render_result(value);self.assertIn("다음 요청 해석: 완료",rendered);self.assertIn("다음 기능 명세: 완료",rendered);self.assertIn("다음 설계 검토 준비: 완료",rendered)
  def test_evidence_bundle_survives_temporary_target_removal(self):
   with tempfile.TemporaryDirectory() as directory:
    root=Path(directory);target=root/"target";target.mkdir();(target/"docs").mkdir();(target/"docs/evidence.json").write_text("{}")

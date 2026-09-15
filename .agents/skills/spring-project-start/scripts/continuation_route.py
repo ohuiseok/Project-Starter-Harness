@@ -3,8 +3,9 @@
 from __future__ import annotations
 import datetime as dt,hashlib,json,re
 from pathlib import Path
+from milestone_completion_v2 import validate_progress as validate_progress_v2
 from next_feature_id import next_feature_id
-from spring_milestone_completion import sha,target_path,validate_progress
+from spring_milestone_completion import sha,target_path,validate_progress as validate_progress_v1
 from validate_feature_specs import load_object,validate_project
 ROUTES={"NEXT_FEATURE","NEW_FEATURE","REVISE_FEATURE","BUG_FIX","TECHNOLOGY_CHANGE","RETRY_VERIFICATION","RESUME_DEFERRED","NEEDS_CLARIFICATION","BLOCKED"}
 SECRET=re.compile(r"(?i)(?:AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9_]{20,}|(?:password|passwd|token|api[_-]?key|secret)\s*[:=]\s*\S+)")
@@ -29,6 +30,15 @@ def technology_terms()->set[str]:
     for value in values:
         result.update(token for token in re.findall(r"[a-z0-9.+#-]{2,}|[가-힣]{2,}",value) if len(token)>=2)
     return result|{"db","database","데이터베이스","postgres","postgresql","mysql","mariadb","mongodb","redis","kafka","rabbitmq","jwt","oauth","세션","인증","보안","jsp","msa"}
+def validate_progress(value:dict,root:Path)->str:
+    if value.get("progressVersion")==1:
+        validate_progress_v1(value,root);return "V1"
+    if value.get("progressV2Version")==1:
+        validate_progress_v2(value,root,True);return "V2"
+    raise ValueError("progress ledger version is unsupported")
+def blocker(value:str)->str:
+    prefixes={"DEPENDENCIES:":"dependencies:","UNKNOWNS:":"unknowns:","STATUS:":"status:"}
+    return next((replacement+value[len(prefix):] for prefix,replacement in prefixes.items() if value.startswith(prefix)),value)
 def select_candidate(request:str,project:dict,explicit:str|None)->tuple[dict|None,str,list[str]]:
     candidates=project["featureCandidates"]
     if explicit:
@@ -49,8 +59,8 @@ def select_candidate(request:str,project:dict,explicit:str|None)->tuple[dict|Non
 def build_route(root:Path,request:str,project_path:Path,progress_path:Path,explicit_feature_id:str|None=None,reserved_feature_id:str|None=None,reservation:dict|None=None)->dict:
     request=sanitize(request); project=load_object(project_path); project_approved,_=validate_project(project); progress=load_object(progress_path); validate_progress(progress,root)
     if not project_approved: raise ValueError("continuation requires an approved current project brief")
-    if progress["project"]!={"name":project["project"]["name"],"goal":project["project"]["goal"]}: raise ValueError("progress and project brief identify different projects")
-    candidate,matched_by,decisions=select_candidate(request,project,explicit_feature_id); completed={item["featureId"] for item in progress["completedMilestones"]}; blocked={item["featureId"]:item for item in progress["blockedCandidates"]}; generic_next=contains(request,("다음","추천","계속","next","continue")); lower=request.lower(); change=contains(lower,("변경","바꿔","교체","전환","추가","제거","change","switch","replace","add","remove")); tech=change and any(term in lower for term in technology_terms())
+    if any(progress["project"].get(key)!=project["project"][key] for key in ("name","goal")): raise ValueError("progress and project brief identify different projects")
+    candidate,matched_by,decisions=select_candidate(request,project,explicit_feature_id); completed={item["featureId"] for item in progress["completedMilestones"]}; blocked={item["featureId"]:{**item,"blockers":[blocker(reason) for reason in item["blockers"]]} for item in progress["blockedCandidates"]}; generic_next=contains(request,("다음","추천","계속","next","continue")); lower=request.lower(); change=contains(lower,("변경","바꿔","교체","전환","추가","제거","change","switch","replace","add","remove")); tech=change and any(term in lower for term in technology_terms())
     route_type="NEW_FEATURE"; workflow="FEATURE_SPECIFICATION"; change_kind="FEATURE"; blockers=[]; warnings=[]; confidence="MEDIUM"; selected=None
     if decisions: route_type="NEEDS_CLARIFICATION"; workflow="CONTINUATION_ROUTING"; confidence="LOW"
     elif contains(request,("검증 재시도","테스트 재시도","retry verification","retry test")): route_type="RETRY_VERIFICATION"; workflow="POST_APPLY_VERIFICATION"; change_kind="VERIFICATION_RETRY"; confidence="HIGH"

@@ -30,6 +30,7 @@ from tests.spring_gradle_acceptance import (  # noqa: E402
 
 APPROVED_BY = "acceptance-user"
 PHASES = ["PREPARE", "CANDIDATE_VERIFICATION", "APPLY", "POST_APPLY_VERIFICATION", "COMPLETION"]
+CONTINUATION_PHASES = ["CONTINUATION_ROUTING", "FEATURE_SPECIFICATION", "DESIGN_ROUTE_PREPARATION"]
 STATUS_LINE = re.compile(r"^([A-Z][A-Z0-9_]*):\s*(.*)$")
 
 
@@ -114,7 +115,10 @@ def base_documents(target: Path) -> dict[str, Path]:
         "scope": {"included": ["List orders API"], "excluded": ["Persistence", "Authentication", "Deployment"]},
         "featureCandidates": [{"id": "F001", "name": "List orders", "userValue": "An API client retrieves an empty order list.",
                                "recommendationReason": "Smallest executable Spring MVC vertical slice.", "dependsOn": [],
-                               "blockingUnknownIds": [], "recommendedOrder": 1, "status": "APPROVED"}],
+                               "blockingUnknownIds": [], "recommendedOrder": 1, "status": "APPROVED"},
+                              {"id": "F002", "name": "List order summaries", "userValue": "An API client retrieves summarized orders.",
+                               "recommendationReason": "It proves natural-language continuation after F001.", "dependsOn": ["F001"],
+                               "blockingUnknownIds": [], "recommendedOrder": 2, "status": "APPROVED"}],
         "unknowns": [], "sources": [{"id": "S001", "type": "USER_STATED", "reference": "Production v2 acceptance scope"}], "approval": {},
     }, approved_at)
     requirement = lambda status, reason: {"status": status, "reason": reason, "source": "USER_STATED", "confirmedByUser": True}
@@ -142,11 +146,18 @@ def base_documents(target: Path) -> dict[str, Path]:
         "dependencies": [], "unknowns": [],
         "sources": [{"id": "S001", "type": "USER_STATED", "reference": "Production v2 acceptance scope"}], "approval": {},
     }, approved_at)
-    profile = {"project": {"artifactId": "orders-acceptance"}, "projects": [], "dataStores": [], "decisions": {
-        "application": {"option": "application.rest-api"}, "view": {"option": "view.none"},
-        "security": {"option": "security.none"}, "authorization": {"option": "authorization.none"},
-        "database": {"option": "database.none"}, "persistence": {"option": "persistence.none"},
-        "integration": {"option": "integration.none"}, "language": {"option": "language.java"}}}
+    profile = {"profileVersion": 1, "project": {"groupId": "com.example", "artifactId": "orders-acceptance", "name": "orders-acceptance",
+               "description": "Production v2 acceptance", "packageName": "com.example"}, "projects": [], "dataStores": [], "decisions": {
+        "language": {"status": "NOW", "option": "language.java"}, "java-version": {"status": "NOW", "option": "java-version.17"},
+        "spring-boot-version": {"status": "NOW", "option": "spring-boot-version.current-stable", "resolvedValue": "3.2.0"},
+        "build": {"status": "NOW", "option": "build.gradle-groovy"}, "application": {"status": "NOW", "option": "application.rest-api"},
+        "view": {"status": "NOW", "option": "view.none"}, "security": {"status": "NOW", "option": "security.none"},
+        "authorization": {"status": "NOW", "option": "authorization.none"}, "database": {"status": "NOW", "option": "database.none"},
+        "persistence": {"status": "NOW", "option": "persistence.none"}, "database-topology": {"status": "NOW", "option": "database-topology.none"},
+        "architecture": {"status": "NOW", "option": "architecture.single-module"}, "packaging": {"status": "NOW", "option": "packaging.jar"},
+        "verification": {"status": "NOW", "option": "verification.spring-integration"}},
+        "compatibilityReview": {"result": "SUPPORTED", "findings": [], "acceptedFindings": []},
+        "confirmedBy": {"user": True, "confirmedAt": approved_at}}
     paths = {"project": docs / "project-brief.json", "feature": feature_dir / "spec.json", "profile": docs / "project-profile.json",
              "route": feature_dir / "design-route.json", "contract": contract_dir / "metadata.json", "openapi": contract_dir / "openapi.json"}
     for key, value in (("project", project), ("feature", feature), ("profile", profile)): json_file(paths[key], value)
@@ -213,6 +224,87 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         write(path, body)
 
 
+def continue_to_design_review(target: Path, paths: dict[str, Path], artifacts: dict[str, Path], receipts: list[dict], request: str,
+                              inject: str | None = None) -> dict:
+    command = lambda label, script, *args: run_command(target, receipts, label, script, *args)
+    common = ["--target", str(target)]; directory = target / "docs/continuation/F002"; feature_dir = target / "docs/features/F002"
+    source_before = {path.relative_to(target).as_posix(): sha(path) for path in target.glob("src/**/*") if path.is_file()}
+    route = directory / "route.json"; route_view = route.with_suffix(".md")
+    command("continuation route", "create_continuation_route.py", "--request", request, "--project-brief", str(paths["project"]),
+            "--progress", str(target / "docs/progress-v2.json"), *common, "--output", str(route), "--view", str(route_view))
+    route_value = json.loads(route.read_text())
+    selected = route_value["route"].get("selectedFeature")
+    if route_value["route"]["type"] != "NEXT_FEATURE" or not selected or selected["featureId"] != "F002":
+        raise ValueError("natural-language continuation did not select the recommended F002")
+    approval = directory / "route-approval.json"; handoff = directory / "handoff.json"
+    command("continuation approval", "record_continuation_route_approval.py", "--route", str(route), "--view", str(route_view), *common,
+            "--approval-output", str(approval), "--handoff-output", str(handoff), "--expected-route-hash", sha(route),
+            "--approved-by", APPROVED_BY, "--approved-at", now())
+    intake = directory / "workflow-intake.json"
+    command("continuation handoff", "consume_continuation_handoff.py", "--handoff", str(handoff), *common, "--output", str(intake))
+    replay_blocked = False; recovery_executed = False
+    if inject == "continuation-handoff-replay-and-recovery":
+        duplicate = directory / "duplicate-workflow-intake.json"
+        try: command("continuation handoff replay", "consume_continuation_handoff.py", "--handoff", str(handoff), *common, "--output", str(duplicate))
+        except CommandFailure:
+            replay_blocked = not duplicate.exists()
+        if not replay_blocked: raise ValueError("continuation handoff replay was not blocked cleanly")
+        claim = target / ".starter-harness/continuation-handoff-consumptions" / f"{sha(handoff)}.json"; claim_value = json.loads(claim.read_text()); claim_value["state"] = "PREPARED"; json_file(claim, claim_value)
+        command("continuation handoff recovery", "recover_continuation_handoff_consumption.py", "--handoff", str(handoff), *common)
+        recovery_executed = True
+    draft = feature_dir / "spec.draft.v001.json"; draft_view = draft.with_suffix(".md")
+    command("feature draft", "create_feature_spec_from_intake.py", "--intake", str(intake), *common,
+            "--draft-output", str(draft), "--view-output", str(draft_view))
+    proposal_value = json.loads(draft.read_text()); proposal_value["feature"].update({"goal": "Return summarized orders.", "status": "DRAFT"})
+    proposal_value["actors"] = ["API client"]
+    proposal_value["scenario"] = {"preconditions": [], "trigger": "The client requests GET /order-summaries.",
+                                  "mainFlow": ["Return HTTP 200 with summarized orders."], "alternateFlows": [], "postconditions": ["No state is changed."]}
+    proposal_value["acceptanceCriteria"] = [{"id": "AC-F002-01", "given": "the Spring application is available",
+                                               "when": "GET /order-summaries is requested", "then": "HTTP 200 and a JSON array are returned"}]
+    requirement = lambda status, reason: {"status": status, "reason": reason, "source": "USER_STATED", "confirmedByUser": True}
+    proposal_value["designRequirements"] = {
+        "httpApi": requirement("REQUIRED", "The continuation exposes an HTTP endpoint."),
+        "persistentState": requirement("NOT_USED", "No persisted data is required by this acceptance slice."),
+        "messaging": requirement("NOT_USED", "No asynchronous integration is required."),
+        "scheduledJob": requirement("NOT_USED", "No scheduled work is required."),
+        "serverRenderedUi": requirement("NOT_USED", "No server-rendered UI is required."),
+        "separateClient": requirement("NOT_USED", "Only the API boundary is in scope."),
+        "externalIntegration": requirement("NOT_USED", "No external service is required."),
+    }
+    for item in proposal_value["unknowns"]: item["status"] = "RESOLVED"
+    proposal_value["sources"].append({"id": "ANSWER-F002-001", "type": "USER_STATED", "reference": "주문 요약 목록 API로 진행"})
+    proposal = directory / "spec-proposal.json"; json_file(proposal, proposal_value)
+    revised = feature_dir / "spec.draft.v002.json"; revised_view = revised.with_suffix(".md")
+    command("feature draft update", "advance_feature_spec_draft.py", "--intake", str(intake), "--current", str(draft),
+            "--proposal", str(proposal), *common, "--output", str(revised), "--view", str(revised_view))
+    readiness = directory / "spec-readiness.json"; readiness_view = readiness.with_suffix(".md")
+    command("feature readiness", "prepare_feature_spec_approval.py", "--intake", str(intake), "--draft", str(revised),
+            *common, "--output", str(readiness), "--view", str(readiness_view))
+    command("feature readiness validation", "validate_feature_spec_approval_readiness.py", "--intake", str(intake),
+            "--report", str(readiness), "--view", str(readiness_view), *common)
+    promotion = directory / "promotion.json"; promotion_view = promotion.with_suffix(".md")
+    command("feature promotion review", "prepare_feature_spec_promotion.py", "--intake", str(intake), "--readiness", str(readiness),
+            "--readiness-view", str(readiness_view), *common, "--output", str(promotion), "--view", str(promotion_view))
+    approved_at = now()
+    command("feature promotion apply", "apply_feature_spec_promotion.py", "--plan", str(promotion), "--view", str(promotion_view),
+            *common, "--expected-plan-hash", sha(promotion), "--approved-by", APPROVED_BY, "--approved-at", approved_at)
+    completion = target / ".starter-harness/continuation-completions" / f"{sha(intake)}.json"
+    design_route = feature_dir / "design-route.json"; design_view = design_route.with_suffix(".md")
+    command("design route preparation", "prepare_design_route_from_completion.py", "--completion", str(completion),
+            "--project-brief", str(paths["project"]), "--profile", str(paths["profile"]), *common,
+            "--output", str(design_route), "--view", str(design_view))
+    source_after = {path.relative_to(target).as_posix(): sha(path) for path in target.glob("src/**/*") if path.is_file()}
+    official = feature_dir / "spec.json"; official_value = json.loads(official.read_text()); design_value = json.loads(design_route.read_text())
+    if official_value["approval"]["status"] != "APPROVED" or source_before != source_after:
+        raise ValueError("continuation promotion changed source or did not approve F002")
+    artifacts.update(continuationRoute=route, continuationApproval=approval, continuationHandoff=handoff, continuationIntake=intake,
+                     featureDraft=draft, featureDraftRevision=revised, featureReadiness=readiness, featurePromotion=promotion,
+                     featurePromotionCompletion=completion, nextFeature=official, nextDesignRoute=design_route)
+    return {"request": request, "selectedFeatureId": "F002", "progressVersion": "V2", "officialFeatureApproved": True,
+            "sourceUnchangedDuringContinuation": True, "designRouteState": design_value["approval"]["status"],
+            "handoffReplayBlocked": replay_blocked, "handoffRecoveryExecuted": recovery_executed, "nextBoundary": "DESIGN_ROUTE_REVIEW"}
+
+
 def evidence_index(target: Path, initial_head: str, artifacts: dict[str, Path]) -> dict:
     indexed = {name: {"path": path.relative_to(target).as_posix(), "sha256": sha(path), "mode": path.stat().st_mode & 0o777}
                for name, path in artifacts.items() if path.is_file()}
@@ -224,9 +316,11 @@ def evidence_index(target: Path, initial_head: str, artifacts: dict[str, Path]) 
 def render_result(result: dict) -> str:
     completed = set(result["completedPhases"]); current = result["phase"]
     labels = {"PREPARE": "준비", "CANDIDATE_VERIFICATION": "후보 검증", "APPLY": "프로젝트 적용",
-              "POST_APPLY_VERIFICATION": "적용 후 검증", "COMPLETION": "완료 기록"}
+              "POST_APPLY_VERIFICATION": "적용 후 검증", "COMPLETION": "완료 기록", "CONTINUATION_ROUTING": "다음 요청 해석",
+              "FEATURE_SPECIFICATION": "다음 기능 명세", "DESIGN_ROUTE_PREPARATION": "다음 설계 검토 준비"}
     lines = ["# Production v2 적용 검증", "", "## 현재 상태", "", f"- 결과: `{result['acceptanceState']}`", f"- 현재 단계: {labels.get(current, current)}", f"- 분류: `{result['category']}`", "", "## 진행", ""]
-    for phase in PHASES:
+    displayed = PHASES + CONTINUATION_PHASES if any(phase in completed or phase == current for phase in CONTINUATION_PHASES) else PHASES
+    for phase in displayed:
         state = "완료" if phase in completed else "현재" if phase == current and result["acceptanceState"] != "PASSED" else "대기"
         lines.append(f"- {labels[phase]}: {state}")
     scope = result["scope"]
@@ -280,7 +374,8 @@ def finish(result: dict, target: Path, evidence_dir: Path | None) -> dict:
     return result
 
 
-def execute(scenario_path: Path, timeout: int | None = None, inject: str | None = None, evidence_dir: Path | None = None) -> dict:
+def execute(scenario_path: Path, timeout: int | None = None, inject: str | None = None, evidence_dir: Path | None = None,
+            continuation_request: str | None = None) -> dict:
     try: scenario = load_scenario(scenario_path)
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
         return outcome("BLOCKED", "PREPARE", "SCENARIO_INVALID", "acceptance 시나리오를 수정", error=str(error))
@@ -365,12 +460,21 @@ def execute(scenario_path: Path, timeout: int | None = None, inject: str | None 
             command("completion approval", "record_milestone_completion_approval_v2.py", "--review", str(completion_review), "--view", str(completion_review.with_suffix(".md")), *common, "--output", str(completion_approval), "--approved-by", APPROVED_BY, "--approved-at", completion_time)
             command("completion apply", "apply_milestone_completion_v2.py", "--review", str(completion_review), "--approval", str(completion_approval), *common)
             artifacts.update(completionReview=completion_review, completionApproval=completion_approval, completion=completion, progress=target / "docs/progress-v2.json")
-            result = {**outcome("PASSED", "COMPLETION", "PRODUCTION_V2_FLOW_COMPLETED", "자연어 연속 개발 acceptance로 확장", evidence=evidence_index(target, initial_head, artifacts), stageReceipts=stage_receipts),
+            continuation = None
+            if continuation_request:
+                phase = "DESIGN_ROUTE_PREPARATION"
+                continuation = continue_to_design_review(target, paths, artifacts, stage_receipts, continuation_request, inject)
+            category = "PRODUCTION_V2_CONTINUATION_READY" if continuation else "PRODUCTION_V2_FLOW_COMPLETED"
+            next_action = "F002 설계 경로를 검토하고 승인" if continuation else "자연어 연속 개발 acceptance로 확장"
+            result = {**outcome("PASSED", phase, category, next_action, evidence=evidence_index(target, initial_head, artifacts), stageReceipts=stage_receipts),
                     "completedPhases": PHASES, "proof": {"candidateExecuted": True, "productionApplyTransaction": True, "postApplyExecuted": True,
                     "completionRecorded": True, "productionValidatorsMocked": False, "targetWasExternal": True,
                     "featureAbsentFromInitialCommit": True, "plannedFeatureFiles": planned_feature_files,
                     "applyReportRecoveryExecuted": inject == "apply-report-recovery",
                     "upstreamApprovedInput": "CANONICAL_ACCEPTANCE_FIXTURE", "productionApprovalsRecordedFrom": "SPRING_MAPPING"}}
+            if continuation:
+                result["completedPhases"] = PHASES + CONTINUATION_PHASES
+                result["proof"]["continuation"] = continuation
             return finish(result, target, evidence_dir)
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
             expected_block = inject in {"target-drift-before-apply", "candidate-evidence-tamper-before-apply"} and phase == "APPLY"
@@ -390,8 +494,9 @@ def execute(scenario_path: Path, timeout: int | None = None, inject: str | None 
 
 def main() -> int:
     parser = argparse.ArgumentParser(); parser.add_argument("--scenario", type=Path, default=DEFAULT_SCENARIO); parser.add_argument("--timeout", type=int)
-    parser.add_argument("--inject", choices=["target-drift-before-apply", "candidate-evidence-tamper-before-apply", "reuse-apply-approval", "apply-report-recovery"])
-    parser.add_argument("--output", type=Path); parser.add_argument("--view", type=Path); parser.add_argument("--evidence-dir", type=Path); args = parser.parse_args()
+    parser.add_argument("--inject", choices=["target-drift-before-apply", "candidate-evidence-tamper-before-apply", "reuse-apply-approval", "apply-report-recovery", "continuation-handoff-replay-and-recovery"])
+    parser.add_argument("--output", type=Path); parser.add_argument("--view", type=Path); parser.add_argument("--evidence-dir", type=Path)
+    parser.add_argument("--continue-request"); args = parser.parse_args()
     output = args.output.resolve() if args.output else None; view = args.view.resolve() if args.view else output.with_suffix(".md") if output else None
     evidence_dir = args.evidence_dir.resolve() if args.evidence_dir else output.with_suffix(".evidence") if output else None
     occupied = [path for path in (output, view, evidence_dir) if path is not None and (path.exists() or path.is_symlink())]
@@ -400,7 +505,7 @@ def main() -> int:
     elif occupied:
         result = outcome("BLOCKED", "PREPARE", "OUTPUT_UNSAFE", "비어 있는 결과·화면·증거 경로를 선택", occupied=[str(path) for path in occupied])
     else:
-        result = execute(args.scenario.resolve(), args.timeout, args.inject, evidence_dir)
+        result = execute(args.scenario.resolve(), args.timeout, args.inject, evidence_dir, args.continue_request)
     rendered = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     if args.output and not occupied:
         try:

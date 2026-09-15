@@ -493,7 +493,9 @@ blockers, and atomically reserve—but do not insert—the next stable ID for a 
 feature.
 Obtain exact route/view confirmation when interpretation or impact requires it,
 then create and consume a handoff into the named existing workflow's immutable
-intake. Store only a PII-minimized summary, reject secret-like input, escape
+intake. A handoff is consumable exactly once; recover an interrupted `PREPARED`
+claim with `recover_continuation_handoff_consumption.py` instead of creating a
+second intake. Store only a PII-minimized summary, reject secret-like input, escape
 user text in the review, and keep blockers, warnings, and decisions distinct.
 For a `FEATURE_SPECIFICATION` intake, use
 `create_feature_spec_from_intake.py` to create a non-authoritative draft and a
