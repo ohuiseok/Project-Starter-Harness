@@ -736,6 +736,11 @@ CODE=$?
 expect_code "milestone completion v2: focused regression suite passes" 0
 expect_out "milestone completion v2: all focused scenarios ran" "Ran 8 tests"
 
+OUT="$(python3 "$HARNESS_ROOT/tests/test_v2_closed_loop.py" 2>&1)"
+CODE=$?
+expect_code "v2 closed loop: cross-stage regression suite passes" 0
+expect_out "v2 closed loop: all cross-stage scenarios ran" "Ran 2 tests"
+
 OUT="$(python3 "$HARNESS_ROOT/tests/test_continuation_route.py" 2>&1)"
 CODE=$?
 expect_code "natural-language continuation: focused regression suite passes" 0

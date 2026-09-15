@@ -83,3 +83,11 @@ and relevant Git-state comparison. Transaction backups have a file/mode
 manifest whose own SHA-256 is journaled and checked before rollback. An
 ownership marker permits safe cleanup of an allocation interrupted before its
 journal exists, while unproven directories are never deleted.
+
+The Harness regression suite includes a cross-stage v2 closed-loop fixture. It
+uses one Git target and real SHA-256 references from Spring mapping and
+implementation planning through dry run, candidate verification, apply,
+post-apply verification, atomic completion, and progress materialization. It
+also proves that tampering with an intermediate dry run is rejected before
+completion. Capability-specific runtime execution remains covered by its own
+focused runner tests rather than being faked by the closed-loop contract test.
