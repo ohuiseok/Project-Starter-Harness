@@ -734,12 +734,17 @@ expect_out "post-apply verification v2: all focused scenarios ran" "Ran 9 tests"
 OUT="$(python3 "$HARNESS_ROOT/tests/test_milestone_completion_v2.py" 2>&1)"
 CODE=$?
 expect_code "milestone completion v2: focused regression suite passes" 0
-expect_out "milestone completion v2: all focused scenarios ran" "Ran 8 tests"
+expect_out "milestone completion v2: all focused scenarios ran" "Ran 10 tests"
 
-OUT="$(python3 "$HARNESS_ROOT/tests/test_v2_closed_loop.py" 2>&1)"
+OUT="$(python3 "$HARNESS_ROOT/tests/test_v2_contract_chain.py" 2>&1)"
 CODE=$?
-expect_code "v2 closed loop: cross-stage regression suite passes" 0
-expect_out "v2 closed loop: all cross-stage scenarios ran" "Ran 2 tests"
+expect_code "v2 contract chain: cross-stage regression suite passes" 0
+expect_out "v2 contract chain: all cross-stage scenarios ran" "Ran 2 tests"
+
+OUT="$(python3 "$HARNESS_ROOT/tests/test_v2_execution_loop.py" 2>&1)"
+CODE=$?
+expect_code "v2 execution loop: real wrapper integration suite passes" 0
+expect_out "v2 execution loop: Gradle, Maven, and retry scenarios ran" "Ran 3 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_continuation_route.py" 2>&1)"
 CODE=$?

@@ -15,6 +15,11 @@ class CompletionV2Tests(unittest.TestCase):
   chain={"feature":json.loads(feature.read_text()),"featureId":"F001","featureRef":core.reference(feature,root),"implementationPlan":core.reference(feature,root),"dryRun":core.reference(feature,root),"candidateVerification":core.reference(feature,root),"applyResult":core.reference(feature,root),"postApplyVerification":core.reference(post,root),"baseline":{"path":".starter-harness-implementation-v2.json","sha256":"a"*64},"times":{"implementedAt":"2026-09-10T00:00:00Z","verifiedAt":"2026-09-10T00:01:00Z"}}
   with mock.patch.object(core,"evidence_chain",return_value=chain),mock.patch.object(core,"validate_project",return_value=(True,[])),mock.patch.object(core,"validate_feature",return_value=(True,[])),mock.patch.object(core,"git_state",return_value={"branch":"main","head":"b"*40,"relevantDirtyPaths":[]}):review=core.build_review(root,post,feature,project,completion_path,"2026-09-10T00:02:00Z")
   review_path=docs/"review.json";review_path.write_text(json.dumps(review));approval=docs/"approval.json";approval.write_text("{}");return review,review_path,approval
+ def approved(self,root:Path,review:dict,review_path:Path,approval_path:Path):
+  view=root/"docs/review.md";view.write_text(core.render(review));approval={"milestoneCompletionApprovalV2Version":1,"state":"APPROVED","completionAttemptId":review["completionAttemptId"],"review":core.reference(review_path,root),"view":core.reference(view,root),"approvedBy":"test-user","approvedAt":review["completion"]["document"]["completionApprovedAt"],"effects":{"milestoneCompletion":True,"progressMutation":True,"sourceMutation":False,"testExecution":False,"gitCommitOrPush":"NOT_RUN"}};approval_path.write_text(json.dumps(approval));return view
+ def chain_from_review(self,root:Path,review:dict)->dict:
+  completion=review["completion"]["document"];feature_path=root/completion["evidence"]["featureRef"]["path"]
+  return {"feature":json.loads(feature_path.read_text()),"featureId":completion["featureId"],"featureRef":completion["evidence"]["featureRef"],"implementationPlan":completion["evidence"]["implementationPlan"],"dryRun":completion["evidence"]["dryRun"],"candidateVerification":completion["evidence"]["candidateVerification"],"applyResult":completion["evidence"]["applyResult"],"postApplyVerification":completion["evidence"]["postApplyVerification"],"baseline":completion["evidence"]["baseline"],"times":{"implementedAt":completion["implementedAt"],"verifiedAt":completion["verifiedAt"]}}
  def test_completion_separates_state_from_verification_levels(self):
   with tempfile.TemporaryDirectory() as d:
    review,_,_=self.fixture(Path(d));completion=review["completion"]["document"];self.assertEqual("COMPLETED",completion["state"]);self.assertEqual("PASSED",completion["verificationLevels"]["appliedIsolated"]);self.assertEqual("NOT_RUN",completion["verificationLevels"]["deployment"])
@@ -26,6 +31,23 @@ class CompletionV2Tests(unittest.TestCase):
    root=Path(d);review,path,approval=self.fixture(root)
    with mock.patch.object(apply_script,"validate_approval"):record=apply_script.apply(root,path,approval)
    self.assertEqual("COMMITTED",record["state"]);self.assertTrue((root/"docs/completion.json").is_file());self.assertTrue((root/core.PROGRESS).is_file());self.assertTrue((root/core.VIEW).is_file())
+ def test_apply_validates_real_approval_and_review_view(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);review,path,approval=self.fixture(root);self.approved(root,review,path,approval);chain=self.chain_from_review(root,review)
+   with mock.patch.object(core,"evidence_chain",return_value=chain),mock.patch.object(core,"validate_project",return_value=(True,[])),mock.patch.object(core,"validate_feature",return_value=(True,[])),mock.patch.object(core,"git_state",return_value=review["git"]):record=apply_script.apply(root,path,approval)
+   self.assertEqual("COMMITTED",record["state"])
+ def test_second_completion_preserves_first_milestone(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);first,first_path,first_approval=self.fixture(root);self.approved(root,first,first_path,first_approval);first_chain=self.chain_from_review(root,first)
+   with mock.patch.object(core,"evidence_chain",return_value=first_chain),mock.patch.object(core,"validate_project",return_value=(True,[])),mock.patch.object(core,"validate_feature",return_value=(True,[])),mock.patch.object(core,"git_state",return_value=first["git"]):apply_script.apply(root,first_path,first_approval)
+   first_ref=json.loads((root/core.PROGRESS).read_text())["completedMilestones"][0]["completion"]
+   feature=root/"docs/feature-2.json";post=root/"docs/post-2.json";feature.write_text(json.dumps({"feature":{"id":"F002","name":"Update","userValue":"More value"}}));post.write_text("{}")
+   project=root/"docs/project.json";project.write_text(json.dumps({"project":{"name":"Sample","goal":"Goal"},"featureCandidates":[{"id":"F001","name":"Create","userValue":"Value","recommendedOrder":1,"dependsOn":[],"blockingUnknownIds":[],"status":"APPROVED","recommendationReason":"first"},{"id":"F002","name":"Update","userValue":"More value","recommendedOrder":2,"dependsOn":["F001"],"blockingUnknownIds":[],"status":"APPROVED","recommendationReason":"next"}],"unknowns":[]}))
+   ref=core.reference(feature,root);post_ref=core.reference(post,root);second_chain={"feature":json.loads(feature.read_text()),"featureId":"F002","featureRef":ref,"implementationPlan":ref,"dryRun":ref,"candidateVerification":ref,"applyResult":ref,"postApplyVerification":post_ref,"baseline":{"path":".starter-harness-implementation-v2.json","sha256":"c"*64},"times":{"implementedAt":"2026-09-10T00:03:00Z","verifiedAt":"2026-09-10T00:04:00Z"}}
+   with mock.patch.object(core,"evidence_chain",return_value=second_chain),mock.patch.object(core,"validate_project",return_value=(True,[])),mock.patch.object(core,"validate_feature",return_value=(True,[])),mock.patch.object(core,"git_state",return_value={"branch":"main","head":"d"*40,"relevantDirtyPaths":[]}):second=core.build_review(root,post,feature,project,"docs/completion-2.json","2026-09-10T00:05:00Z")
+   second_path=root/"docs/review-2.json";second_approval=root/"docs/approval-2.json";second_path.write_text(json.dumps(second));self.approved(root,second,second_path,second_approval)
+   with mock.patch.object(core,"evidence_chain",return_value=second_chain),mock.patch.object(core,"validate_project",return_value=(True,[])),mock.patch.object(core,"validate_feature",return_value=(True,[])),mock.patch.object(core,"git_state",return_value=second["git"]):apply_script.apply(root,second_path,second_approval)
+   completed=json.loads((root/core.PROGRESS).read_text())["completedMilestones"];self.assertEqual(["F001","F002"],[item["featureId"] for item in completed]);self.assertEqual(first_ref,completed[0]["completion"])
  def test_view_failure_preserves_committed_json_for_recovery(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);review,path,approval=self.fixture(root);real=apply_script.atomic_file
