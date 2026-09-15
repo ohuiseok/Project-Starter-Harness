@@ -122,6 +122,17 @@ transactional apply, post-apply verification, and completion entry points. It
 then emits one content-addressed evidence index and imports no mocking
 framework. The proof remains deliberately narrow: Java, Gradle, single-module
 Spring MVC API-only code, offline tests, CREATE files, and no DB, startup, HTTP
-smoke, deployment, commit, or push. The optional
-`--inject target-drift-before-apply` case proves that relevant drift is blocked
-before source application.
+smoke, deployment, commit, or push. With `--output`, the runner also writes a
+sibling user-first Markdown result and an immutable `.evidence` directory. The
+bundle retains only allowlisted contracts, approvals, logs, transactions,
+baseline, build inputs, and applied source; its manifest fixes every path,
+SHA-256, mode, and size after rejecting secret-like or personal content.
+Structured per-entry-point receipts record exit code, duration, status fields,
+and output SHA-256 instead of making the final state depend only on prose.
+
+Optional failure injections prove that target or candidate drift is blocked,
+a consumed apply approval cannot be reused, and a
+`COMMITTED_REPORT_PENDING` apply can recreate its result through the production
+recovery entry point. Unit-level failure injection continues to cover partial
+write rollback and completion-view recovery without weakening production code
+with test-only failure switches.

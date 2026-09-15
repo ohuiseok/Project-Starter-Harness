@@ -754,7 +754,7 @@ expect_out "Spring Gradle acceptance: status and external fixture scenarios ran"
 OUT="$(python3 "$HARNESS_ROOT/tests/test_v2_production_apply_acceptance.py" 2>&1)"
 CODE=$?
 expect_code "production v2 acceptance: fast contract suite passes" 0
-expect_out "production v2 acceptance: phase and no-mocking contracts ran" "Ran 4 tests"
+expect_out "production v2 acceptance: phase and no-mocking contracts ran" "Ran 6 tests"
 
 OUT="$(python3 "$HARNESS_ROOT/tests/test_continuation_route.py" 2>&1)"
 CODE=$?

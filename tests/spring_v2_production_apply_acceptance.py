@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
+import os
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -20,11 +25,18 @@ from render_spec_markdown import render_feature, render_project  # noqa: E402
 from validate_design_route import validate as validate_route  # noqa: E402
 from validate_feature_specs import approval_content_hash, validate_feature, validate_project  # noqa: E402
 from tests.spring_gradle_acceptance import (  # noqa: E402
-    DEFAULT_SCENARIO, atomic_output, create_target, load_scenario, prerequisites, safe_message, sha, write,
+    DEFAULT_SCENARIO, PII, SECRET, atomic_output, create_target, load_scenario, prerequisites, safe_message, sha, write,
 )
 
 APPROVED_BY = "acceptance-user"
 PHASES = ["PREPARE", "CANDIDATE_VERIFICATION", "APPLY", "POST_APPLY_VERIFICATION", "COMPLETION"]
+STATUS_LINE = re.compile(r"^([A-Z][A-Z0-9_]*):\s*(.*)$")
+
+
+class CommandFailure(RuntimeError):
+    def __init__(self, receipt: dict):
+        super().__init__(f"{receipt['stage']}: {receipt['summary']}")
+        self.receipt = receipt
 
 
 def now() -> str:
@@ -55,22 +67,40 @@ def outcome(state: str, phase: str, category: str, next_action: str, **details: 
     }
 
 
-def failure_state(phase: str, message: str, injected_stale: bool = False) -> tuple[str, str]:
+def failure_state(phase: str, message: str, injected_stale: bool = False, fields: dict | None = None) -> tuple[str, str]:
+    fields = fields or {}
     if injected_stale or any(marker in message.lower() for marker in ("stale", "changed after", "target context changed", "approved mapping is stale")):
         return "BLOCKED", "BLOCKED_STALE"
-    if any(marker in message for marker in ("COMPILATION_FAILURE", "SPRING_CONTEXT_FAILURE", "TEST_FAILURE", "BUILD_FAILURE", "VERIFICATION_RESULT: FAILED")):
+    if fields.get("VERIFICATION_RESULT") == "FAILED" or fields.get("TRANSACTION_STATE") in {"ROLLED_BACK", "ROLLBACK_INCOMPLETE"}:
         return "FAILED", "FAILED_CODE"
-    if any(marker in message for marker in ("OFFLINE_DEPENDENCY", "UNKNOWN", "TIMEOUT", "SENSITIVE_OUTPUT")) or phase in {"PREPARE", "CANDIDATE_VERIFICATION", "POST_APPLY_VERIFICATION"}:
+    if fields.get("VERIFICATION_RESULT") == "UNKNOWN" or any(marker in message for marker in ("OFFLINE_DEPENDENCY", "TIMEOUT", "SENSITIVE_OUTPUT")):
+        return "UNKNOWN", "UNKNOWN_ENVIRONMENT"
+    if phase in {"PREPARE", "CANDIDATE_VERIFICATION", "POST_APPLY_VERIFICATION"}:
         return "UNKNOWN", "UNKNOWN_ENVIRONMENT"
     return "FAILED", "PRODUCTION_FLOW_ERROR"
 
 
-def run_command(target: Path, label: str, script: str, *arguments: str) -> str:
+def run_command(target: Path, receipts: list[dict], label: str, script: str, *arguments: str) -> str:
+    started = time.monotonic()
     done = subprocess.run([sys.executable, str(SCRIPTS / script), *arguments], cwd=target, text=True,
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+    fields = {match.group(1): match.group(2) for line in done.stdout.splitlines() if (match := STATUS_LINE.match(line))}
+    receipt = {"stage": label, "entryPoint": script, "exitCode": done.returncode,
+               "durationMilliseconds": round((time.monotonic() - started) * 1000), "fields": fields,
+               "outputSha256": hashlib.sha256(done.stdout.encode()).hexdigest(), "summary": safe_message(done.stdout.strip()[-1000:])}
+    receipts.append(receipt)
     if done.returncode:
-        raise RuntimeError(f"{label}: {done.stdout.strip()[-2000:]}")
+        raise CommandFailure(receipt)
     return done.stdout
+
+
+def assert_feature_absent_from_head(target: Path, head: str, plan: dict) -> list[str]:
+    tracked = set(subprocess.check_output(["git", "ls-tree", "-r", "--name-only", head], cwd=target, text=True).splitlines())
+    planned = sorted(component["target"]["path"] for component in plan["components"] if component["fileAction"] == "CREATE_FILE")
+    overlap = sorted(set(planned) & tracked)
+    if overlap:
+        raise ValueError("planned feature files already exist in initial Git HEAD: " + ", ".join(overlap))
+    return planned
 
 
 def base_documents(target: Path) -> dict[str, Path]:
@@ -191,7 +221,66 @@ def evidence_index(target: Path, initial_head: str, artifacts: dict[str, Path]) 
     return {"initialGitHead": initial_head, "finalGitHead": final_head, "gitHeadUnchanged": final_head == initial_head, "gitStatus": status, "artifacts": indexed}
 
 
-def execute(scenario_path: Path, timeout: int | None = None, inject: str | None = None) -> dict:
+def render_result(result: dict) -> str:
+    completed = set(result["completedPhases"]); current = result["phase"]
+    labels = {"PREPARE": "준비", "CANDIDATE_VERIFICATION": "후보 검증", "APPLY": "프로젝트 적용",
+              "POST_APPLY_VERIFICATION": "적용 후 검증", "COMPLETION": "완료 기록"}
+    lines = ["# Production v2 적용 검증", "", "## 현재 상태", "", f"- 결과: `{result['acceptanceState']}`", f"- 현재 단계: {labels.get(current, current)}", f"- 분류: `{result['category']}`", "", "## 진행", ""]
+    for phase in PHASES:
+        state = "완료" if phase in completed else "현재" if phase == current and result["acceptanceState"] != "PASSED" else "대기"
+        lines.append(f"- {labels[phase]}: {state}")
+    scope = result["scope"]
+    lines += ["", "## 이번 검증 범위", "", f"- Adapter: `{scope['adapter']}`", "- Java · Gradle · 단일 모듈 Spring MVC · CREATE",
+              f"- DB runtime: `{scope['databaseRuntime']}`", f"- 애플리케이션 기동·HTTP smoke: `{scope['applicationStartup']}` / `{scope['httpSmoke']}`",
+              f"- Git commit/push: `{scope['gitCommitOrPush']}`", "", "## 다음", "", f"- {result['nextAction']}", ""]
+    return "\n".join(lines)
+
+
+def bundle_files(target: Path) -> list[Path]:
+    roots = [target / "docs", target / ".starter-harness", target / "src", target / "gradle/wrapper"]
+    files = [path for root in roots if root.is_dir() for path in root.rglob("*") if path.is_file() and not path.is_symlink()]
+    files += [path for path in (target / "build.gradle", target / "settings.gradle", target / "gradlew", target / ".starter-harness-implementation-v2.json") if path.is_file() and not path.is_symlink()]
+    return sorted(set(files))
+
+
+def persist_bundle(target: Path, destination: Path, result: dict) -> dict:
+    destination = destination.absolute()
+    if destination.exists() or destination.is_symlink(): raise ValueError("evidence bundle destination is occupied")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.parent.is_symlink(): raise ValueError("evidence bundle parent is unsafe")
+    staging = Path(tempfile.mkdtemp(prefix=".v2-evidence-stage-", dir=destination.parent))
+    records = []
+    try:
+        for source in bundle_files(target):
+            relative = source.relative_to(target); output = staging / "target" / relative; output.parent.mkdir(parents=True, exist_ok=True)
+            if source.suffix.lower() in {".json", ".md", ".java", ".gradle", ".txt", ".log", ".properties"} or source.name in {"gradlew", "settings.gradle"}:
+                content = source.read_text(encoding="utf-8", errors="replace")
+                if SECRET.search(content) or PII.search(content): raise ValueError("evidence bundle contains sensitive or personal output: " + relative.as_posix())
+            shutil.copy2(source, output)
+            records.append({"targetPath": relative.as_posix(), "bundlePath": output.relative_to(staging).as_posix(),
+                            "sha256": sha(output), "mode": output.stat().st_mode & 0o777, "sizeBytes": output.stat().st_size})
+        snapshot = staging / "acceptance-result.json"; json_file(snapshot, result)
+        records.append({"targetPath": None, "bundlePath": snapshot.relative_to(staging).as_posix(), "sha256": sha(snapshot),
+                        "mode": snapshot.stat().st_mode & 0o777, "sizeBytes": snapshot.stat().st_size})
+        manifest = {"productionV2EvidenceBundleVersion": 1, "sourceTargetWasTemporary": True, "files": records}
+        manifest_path = staging / "manifest.json"; json_file(manifest_path, manifest)
+        os.replace(staging, destination)
+        return {"path": str(destination), "manifestSha256": sha(destination / "manifest.json"), "fileCount": len(records),
+                "totalBytes": sum(item["sizeBytes"] for item in records)}
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True); raise
+
+
+def finish(result: dict, target: Path, evidence_dir: Path | None) -> dict:
+    if evidence_dir is not None:
+        try: result["evidenceBundle"] = persist_bundle(target, evidence_dir, result)
+        except (OSError, ValueError) as error:
+            return outcome("BLOCKED", result.get("phase", "PREPARE"), "EVIDENCE_BUNDLE_FAILED", "증거 번들 경로와 민감정보 검사를 확인한 뒤 재실행",
+                           originalState=result.get("acceptanceState"), error=safe_message(error))
+    return result
+
+
+def execute(scenario_path: Path, timeout: int | None = None, inject: str | None = None, evidence_dir: Path | None = None) -> dict:
     try: scenario = load_scenario(scenario_path)
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
         return outcome("BLOCKED", "PREPARE", "SCENARIO_INVALID", "acceptance 시나리오를 수정", error=str(error))
@@ -201,82 +290,124 @@ def execute(scenario_path: Path, timeout: int | None = None, inject: str | None 
     timeout = timeout or scenario["limits"]["timeoutSeconds"]
     with tempfile.TemporaryDirectory(prefix="spring-v2-production-acceptance-", dir="/var/tmp") as temporary:
         target = Path(temporary) / "external-target"; candidate = Path(temporary) / "candidate"; target.mkdir(); candidate.mkdir()
-        artifacts: dict[str, Path] = {}; phase = "PREPARE"; initial_head = "UNKNOWN"
+        artifacts: dict[str, Path] = {}; stage_receipts: list[dict] = []; phase = "PREPARE"; initial_head = "UNKNOWN"
+        command = lambda label, script, *args: run_command(target, stage_receipts, label, script, *args)
         try:
             initial_head = create_target(target, ready["details"]["gradleExecutable"], scenario)
             paths = base_documents(target); artifacts.update(paths); common = ["--target", str(target)]
             mapping = target / "docs/features/F001/spring-mapping.json"
-            run_command(target, "mapping prepare", "prepare_http_api_spring_mapping.py", "--feature", str(paths["feature"]), "--profile", str(paths["profile"]), "--route", str(paths["route"]), "--http-api-contract", str(paths["contract"]), *common, "--output", str(mapping), "--view", str(mapping.with_suffix(".md")), "--module-path", ".", "--package-name", "com.example", "--decision-source", "USER_CONFIRMED")
+            command("mapping prepare", "prepare_http_api_spring_mapping.py", "--feature", str(paths["feature"]), "--profile", str(paths["profile"]), "--route", str(paths["route"]), "--http-api-contract", str(paths["contract"]), *common, "--output", str(mapping), "--view", str(mapping.with_suffix(".md")), "--module-path", ".", "--package-name", "com.example", "--decision-source", "USER_CONFIRMED")
             artifacts["springMapping"] = mapping; mapping_approval = mapping.with_name("spring-mapping-approval.json")
-            run_command(target, "mapping approval", "record_http_api_spring_mapping_approval.py", "--mapping", str(mapping), "--view", str(mapping.with_suffix(".md")), *common, "--output", str(mapping_approval), "--approved-by", APPROVED_BY, "--approved-at", now())
+            command("mapping approval", "record_http_api_spring_mapping_approval.py", "--mapping", str(mapping), "--view", str(mapping.with_suffix(".md")), *common, "--output", str(mapping_approval), "--approved-by", APPROVED_BY, "--approved-at", now())
             artifacts["springMappingApproval"] = mapping_approval; plan = mapping.with_name("implementation-plan-v2.json")
-            run_command(target, "plan prepare", "prepare_spring_implementation_plan_v2.py", "--mapping-approval", str(mapping_approval), *common, "--output", str(plan), "--view", str(plan.with_suffix(".md")))
+            command("plan prepare", "prepare_spring_implementation_plan_v2.py", "--mapping-approval", str(mapping_approval), *common, "--output", str(plan), "--view", str(plan.with_suffix(".md")))
+            plan_value = json.loads(plan.read_text()); planned_feature_files = assert_feature_absent_from_head(target, initial_head, plan_value)
             artifacts["implementationPlan"] = plan; plan_approval = plan.with_name("implementation-plan-v2-approval.json")
-            run_command(target, "plan approval", "record_spring_implementation_plan_v2_approval.py", "--plan", str(plan), "--view", str(plan.with_suffix(".md")), *common, "--output", str(plan_approval), "--approved-by", APPROVED_BY, "--approved-at", now())
+            command("plan approval", "record_spring_implementation_plan_v2_approval.py", "--plan", str(plan), "--view", str(plan.with_suffix(".md")), *common, "--output", str(plan_approval), "--approved-by", APPROVED_BY, "--approved-at", now())
             artifacts["implementationPlanApproval"] = plan_approval; renderability = plan.with_name("spring-code-renderability-v2.json")
-            run_command(target, "renderability", "prepare_spring_code_renderability_v2.py", "--plan-approval", str(plan_approval), *common, "--output", str(renderability), "--view", str(renderability.with_suffix(".md")))
-            artifacts["renderability"] = renderability; candidate_files(candidate, json.loads(plan.read_text())); dry = plan.with_name("spring-code-dry-run-v2.json")
-            run_command(target, "dry run", "prepare_spring_code_dry_run_v2.py", "--plan-approval", str(plan_approval), "--renderability", str(renderability), "--rendered-source", str(candidate), *common, "--output", str(dry), "--view", str(dry.with_suffix(".md")))
+            command("renderability", "prepare_spring_code_renderability_v2.py", "--plan-approval", str(plan_approval), *common, "--output", str(renderability), "--view", str(renderability.with_suffix(".md")))
+            artifacts["renderability"] = renderability; candidate_files(candidate, plan_value); dry = plan.with_name("spring-code-dry-run-v2.json")
+            command("dry run", "prepare_spring_code_dry_run_v2.py", "--plan-approval", str(plan_approval), "--renderability", str(renderability), "--rendered-source", str(candidate), *common, "--output", str(dry), "--view", str(dry.with_suffix(".md")))
             artifacts["dryRun"] = dry; dry_approval = dry.with_name("spring-code-dry-run-v2-approval.json")
-            run_command(target, "dry-run approval", "record_spring_code_dry_run_v2_approval.py", "--report", str(dry), "--view", str(dry.with_suffix(".md")), *common, "--output", str(dry_approval), "--approved-by", APPROVED_BY, "--approved-at", now())
+            command("dry-run approval", "record_spring_code_dry_run_v2_approval.py", "--report", str(dry), "--view", str(dry.with_suffix(".md")), *common, "--output", str(dry_approval), "--approved-by", APPROVED_BY, "--approved-at", now())
             artifacts["dryRunApproval"] = dry_approval
 
             phase = "CANDIDATE_VERIFICATION"; verification_plan = dry.with_name("spring-code-verification-plan-v2.json")
-            run_command(target, "candidate plan", "prepare_spring_code_verification_plan_v2.py", "--dry-run-approval", str(dry_approval), *common, "--output", str(verification_plan), "--view", str(verification_plan.with_suffix(".md")), "--timeout-seconds", str(timeout))
+            command("candidate plan", "prepare_spring_code_verification_plan_v2.py", "--dry-run-approval", str(dry_approval), *common, "--output", str(verification_plan), "--view", str(verification_plan.with_suffix(".md")), "--timeout-seconds", str(timeout))
             verification_approval = dry.with_name("spring-code-verification-plan-v2-approval.json")
-            run_command(target, "candidate approval", "record_spring_code_verification_plan_v2_approval.py", "--plan", str(verification_plan), "--view", str(verification_plan.with_suffix(".md")), *common, "--output", str(verification_approval), "--approved-by", APPROVED_BY, "--approved-at", now())
+            command("candidate approval", "record_spring_code_verification_plan_v2_approval.py", "--plan", str(verification_plan), "--view", str(verification_plan.with_suffix(".md")), *common, "--output", str(verification_approval), "--approved-by", APPROVED_BY, "--approved-at", now())
             verification = dry.with_name("spring-code-verification-report-v2.json")
-            run_command(target, "candidate verification", "run_spring_code_verification_v2.py", "--plan", str(verification_plan), "--approval", str(verification_approval), *common, "--output", str(verification))
+            command("candidate verification", "run_spring_code_verification_v2.py", "--plan", str(verification_plan), "--approval", str(verification_approval), *common, "--output", str(verification))
             artifacts.update(candidateVerificationPlan=verification_plan, candidateVerificationApproval=verification_approval, candidateVerification=verification)
+            candidate_state = json.loads(verification.read_text())["result"]["state"]
+            if candidate_state != "PASSED":
+                state = "FAILED" if candidate_state == "FAILED" else "UNKNOWN"
+                category = "FAILED_CODE" if state == "FAILED" else "UNKNOWN_ENVIRONMENT"
+                return finish(outcome(state, phase, category, "후보 코드 또는 실행 환경을 해결한 뒤 새 시도로 검증", stageReceipts=stage_receipts), target, evidence_dir)
+            if inject == "candidate-evidence-tamper-before-apply": write(dry, dry.read_text() + " ")
             if inject == "target-drift-before-apply": write(target / "build.gradle", (target / "build.gradle").read_text() + "\n// injected relevant drift\n")
 
-            phase = "APPLY"; apply_review = dry.with_name("spring-code-apply-review-v2.json"); apply_result = dry.with_name("spring-code-apply-result-v2.json")
-            run_command(target, "apply review", "prepare_spring_code_apply_review_v2.py", "--verification-report", str(verification), *common, "--output", str(apply_review), "--view", str(apply_review.with_suffix(".md")), "--result", apply_result.relative_to(target).as_posix())
+            phase = "APPLY"; apply_review = dry.with_name("spring-code-apply-review-v2.json")
+            apply_result = target / "docs/features/F001/acceptance-apply-result/apply.json" if inject == "apply-report-recovery" else dry.with_name("spring-code-apply-result-v2.json")
+            if inject == "apply-report-recovery": apply_result.parent.mkdir()
+            command("apply review", "prepare_spring_code_apply_review_v2.py", "--verification-report", str(verification), *common, "--output", str(apply_review), "--view", str(apply_review.with_suffix(".md")), "--result", apply_result.relative_to(target).as_posix())
             apply_approval = dry.with_name("spring-code-apply-approval-v2.json")
-            run_command(target, "apply approval", "record_spring_code_apply_approval_v2.py", "--review", str(apply_review), "--view", str(apply_review.with_suffix(".md")), *common, "--output", str(apply_approval), "--approved-by", APPROVED_BY, "--approved-at", now())
-            run_command(target, "apply", "apply_approved_spring_code_v2.py", "--review", str(apply_review), "--approval", str(apply_approval), *common)
+            command("apply approval", "record_spring_code_apply_approval_v2.py", "--review", str(apply_review), "--view", str(apply_review.with_suffix(".md")), *common, "--output", str(apply_approval), "--approved-by", APPROVED_BY, "--approved-at", now())
+            if inject == "apply-report-recovery": apply_result.parent.rmdir()
+            command("apply", "apply_approved_spring_code_v2.py", "--review", str(apply_review), "--approval", str(apply_approval), *common)
+            if inject == "apply-report-recovery":
+                apply_result.parent.mkdir(); transaction_id = json.loads(apply_review.read_text())["transactionId"]
+                command("apply report recovery", "recover_spring_code_apply_v2.py", *common, "--transaction-id", transaction_id)
             artifacts.update(applyReview=apply_review, applyApproval=apply_approval, applyResult=apply_result, baseline=target / ".starter-harness-implementation-v2.json")
+            if inject == "reuse-apply-approval":
+                try: command("apply approval reuse", "apply_approved_spring_code_v2.py", "--review", str(apply_review), "--approval", str(apply_approval), *common)
+                except CommandFailure:
+                    result = outcome("BLOCKED", phase, "BLOCKED_APPROVAL_REUSE", "새 review와 승인으로만 다시 적용", stageReceipts=stage_receipts,
+                                     evidence=evidence_index(target, initial_head, artifacts), appliedFeatureFiles=planned_feature_files)
+                    return finish(result, target, evidence_dir)
+                raise ValueError("consumed apply approval was unexpectedly reusable")
 
             phase = "POST_APPLY_VERIFICATION"; post_plan = dry.with_name("post-apply-verification-plan-v2.json")
-            run_command(target, "post-apply plan", "prepare_post_apply_verification_v2.py", "--apply-result", str(apply_result), *common, "--output", str(post_plan), "--view", str(post_plan.with_suffix(".md")), "--timeout-seconds", str(timeout))
+            command("post-apply plan", "prepare_post_apply_verification_v2.py", "--apply-result", str(apply_result), *common, "--output", str(post_plan), "--view", str(post_plan.with_suffix(".md")), "--timeout-seconds", str(timeout))
             post_approval = dry.with_name("post-apply-verification-approval-v2.json")
-            run_command(target, "post-apply approval", "record_post_apply_verification_approval_v2.py", "--plan", str(post_plan), "--view", str(post_plan.with_suffix(".md")), *common, "--output", str(post_approval), "--approved-by", APPROVED_BY, "--approved-at", now())
+            command("post-apply approval", "record_post_apply_verification_approval_v2.py", "--plan", str(post_plan), "--view", str(post_plan.with_suffix(".md")), *common, "--output", str(post_approval), "--approved-by", APPROVED_BY, "--approved-at", now())
             post_result = dry.with_name("post-apply-verification-report-v2.json")
-            run_command(target, "post-apply verification", "run_post_apply_verification_v2.py", "--plan", str(post_plan), "--approval", str(post_approval), *common, "--output", str(post_result))
+            command("post-apply verification", "run_post_apply_verification_v2.py", "--plan", str(post_plan), "--approval", str(post_approval), *common, "--output", str(post_result))
             artifacts.update(postApplyPlan=post_plan, postApplyApproval=post_approval, postApplyResult=post_result)
+            post_state = json.loads(post_result.read_text())["state"]
+            if post_state != "VERIFIED":
+                state = "FAILED" if post_state == "FAILED" else "UNKNOWN"; category = "FAILED_CODE" if state == "FAILED" else "UNKNOWN_ENVIRONMENT"
+                return finish(outcome(state, phase, category, "적용된 코드 또는 실행 환경을 해결하고 새 attempt로 검증", stageReceipts=stage_receipts), target, evidence_dir)
 
             phase = "COMPLETION"; completion_time = now(); completion_review = dry.with_name("milestone-completion-review-v2.json"); completion = dry.with_name("milestone-completion-v2.json")
-            run_command(target, "completion review", "prepare_milestone_completion_v2.py", "--post-apply-result", str(post_result), "--feature", str(paths["feature"]), "--project-brief", str(paths["project"]), *common, "--completion-output", completion.relative_to(target).as_posix(), "--approved-at", completion_time, "--output", str(completion_review), "--view", str(completion_review.with_suffix(".md")))
+            command("completion review", "prepare_milestone_completion_v2.py", "--post-apply-result", str(post_result), "--feature", str(paths["feature"]), "--project-brief", str(paths["project"]), *common, "--completion-output", completion.relative_to(target).as_posix(), "--approved-at", completion_time, "--output", str(completion_review), "--view", str(completion_review.with_suffix(".md")))
             completion_approval = dry.with_name("milestone-completion-approval-v2.json")
-            run_command(target, "completion approval", "record_milestone_completion_approval_v2.py", "--review", str(completion_review), "--view", str(completion_review.with_suffix(".md")), *common, "--output", str(completion_approval), "--approved-by", APPROVED_BY, "--approved-at", completion_time)
-            run_command(target, "completion apply", "apply_milestone_completion_v2.py", "--review", str(completion_review), "--approval", str(completion_approval), *common)
+            command("completion approval", "record_milestone_completion_approval_v2.py", "--review", str(completion_review), "--view", str(completion_review.with_suffix(".md")), *common, "--output", str(completion_approval), "--approved-by", APPROVED_BY, "--approved-at", completion_time)
+            command("completion apply", "apply_milestone_completion_v2.py", "--review", str(completion_review), "--approval", str(completion_approval), *common)
             artifacts.update(completionReview=completion_review, completionApproval=completion_approval, completion=completion, progress=target / "docs/progress-v2.json")
-            return {**outcome("PASSED", "COMPLETION", "PRODUCTION_V2_FLOW_COMPLETED", "자연어 연속 개발 acceptance로 확장", evidence=evidence_index(target, initial_head, artifacts)),
+            result = {**outcome("PASSED", "COMPLETION", "PRODUCTION_V2_FLOW_COMPLETED", "자연어 연속 개발 acceptance로 확장", evidence=evidence_index(target, initial_head, artifacts), stageReceipts=stage_receipts),
                     "completedPhases": PHASES, "proof": {"candidateExecuted": True, "productionApplyTransaction": True, "postApplyExecuted": True,
                     "completionRecorded": True, "productionValidatorsMocked": False, "targetWasExternal": True,
+                    "featureAbsentFromInitialCommit": True, "plannedFeatureFiles": planned_feature_files,
+                    "applyReportRecoveryExecuted": inject == "apply-report-recovery",
                     "upstreamApprovedInput": "CANONICAL_ACCEPTANCE_FIXTURE", "productionApprovalsRecordedFrom": "SPRING_MAPPING"}}
+            return finish(result, target, evidence_dir)
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
-            expected_block = inject == "target-drift-before-apply" and phase == "APPLY"
-            state, category = failure_state(phase, str(error), expected_block)
+            expected_block = inject in {"target-drift-before-apply", "candidate-evidence-tamper-before-apply"} and phase == "APPLY"
+            fields = error.receipt["fields"] if isinstance(error, CommandFailure) else {}
+            state, category = failure_state(phase, str(error), expected_block, fields)
             feature_files = sorted(path.relative_to(target).as_posix() for path in target.glob("src/**/*") if path.is_file() and "AcceptanceApplication" not in path.name)
             diagnostics = {}
             for name in ("renderability", "dryRun", "candidateVerification", "applyReview", "postApplyPlan", "postApplyResult", "completionReview"):
                 path = artifacts.get(name)
                 if path and path.is_file():
                     value = json.loads(path.read_text()); diagnostics[name] = {key: value[key] for key in ("state", "status", "blockers", "result") if key in value}
-            return outcome(state, phase, category, "현재 증거와 실행 로그를 확인한 뒤 새 시도로 재실행",
-                           error=safe_message(error), injection=inject, appliedFeatureFiles=feature_files, diagnostics=diagnostics,
-                           evidence=evidence_index(target, initial_head, artifacts) if initial_head != "UNKNOWN" else {})
+            result = outcome(state, phase, category, "현재 증거와 실행 로그를 확인한 뒤 새 시도로 재실행",
+                             error=safe_message(error), injection=inject, appliedFeatureFiles=feature_files, diagnostics=diagnostics,
+                             stageReceipts=stage_receipts, evidence=evidence_index(target, initial_head, artifacts) if initial_head != "UNKNOWN" else {})
+            return finish(result, target, evidence_dir)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(); parser.add_argument("--scenario", type=Path, default=DEFAULT_SCENARIO); parser.add_argument("--timeout", type=int)
-    parser.add_argument("--inject", choices=["target-drift-before-apply"]); parser.add_argument("--output", type=Path); args = parser.parse_args()
-    result = execute(args.scenario.resolve(), args.timeout, args.inject); rendered = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
-    if args.output:
-        try: atomic_output(args.output.resolve(), rendered)
+    parser.add_argument("--inject", choices=["target-drift-before-apply", "candidate-evidence-tamper-before-apply", "reuse-apply-approval", "apply-report-recovery"])
+    parser.add_argument("--output", type=Path); parser.add_argument("--view", type=Path); parser.add_argument("--evidence-dir", type=Path); args = parser.parse_args()
+    output = args.output.resolve() if args.output else None; view = args.view.resolve() if args.view else output.with_suffix(".md") if output else None
+    evidence_dir = args.evidence_dir.resolve() if args.evidence_dir else output.with_suffix(".evidence") if output else None
+    occupied = [path for path in (output, view, evidence_dir) if path is not None and (path.exists() or path.is_symlink())]
+    if args.view and output is None:
+        result = outcome("BLOCKED", "PREPARE", "OUTPUT_UNSAFE", "--view와 함께 --output을 지정")
+    elif occupied:
+        result = outcome("BLOCKED", "PREPARE", "OUTPUT_UNSAFE", "비어 있는 결과·화면·증거 경로를 선택", occupied=[str(path) for path in occupied])
+    else:
+        result = execute(args.scenario.resolve(), args.timeout, args.inject, evidence_dir)
+    rendered = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+    if args.output and not occupied:
+        try:
+            atomic_output(output, rendered)
+            atomic_output(view, render_result(result))
         except (OSError, ValueError) as error:
-            result = outcome("BLOCKED", "PREPARE", "OUTPUT_UNSAFE", "비어 있는 안전한 결과 경로를 선택", error=str(error)); rendered = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+            result = outcome("BLOCKED", "PREPARE", "OUTPUT_UNSAFE", "비어 있는 안전한 결과 경로를 선택", error=safe_message(error)); rendered = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     print(rendered, end=""); return {"PASSED": 0, "FAILED": 1, "BLOCKED": 2, "UNKNOWN": 3}.get(result["acceptanceState"], 2)
 
 
