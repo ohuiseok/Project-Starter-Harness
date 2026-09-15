@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -u
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+exec python3 "$ROOT/tests/spring_v2_production_apply_acceptance.py" "$@"

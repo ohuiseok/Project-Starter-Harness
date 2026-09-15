@@ -103,6 +103,7 @@ java {{ toolchain {{ languageVersion = JavaLanguageVersion.of({scenario["javaToo
 repositories {{ mavenCentral() }}
 dependencies {{
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }}
 tasks.named('test') {{ useJUnitPlatform() }}

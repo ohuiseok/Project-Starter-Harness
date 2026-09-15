@@ -112,3 +112,16 @@ Candidate and post-apply verification plans bind a bounded manifest of the
 exact `/etc/java-*` runtime configuration directories required by installed
 JDK toolchains. Runners rehash that manifest immediately before sandbox launch;
 they never expose all of `/etc` and reject approval-time environment drift.
+
+The opt-in `tests/run-v2-production-apply-acceptance` scenario closes that
+specific gap for the first `JAVA_MVC_API_ONLY_V1` CREATE adapter. It creates an
+external temporary Git target, prepares and validates a canonical pre-approved
+project, feature, route, and API-contract fixture, and uses the production
+mapping, plan, dry-run, approval, isolated verification,
+transactional apply, post-apply verification, and completion entry points. It
+then emits one content-addressed evidence index and imports no mocking
+framework. The proof remains deliberately narrow: Java, Gradle, single-module
+Spring MVC API-only code, offline tests, CREATE files, and no DB, startup, HTTP
+smoke, deployment, commit, or push. The optional
+`--inject target-drift-before-apply` case proves that relevant drift is blocked
+before source application.
